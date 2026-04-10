@@ -1,0 +1,158 @@
+name: idp
+
+networks:
+  idp-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  grafana-data:
+  n8n-data:
+  portainer-data:
+  rabbitmq-data:
+
+services:
+
+  # ── TRAEFIK ──────────────────────────────────────────
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - idp-network
+
+  # ── PORTAINER ─────────────────────────────────────────
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  # ── MOSQUITTO ─────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - idp-network
+
+  # ── RABBITMQ ──────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.${DOMAIN}`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+
+  # ── MONGODB ───────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - idp-network
+
+  # ── FASTAPI ───────────────────────────────────────────
+  fastapi:
+    build: ./fastapi
+    container_name: fastapi
+    restart: unless-stopped
+    environment:
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DB: ${MONGO_DB}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+    depends_on:
+      - mongo
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.fastapi.entrypoints=websecure"
+      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+
+  # ── N8N ───────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      WEBHOOK_URL: https://n8n.${DOMAIN}
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=Host(`n8n.${DOMAIN}`)"
+      - "traefik.http.routers.n8n.entrypoints=websecure"
+      - "traefik.http.routers.n8n.tls.certresolver=letsencrypt"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+
+  # ── GRAFANA ───────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: marcusolsson-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - fastapi
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
