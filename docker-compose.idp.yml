@@ -1,0 +1,100 @@
+name: idp
+
+# IDP stack for Hostinger VPS — no Traefik, nginx handles SSL
+# Ports exposed to localhost, nginx proxies each subdomain
+# Existing containers (N8N, RabbitMQ, Portainer) are NOT touched
+
+networks:
+  idp-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  grafana-data:
+  n8n-idp-data:
+  mosquitto-data:
+
+services:
+
+  # ── MONGODB ───────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: mongo-idp
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - idp-network
+
+  # ── FASTAPI ───────────────────────────────────────────
+  # Port 8001 (8000 is taken by existing Portainer edge agent)
+  fastapi:
+    build: ./fastapi
+    container_name: fastapi-idp
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DB: ${MONGO_DB}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+    depends_on:
+      - mongo
+    networks:
+      - idp-network
+
+  # ── GRAFANA ───────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-idp
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: marcusolsson-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - fastapi
+    networks:
+      - idp-network
+
+  # ── MOSQUITTO ─────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto-idp
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - idp-network
+
+  # ── N8N IDP ───────────────────────────────────────────
+  # Port 5679 (5678 is taken by existing N8N on webhook.techflow24.com)
+  n8n-idp:
+    image: n8nio/n8n:latest
+    container_name: n8n-idp
+    restart: unless-stopped
+    ports:
+      - "5679:5678"
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      WEBHOOK_URL: https://n8n.techflow24.com
+    volumes:
+      - n8n-idp-data:/home/node/.n8n
+    networks:
+      - idp-network
