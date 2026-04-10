@@ -1,0 +1,22 @@
+{
+  "title": "Industrial Data Platform — Demo",
+  "uid": "idp-demo",
+  "panels": [
+    {
+      "title": "API Health",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{"path": "/health", "fields": [{"name": "status", "type": "string"}]}]
+    },
+    {
+      "title": "Tag Count",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{"path": "/tags", "fields": [{"name": "count", "type": "number"}]}]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}
