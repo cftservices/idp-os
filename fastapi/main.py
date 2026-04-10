@@ -12,6 +12,10 @@ MONGO_DB = os.getenv("MONGO_DB", "idp")
 client = MongoClient(MONGO_URL)
 db = client[MONGO_DB]
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "Industrial Data Platform API"}
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "Industrial Data Platform API"}
