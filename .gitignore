@@ -1,0 +1,7 @@
+.env
+traefik/acme.json
+mosquitto/data/
+grafana/data/
+mongo/data/
+n8n/data/
+portainer/data/
