@@ -21,15 +21,20 @@ class LinkedInStore:
         return hashlib.sha256(url.encode()).hexdigest()[:16]
 
     def add_post(self, post: dict) -> None:
-        """Add post to DB, skip silently if URL already exists."""
+        """Upsert post — update classification/metadata if URL already exists."""
         post_id = self._post_id(post["url"])
-        existing = self.posts.get(ids=[post_id])
-        if existing["ids"]:
-            return
+        existing = self.posts.get(ids=[post_id], include=["metadatas"])
 
         metadata = {k: v for k, v in post.items() if k != "text"}
         metadata["keywords_matched"] = json.dumps(metadata.get("keywords_matched", []))
         metadata["reply_drafted"] = bool(metadata.get("reply_drafted", False))
+
+        if existing["ids"]:
+            # Preserve reply_drafted flag from existing record
+            existing_meta = existing["metadatas"][0]
+            if existing_meta.get("reply_drafted"):
+                metadata["reply_drafted"] = True
+            self.posts.delete(ids=[post_id])
 
         self.posts.add(
             ids=[post_id],
@@ -60,6 +65,34 @@ class LinkedInStore:
                 cls = meta.get("classification", "neutral")
                 counts[cls] = counts.get(cls, 0) + 1
         return counts
+
+    def get_all_posts(self) -> list[dict]:
+        """Return all posts stored in DB."""
+        results = self.posts.get(include=["documents", "metadatas"])
+        posts = []
+        for doc, meta in zip(results["documents"], results["metadatas"]):
+            entry = dict(meta)
+            entry["text"] = doc
+            entry["keywords_matched"] = json.loads(entry.get("keywords_matched", "[]"))
+            posts.append(entry)
+        return posts
+
+    def get_all_connections(self) -> list[dict]:
+        """Return all connections stored in DB."""
+        results = self.connections.get(include=["metadatas"])
+        return [dict(meta) for meta in results["metadatas"]]
+
+    def mark_reply_drafted(self, post_url: str, drafted: bool = True) -> None:
+        """Set reply_drafted flag on a post. No-op if URL not found."""
+        post_id = self._post_id(post_url)
+        existing = self.posts.get(ids=[post_id], include=["documents", "metadatas"])
+        if not existing["ids"]:
+            return
+        meta = dict(existing["metadatas"][0])
+        doc = existing["documents"][0]
+        meta["reply_drafted"] = drafted
+        self.posts.delete(ids=[post_id])
+        self.posts.add(ids=[post_id], documents=[doc], metadatas=[meta])
 
     # ── Connections ────────────────────────────────────────────────────────
 
