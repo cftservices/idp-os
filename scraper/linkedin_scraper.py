@@ -259,12 +259,8 @@ def enrich_connections(context: BrowserContext, urls: list[str]) -> dict[str, st
     """
     results: dict[str, str] = {}
     for url in urls:
-        try:
-            results[url] = scrape_profile_about(context, url)
-            print(f"[scraper] enriched {url}: {len(results[url])} chars", file=sys.stderr)
-        except Exception as e:
-            print(f"[scraper] enrich skip {url}: {e}", file=sys.stderr)
-            results[url] = ""
+        results[url] = scrape_profile_about(context, url)
+        print(f"[scraper] enriched {url}: {len(results[url])} chars", file=sys.stderr)
         time.sleep(2)
     return results
 
@@ -363,8 +359,12 @@ if __name__ == "__main__":
     parser.add_argument("--engagement-urls", default="[]", help="JSON list of post URLs to scrape likes/comments for")
     args = parser.parse_args()
 
-    enrich_urls: list[str] = json.loads(args.enrich_urls)
-    engagement_urls: list[str] = json.loads(args.engagement_urls)
+    try:
+        enrich_urls: list[str] = json.loads(args.enrich_urls)
+        engagement_urls: list[str] = json.loads(args.engagement_urls)
+    except json.JSONDecodeError as e:
+        print(f"[scraper] Invalid JSON in --enrich-urls or --engagement-urls: {e}", file=sys.stderr)
+        sys.exit(1)
 
     with sync_playwright() as p:
         context = setup_browser(p)
