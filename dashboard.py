@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 import json
+import subprocess
 from datetime import datetime
 
 import streamlit as st
@@ -279,82 +280,86 @@ with tab5:
 
     if not profile_url:
         st.info("Vul een LinkedIn profiel URL in om te beginnen.")
-        st.stop()
-
-    conv = ms.load_conversation(profile_url)
-    messages = sorted(conv.get("messages", []), key=lambda m: m.get("date", ""))
-
-    # ── Conversation timeline ─────────────────────────────────────────────────
-    st.subheader(f"Conversatie — {person_name or profile_url}")
-    if profile_url:
-        st.markdown(f"[LinkedIn profiel openen]({profile_url})")
-
-    if not messages:
-        st.caption("_Nog geen berichten gelogd voor deze persoon._")
     else:
-        for msg in messages:
-            mtype = msg.get("type", "?")
-            date = msg.get("date", "?")
-            content = msg.get("content", "")
-            post_url = msg.get("post_url", "")
-            msg_id = msg.get("id", "")
-            badge = "💬 comment" if mtype == "comment" else "✉️ DM"
+        conv = ms.load_conversation(profile_url)
+        messages = sorted(conv.get("messages", []), key=lambda m: m.get("date", ""))
 
-            with st.container():
-                col_a, col_b = st.columns([6, 1])
-                with col_a:
-                    st.markdown(f"**{date}** — {badge}")
-                    if post_url:
-                        st.markdown(f"Op post: [{post_url[:60]}]({post_url})")
-                    post_excerpt = msg.get("post_excerpt", "")
-                    if post_excerpt:
-                        st.caption(f'"{post_excerpt}"')
-                    st.write(content)
-                with col_b:
-                    if st.button("🗑", key=f"del_{msg_id}", help="Verwijder bericht"):
-                        ms.delete_message(profile_url, msg_id)
-                        st.rerun()
-                st.divider()
+        # ── Conversation timeline ─────────────────────────────────────────────────
+        st.subheader(f"Conversatie — {person_name or profile_url}")
+        if profile_url:
+            st.markdown(f"[LinkedIn profiel openen]({profile_url})")
 
-    # ── New message form ──────────────────────────────────────────────────────
-    st.subheader("Nieuw bericht loggen")
-    with st.form("new_message_form", clear_on_submit=True):
-        msg_type = st.radio("Type", ["comment", "dm"], horizontal=True, key="msg_type")
-        msg_post_url = st.text_input("Post URL (optioneel)", key="msg_post_url")
-        msg_post_excerpt = st.text_input("Post excerpt (optioneel, eerste 150 tekens)", key="msg_post_excerpt")
-        msg_content = st.text_area("Bericht", height=120, key="msg_content")
-        msg_notes = st.text_input("Notities (optioneel)", key="msg_notes")
-        submitted = st.form_submit_button("Opslaan")
-
-    if submitted:
-        if not msg_content.strip():
-            st.warning("Bericht mag niet leeg zijn.")
+        if not messages:
+            st.caption("_Nog geen berichten gelogd voor deze persoon._")
         else:
-            ms.save_message(
-                profile_url,
-                person_name,
-                person_title,
-                {
-                    "date": datetime.now().date().isoformat(),
-                    "type": msg_type,
-                    "post_url": msg_post_url.strip(),
-                    "post_excerpt": msg_post_excerpt.strip()[:150],
-                    "content": msg_content.strip(),
-                    "notes": msg_notes.strip(),
-                },
-            )
-            st.success("Bericht opgeslagen!")
-            st.rerun()
+            for msg in messages:
+                mtype = msg.get("type", "?")
+                date = msg.get("date", "?")
+                content = msg.get("content", "")
+                post_url = msg.get("post_url", "")
+                msg_id = msg.get("id", "")
+                badge = "💬 comment" if mtype == "comment" else "✉️ DM"
 
-    # ── Advies / clipboard ────────────────────────────────────────────────────
-    st.subheader("Advies voor volgend bericht")
-    all_posts = get_store().get_all_posts()
-    ctx = ms.build_clipboard_context(profile_url, all_posts)
-    st.text_area("Context voor Claude Code", value=ctx, height=300, key="msg_clipboard")
-    if st.button("📋 Kopieer naar clipboard"):
-        try:
-            import subprocess
-            subprocess.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
-            st.success("Gekopieerd! Plak in een nieuwe Claude Code chat en vraag: 'Geef advies voor mijn volgend bericht'")
-        except Exception:
-            st.info("Selecteer alle tekst hierboven en kopieer handmatig (Ctrl+A, Ctrl+C).")
+                with st.container():
+                    col_a, col_b = st.columns([6, 1])
+                    with col_a:
+                        st.markdown(f"**{date}** — {badge}")
+                        if post_url:
+                            st.markdown(f"Op post: [{post_url[:60]}]({post_url})")
+                        post_excerpt = msg.get("post_excerpt", "")
+                        if post_excerpt:
+                            st.caption(f'"{post_excerpt}"')
+                        st.write(content)
+                    with col_b:
+                        if msg_id and st.button("🗑", key=f"del_{msg_id}", help="Verwijder bericht"):
+                            ms.delete_message(profile_url, msg_id)
+                            st.rerun()
+                    st.divider()
+
+        # ── New message form ──────────────────────────────────────────────────────
+        st.subheader("Nieuw bericht loggen")
+        with st.form("new_message_form", clear_on_submit=True):
+            msg_type = st.radio("Type", ["comment", "dm"], horizontal=True, key="msg_type")
+            msg_post_url = st.text_input("Post URL (optioneel)", key="msg_post_url")
+            msg_post_excerpt = st.text_input("Post excerpt (optioneel, eerste 150 tekens)", key="msg_post_excerpt")
+            msg_content = st.text_area("Bericht", height=120, key="msg_content")
+            msg_notes = st.text_input("Notities (optioneel)", key="msg_notes")
+            submitted = st.form_submit_button("Opslaan")
+
+        if submitted:
+            if not msg_content.strip():
+                st.warning("Bericht mag niet leeg zijn.")
+            else:
+                ms.save_message(
+                    profile_url,
+                    person_name,
+                    person_title,
+                    {
+                        "date": datetime.now().date().isoformat(),
+                        "type": msg_type,
+                        "post_url": msg_post_url.strip(),
+                        "post_excerpt": msg_post_excerpt.strip()[:150],
+                        "content": msg_content.strip(),
+                        "notes": msg_notes.strip(),
+                    },
+                )
+                st.success("Bericht opgeslagen!")
+                st.rerun()
+
+        # ── Advies / clipboard ────────────────────────────────────────────────────
+        st.subheader("Advies voor volgend bericht")
+        all_posts = get_store().get_all_posts()
+        # Merge About text from connections into posts for clipboard context
+        conn_data = get_store().get_connection(profile_url)
+        if conn_data and conn_data.get("about"):
+            for p in all_posts:
+                if p.get("author_profile_url") == profile_url:
+                    p["about"] = conn_data["about"]
+        ctx = ms.build_clipboard_context(profile_url, all_posts)
+        st.text_area("Context voor Claude Code", value=ctx, height=300, key="msg_clipboard")
+        if st.button("📋 Kopieer naar clipboard"):
+            try:
+                subprocess.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
+                st.success("Gekopieerd! Plak in een nieuwe Claude Code chat en vraag: 'Geef advies voor mijn volgend bericht'")
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                st.info("Selecteer alle tekst hierboven en kopieer handmatig (Ctrl+A, Ctrl+C).")

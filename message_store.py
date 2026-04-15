@@ -90,6 +90,7 @@ def build_clipboard_context(profile_url: str, chroma_posts: list[dict]) -> str:
 
     author_posts = [p for p in chroma_posts if p.get("author_profile_url") == profile_url]
     classification = author_posts[0].get("classification", "unknown") if author_posts else "unknown"
+    about_text = author_posts[0].get("about", "") if author_posts else ""
 
     lines = [
         "## LinkedIn Conversatie Context",
@@ -97,8 +98,10 @@ def build_clipboard_context(profile_url: str, chroma_posts: list[dict]) -> str:
         f"**Persoon:** {name} — {title}",
         f"**Profiel:** {profile_url}",
         f"**Classificatie:** {classification}",
-        "",
     ]
+    if about_text:
+        lines.append(f"**About:** {about_text}")
+    lines.append("")
 
     if author_posts:
         lines.append("**Posts van deze persoon in mijn database:**")

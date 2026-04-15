@@ -102,3 +102,11 @@ def test_build_clipboard_context_includes_chroma_posts():
     ctx = ms.build_clipboard_context(url, posts)
     assert "ideal_client" in ctx
     assert "OPC UA is great" in ctx
+
+
+def test_build_clipboard_context_includes_about():
+    url = "https://linkedin.com/in/alice"
+    ms.save_message(url, "Alice", "PLC Engineer", {"date": "2026-04-15", "type": "dm", "post_url": "", "post_excerpt": "", "content": "Hi", "notes": ""})
+    posts = [{"author_profile_url": url, "classification": "ideal_client", "timestamp": "2026-04-15T10:00:00", "text": "MQTT rocks", "url": "https://linkedin.com/posts/x", "about": "I build SCADA systems for 10 years."}]
+    ctx = ms.build_clipboard_context(url, posts)
+    assert "I build SCADA systems" in ctx
