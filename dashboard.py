@@ -123,6 +123,10 @@ with tab2:
                 col2.write(f"**Laatste activiteit:** {row.get('last_seen', '?')}")
                 col3.write(f"**Posts in DB:** {row.get('post_count', 0)}")
 
+                about = row.get("about", "")
+                if about:
+                    st.caption(f"**About:** {about}")
+
                 profile_url = row.get("profile_url", "")
                 if profile_url:
                     st.markdown(f"[LinkedIn profiel openen]({profile_url})")
@@ -184,7 +188,7 @@ with tab3:
 
         st.write(f"**{len(filtered_p)} posts**")
 
-        for _, post in filtered_p.iterrows():
+        for i, (_, post) in enumerate(filtered_p.iterrows()):
             kw = ", ".join(post.get("keywords_matched") or [])
             with st.container():
                 col_a, col_b = st.columns([4, 1])
@@ -199,8 +203,18 @@ with tab3:
                     if url:
                         st.markdown(f"[Bekijk post]({url}) | Keywords: `{kw}`")
                 with col_b:
+                    p_url = post.get("url", "")
                     if post.get("reply_drafted"):
-                        st.success("Reply gestuurd")
+                        st.success("Reply")
+                        if st.button("Ongedaan", key=f"posts_undo_{i}_{p_url}"):
+                            get_store().mark_reply_drafted(p_url, drafted=False)
+                            st.cache_data.clear()
+                            st.rerun()
+                    else:
+                        if st.button("Markeer reply", key=f"posts_reply_{i}_{p_url}"):
+                            get_store().mark_reply_drafted(p_url, drafted=True)
+                            st.cache_data.clear()
+                            st.rerun()
                 st.divider()
 
 with tab4:
