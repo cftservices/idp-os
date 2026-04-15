@@ -125,12 +125,7 @@ def main():
             store.upsert_connection(conn)
             total_people += 1
         # Mark post as engagement-scraped
-        post_id = store._post_id(post_url)
-        existing = store.posts.get(ids=[post_id], include=["metadatas"])
-        if existing["ids"]:
-            meta = dict(existing["metadatas"][0])
-            meta["engagement_scraped"] = True
-            store.posts.update(ids=[post_id], metadatas=[meta])
+        store.mark_engagement_scraped(post_url)
     if engagement_results:
         print(f"[run] Stored {total_people} engagement contacts from {len(engagement_results)} posts")
 

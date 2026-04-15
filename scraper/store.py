@@ -95,6 +95,16 @@ class LinkedInStore:
         meta["reply_drafted"] = drafted
         self.posts.update(ids=[post_id], metadatas=[meta])
 
+    def mark_engagement_scraped(self, post_url: str) -> None:
+        """Set engagement_scraped=True on a post. No-op if URL not found."""
+        post_id = self._post_id(post_url)
+        existing = self.posts.get(ids=[post_id], include=["metadatas"])
+        if not existing["ids"]:
+            return
+        meta = dict(existing["metadatas"][0])
+        meta["engagement_scraped"] = True
+        self.posts.update(ids=[post_id], metadatas=[meta])
+
     # ── Connections ────────────────────────────────────────────────────────
 
     def _connection_id(self, profile_url: str) -> str:

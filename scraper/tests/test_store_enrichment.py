@@ -83,3 +83,16 @@ def test_add_post_preserves_engagement_scraped_on_upsert(store):
     posts = store.get_all_posts()
     alice = next(p for p in posts if p["url"] == "https://linkedin.com/posts/alice-1")
     assert alice.get("engagement_scraped") is True
+
+
+def test_mark_engagement_scraped(store):
+    store.mark_engagement_scraped("https://linkedin.com/posts/alice-1")
+    posts = store.get_all_posts()
+    alice = next(p for p in posts if p["url"] == "https://linkedin.com/posts/alice-1")
+    assert alice.get("engagement_scraped") is True
+
+
+def test_mark_engagement_scraped_nonexistent_is_noop(store):
+    store.mark_engagement_scraped("https://linkedin.com/posts/nobody")
+    # Just verify no exception raised and post count unchanged
+    assert len(store.get_all_posts()) == 1
