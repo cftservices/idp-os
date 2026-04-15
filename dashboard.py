@@ -91,7 +91,56 @@ with tab1:
 
 # Remaining tabs — implemented in later tasks
 with tab2:
-    st.info("Connecties tab — komt in Task 4")
+    st.header("Connecties")
+
+    if df_conn.empty:
+        st.info("Nog geen connecties in de database. Run scraper eerst.")
+    else:
+        cls_options = sorted(df_conn["classification"].dropna().unique().tolist())
+        cls_filter = st.multiselect(
+            "Filter op classificatie",
+            options=cls_options,
+            default=cls_options,
+            key="conn_cls_filter",
+        )
+        filtered_conn = df_conn[df_conn["classification"].isin(cls_filter)].copy()
+
+        # Sort: ideal_client first, then influencer, then rest
+        cls_order = {"ideal_client": 0, "influencer": 1, "colleague": 2, "unknown": 3}
+        filtered_conn["_sort"] = filtered_conn["classification"].map(cls_order).fillna(9)
+        filtered_conn = filtered_conn.sort_values("_sort").drop(columns=["_sort"])
+
+        for _, row in filtered_conn.iterrows():
+            label = f"**{row.get('name', '?')}** — {str(row.get('title', ''))[:80]} | *{row.get('classification', '?')}*"
+            with st.expander(label):
+                col1, col2, col3 = st.columns(3)
+                col1.write(f"**Eerste gezien:** {row.get('first_seen', '?')}")
+                col2.write(f"**Laatste activiteit:** {row.get('last_seen', '?')}")
+                col3.write(f"**Posts in DB:** {row.get('post_count', 0)}")
+
+                profile_url = row.get("profile_url", "")
+                if profile_url:
+                    st.markdown(f"[LinkedIn profiel openen]({profile_url})")
+
+                # Posts van deze connectie
+                if not df_posts.empty and "author_profile_url" in df_posts.columns:
+                    conn_posts = df_posts[
+                        df_posts["author_profile_url"] == profile_url
+                    ].sort_values("timestamp", ascending=False)
+
+                    if not conn_posts.empty:
+                        st.write(f"**{len(conn_posts)} post(s) gevonden:**")
+                        for _, post in conn_posts.iterrows():
+                            kw = ", ".join(post.get("keywords_matched") or [])
+                            reply_badge = "Reply gestuurd" if post.get("reply_drafted") else "Geen reply"
+                            st.markdown(
+                                f"- **{str(post.get('timestamp', ''))[:10]}** "
+                                f"— {str(post.get('text', ''))[:200]}  \n"
+                                f"  [{str(post.get('url', ''))[:70]}]({post.get('url', '')}) "
+                                f"| `{kw}` | *{reply_badge}*"
+                            )
+                    else:
+                        st.caption("_Geen posts gevonden voor dit profiel._")
 
 with tab3:
     st.info("Posts tab — komt in Task 5")
