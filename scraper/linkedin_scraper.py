@@ -473,19 +473,22 @@ if __name__ == "__main__":
         all_posts: list[dict] = []
         seen_post_urls: set[str] = set()
 
-        date_filter = args.date_filter
-        kw_limit = None if date_filter != "past-24h" else 8
-        print(f"[scraper] date_filter={date_filter}, keywords={kw_limit or 'all'}", file=sys.stderr)
+        # When --scrape-messages is set, skip keyword/connection scraping entirely
+        connections: list[dict] = []
+        if not args.scrape_messages:
+            date_filter = args.date_filter
+            kw_limit = None if date_filter != "past-24h" else 8
+            print(f"[scraper] date_filter={date_filter}, keywords={kw_limit or 'all'}", file=sys.stderr)
 
-        for keyword in (KEYWORDS[:kw_limit] if kw_limit else KEYWORDS):
-            kw_posts = scrape_keyword(context, keyword, date_filter=date_filter)
-            for post in kw_posts:
-                if post["url"] not in seen_post_urls:
-                    seen_post_urls.add(post["url"])
-                    all_posts.append(post)
-            time.sleep(4)
+            for keyword in (KEYWORDS[:kw_limit] if kw_limit else KEYWORDS):
+                kw_posts = scrape_keyword(context, keyword, date_filter=date_filter)
+                for post in kw_posts:
+                    if post["url"] not in seen_post_urls:
+                        seen_post_urls.add(post["url"])
+                        all_posts.append(post)
+                time.sleep(4)
 
-        connections = scrape_connections(context)
+            connections = scrape_connections(context)
 
         # Enrich profile About sections
         about_results: dict[str, str] = {}
@@ -502,9 +505,10 @@ if __name__ == "__main__":
                 time.sleep(3)
 
         # Scrape DM inbox outgoing messages
-        messages_results: list[dict] = []
         if args.scrape_messages:
-            messages_results = scrape_messages(context)
+            messages_results: list[dict] = scrape_messages(context)
+        else:
+            messages_results = []
 
         context.close()
 
