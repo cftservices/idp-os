@@ -306,6 +306,9 @@ with tab5:
                     st.markdown(f"**{date}** — {badge}")
                     if post_url:
                         st.markdown(f"Op post: [{post_url[:60]}]({post_url})")
+                    post_excerpt = msg.get("post_excerpt", "")
+                    if post_excerpt:
+                        st.caption(f'"{post_excerpt}"')
                     st.write(content)
                 with col_b:
                     if st.button("🗑", key=f"del_{msg_id}", help="Verwijder bericht"):
@@ -318,6 +321,7 @@ with tab5:
     with st.form("new_message_form", clear_on_submit=True):
         msg_type = st.radio("Type", ["comment", "dm"], horizontal=True, key="msg_type")
         msg_post_url = st.text_input("Post URL (optioneel)", key="msg_post_url")
+        msg_post_excerpt = st.text_input("Post excerpt (optioneel, eerste 150 tekens)", key="msg_post_excerpt")
         msg_content = st.text_area("Bericht", height=120, key="msg_content")
         msg_notes = st.text_input("Notities (optioneel)", key="msg_notes")
         submitted = st.form_submit_button("Opslaan")
@@ -334,7 +338,7 @@ with tab5:
                     "date": datetime.now().date().isoformat(),
                     "type": msg_type,
                     "post_url": msg_post_url.strip(),
-                    "post_excerpt": "",
+                    "post_excerpt": msg_post_excerpt.strip()[:150],
                     "content": msg_content.strip(),
                     "notes": msg_notes.strip(),
                 },
@@ -348,10 +352,9 @@ with tab5:
     ctx = ms.build_clipboard_context(profile_url, all_posts)
     st.text_area("Context voor Claude Code", value=ctx, height=300, key="msg_clipboard")
     if st.button("📋 Kopieer naar clipboard"):
-        st.write(
-            "<script>navigator.clipboard.writeText("
-            + json.dumps(ctx)
-            + ")</script>",
-            unsafe_allow_html=True,
-        )
-        st.success("Gekopieerd! Plak in een nieuwe Claude Code chat en vraag: 'Geef advies voor mijn volgend bericht'")
+        try:
+            import subprocess
+            subprocess.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
+            st.success("Gekopieerd! Plak in een nieuwe Claude Code chat en vraag: 'Geef advies voor mijn volgend bericht'")
+        except Exception:
+            st.info("Selecteer alle tekst hierboven en kopieer handmatig (Ctrl+A, Ctrl+C).")
