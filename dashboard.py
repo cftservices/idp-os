@@ -22,6 +22,7 @@ def get_store() -> LinkedInStore:
     return LinkedInStore(CHROMA_PATH)
 
 
+@st.cache_data(ttl=300)
 def load_data():
     store = get_store()
     posts = store.get_all_posts()
