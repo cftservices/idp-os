@@ -199,4 +199,50 @@ with tab3:
                 st.divider()
 
 with tab4:
-    st.info("Replies tab — komt in Task 6")
+    st.header("Reply Tracker")
+
+    if df_posts.empty:
+        st.info("Nog geen posts in de database.")
+    else:
+        priority = df_posts[
+            df_posts["classification"].isin(["ideal_client", "influencer"])
+        ].copy()
+        priority["timestamp"] = pd.to_datetime(priority["timestamp"], errors="coerce")
+        priority = priority.sort_values("timestamp", ascending=False, na_position="last")
+
+        replied = priority[priority["reply_drafted"] == True]
+        not_replied = priority[priority["reply_drafted"] != True]
+
+        col1, col2 = st.columns(2)
+        col1.metric("Bereikt", len(replied))
+        col2.metric("Nog te doen", len(not_replied))
+
+        st.subheader("Nog geen reply gestuurd")
+        if not_replied.empty:
+            st.success("Alle priority posts bereikt!")
+        else:
+            for _, post in not_replied.iterrows():
+                url = post.get("url", "")
+                ts = str(post["timestamp"])[:10] if pd.notna(post.get("timestamp")) else ""
+                with st.expander(f"{post.get('author_name', '?')} — {ts} [{post.get('classification', '?')}]"):
+                    st.write(str(post.get("text", ""))[:400])
+                    if url:
+                        st.markdown(f"[Bekijk post op LinkedIn]({url})")
+                    if st.button("Markeer als reply gestuurd", key=f"btn_{url}"):
+                        get_store().mark_reply_drafted(url, drafted=True)
+                        st.cache_data.clear()
+                        st.rerun()
+
+        if not replied.empty:
+            st.subheader("Al bereikt")
+            for _, post in replied.iterrows():
+                url = post.get("url", "")
+                ts = str(post["timestamp"])[:10] if pd.notna(post.get("timestamp")) else ""
+                col_a, col_b = st.columns([5, 1])
+                col_a.markdown(
+                    f"**{post.get('author_name', '?')}** — {ts} — [{str(url)[:60]}]({url})"
+                )
+                if col_b.button("Ongedaan", key=f"undo_{url}"):
+                    get_store().mark_reply_drafted(url, drafted=False)
+                    st.cache_data.clear()
+                    st.rerun()
