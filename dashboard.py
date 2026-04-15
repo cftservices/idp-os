@@ -2,6 +2,8 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+import json
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
@@ -10,6 +12,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / "scraper" / ".env")
 sys.path.insert(0, str(Path(__file__).parent / "scraper"))
+sys.path.insert(0, str(Path(__file__).parent))
+import message_store as ms
 from store import LinkedInStore
 
 CHROMA_PATH = os.getenv("CHROMA_PATH", "c:/tools/linkedin-intel/db/chroma")
@@ -40,7 +44,7 @@ def load_data():
 
 df_posts, df_conn = load_data()
 
-tab1, tab2, tab3, tab4 = st.tabs(["Overzicht", "Connecties", "Posts", "Replies"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overzicht", "Connecties", "Posts", "Replies", "Berichten"])
 
 # ── TAB 1: OVERZICHT ──────────────────────────────────────────────────────────
 with tab1:
@@ -246,3 +250,108 @@ with tab4:
                     get_store().mark_reply_drafted(url, drafted=False)
                     st.cache_data.clear()
                     st.rerun()
+
+# ── TAB 5: BERICHTEN ──────────────────────────────────────────────────────────
+with tab5:
+    st.header("Berichten")
+
+    # ── Person selection ──────────────────────────────────────────────────────
+    conversations = ms.list_conversations()
+    conv_options = ["+ Nieuwe persoon"] + [
+        f"{c.get('name', '?')} ({ms.get_slug(c.get('profile_url', ''))})"
+        for c in conversations
+    ]
+    selected = st.selectbox("Selecteer persoon", conv_options, key="msg_person_select")
+
+    if selected == "+ Nieuwe persoon":
+        new_url = st.text_input("LinkedIn profiel URL", placeholder="https://www.linkedin.com/in/username/", key="msg_new_url")
+        new_name = st.text_input("Naam", key="msg_new_name")
+        new_title = st.text_input("Titel / functie", key="msg_new_title")
+        profile_url = new_url.strip()
+        person_name = new_name.strip()
+        person_title = new_title.strip()
+    else:
+        idx = conv_options.index(selected) - 1  # -1 for "Nieuwe persoon" offset
+        conv_meta = conversations[idx]
+        profile_url = conv_meta.get("profile_url", "")
+        person_name = conv_meta.get("name", "")
+        person_title = conv_meta.get("title", "")
+
+    if not profile_url:
+        st.info("Vul een LinkedIn profiel URL in om te beginnen.")
+        st.stop()
+
+    conv = ms.load_conversation(profile_url)
+    messages = sorted(conv.get("messages", []), key=lambda m: m.get("date", ""))
+
+    # ── Conversation timeline ─────────────────────────────────────────────────
+    st.subheader(f"Conversatie — {person_name or profile_url}")
+    if profile_url:
+        st.markdown(f"[LinkedIn profiel openen]({profile_url})")
+
+    if not messages:
+        st.caption("_Nog geen berichten gelogd voor deze persoon._")
+    else:
+        for msg in messages:
+            mtype = msg.get("type", "?")
+            date = msg.get("date", "?")
+            content = msg.get("content", "")
+            post_url = msg.get("post_url", "")
+            msg_id = msg.get("id", "")
+            badge = "💬 comment" if mtype == "comment" else "✉️ DM"
+
+            with st.container():
+                col_a, col_b = st.columns([6, 1])
+                with col_a:
+                    st.markdown(f"**{date}** — {badge}")
+                    if post_url:
+                        st.markdown(f"Op post: [{post_url[:60]}]({post_url})")
+                    st.write(content)
+                with col_b:
+                    if st.button("🗑", key=f"del_{msg_id}", help="Verwijder bericht"):
+                        ms.delete_message(profile_url, msg_id)
+                        st.rerun()
+                st.divider()
+
+    # ── New message form ──────────────────────────────────────────────────────
+    st.subheader("Nieuw bericht loggen")
+    with st.form("new_message_form", clear_on_submit=True):
+        msg_type = st.radio("Type", ["comment", "dm"], horizontal=True, key="msg_type")
+        msg_post_url = st.text_input("Post URL (optioneel)", key="msg_post_url")
+        msg_content = st.text_area("Bericht", height=120, key="msg_content")
+        msg_notes = st.text_input("Notities (optioneel)", key="msg_notes")
+        submitted = st.form_submit_button("Opslaan")
+
+    if submitted:
+        if not msg_content.strip():
+            st.warning("Bericht mag niet leeg zijn.")
+        else:
+            ms.save_message(
+                profile_url,
+                person_name,
+                person_title,
+                {
+                    "date": datetime.now().date().isoformat(),
+                    "type": msg_type,
+                    "post_url": msg_post_url.strip(),
+                    "post_excerpt": "",
+                    "content": msg_content.strip(),
+                    "notes": msg_notes.strip(),
+                },
+            )
+            st.success("Bericht opgeslagen!")
+            st.rerun()
+
+    # ── Advies / clipboard ────────────────────────────────────────────────────
+    st.subheader("Advies voor volgend bericht")
+    all_posts = get_store().get_all_posts()
+    ctx = ms.build_clipboard_context(profile_url, all_posts)
+    st.text_area("Context voor Claude Code", value=ctx, height=300, key="msg_clipboard")
+    if st.button("📋 Kopieer naar clipboard"):
+        st.write(
+            "<script>navigator.clipboard.writeText("
+            + json.dumps(ctx)
+            + ")</script>",
+            unsafe_allow_html=True,
+        )
+        st.success("Gekopieerd! Plak in een nieuwe Claude Code chat en vraag: 'Geef advies voor mijn volgend bericht'")
