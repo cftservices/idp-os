@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import os
 import sys
 import time
@@ -29,9 +30,10 @@ def setup_browser(playwright) -> BrowserContext:
     )
 
 
-def scrape_keyword(context: BrowserContext, keyword: str) -> list[dict]:
+def scrape_keyword(context: BrowserContext, keyword: str, date_filter: str = "past-24h") -> list[dict]:
     """
-    Search LinkedIn for posts matching keyword posted in last 24h.
+    Search LinkedIn for posts matching keyword.
+    date_filter: 'past-24h' | 'past-week' | 'past-month'
     Returns list of posts with url, text, author_name, author_profile_url, timestamp.
     """
     page = context.new_page()
@@ -42,7 +44,7 @@ def scrape_keyword(context: BrowserContext, keyword: str) -> list[dict]:
 
         search_url = (
             f"https://www.linkedin.com/search/results/content/"
-            f"?keywords={keyword}&sortBy=%22date_posted%22&datePosted=%22past-24h%22"
+            f"?keywords={keyword}&sortBy=%22date_posted%22&datePosted=%22{date_filter}%22"
         )
         page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
         time.sleep(6)
@@ -161,7 +163,16 @@ def scrape_keyword(context: BrowserContext, keyword: str) -> list[dict]:
 
 
 def scrape_connections(context: BrowserContext) -> list[dict]:
-    """Scrape first-degree connections list."""
+    """Scrape first-degree connections list.
+
+    LinkedIn's UI uses fully obfuscated CSS classes — no stable selectors.
+    Strategy: find all a[href*='/in/'] links, walk up the DOM to find a
+    container with name+title text, parse lines to extract structured data.
+    """
+    # Read extraction JS from sibling file
+    js_path = Path(__file__).parent / "inspect_conn.js"
+    extract_js = js_path.read_text(encoding="utf-8")
+
     page = context.new_page()
     try:
         page.goto(
@@ -169,44 +180,38 @@ def scrape_connections(context: BrowserContext) -> list[dict]:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        time.sleep(4)
+        time.sleep(5)
 
-        connections = []
+        connections: list[dict] = []
         seen_urls: set[str] = set()
+        no_new_count = 0
 
-        for _ in range(20):
-            cards = page.query_selector_all(
-                "li.mn-connection-card, div.scaffold-finite-scroll__content li"
-            )
+        for scroll_round in range(40):
+            cards = page.evaluate(extract_js)
+
+            new_this_round = 0
             for card in cards:
-                try:
-                    link_el = card.query_selector("a[href*='/in/']")
-                    if not link_el:
-                        continue
-                    profile_url = (link_el.get_attribute("href") or "").split("?")[0]
-                    if not profile_url or profile_url in seen_urls:
-                        continue
-                    if profile_url.startswith("/"):
-                        profile_url = "https://www.linkedin.com" + profile_url
-
-                    name_el = card.query_selector("span.mn-connection-card__name, span.t-16")
-                    name = name_el.inner_text().strip() if name_el else "Unknown"
-
-                    title_el = card.query_selector("span.mn-connection-card__occupation, span.t-14")
-                    title = title_el.inner_text().strip() if title_el else ""
-
-                    seen_urls.add(profile_url)
-                    connections.append({
-                        "profile_url": profile_url,
-                        "name": name,
-                        "title": title,
-                        "company": "",
-                        "first_seen": datetime.now().date().isoformat(),
-                    })
-                except Exception:
+                url = card.get("profile_url", "")
+                if not url or url in seen_urls:
                     continue
+                seen_urls.add(url)
+                new_this_round += 1
+                connections.append({
+                    "profile_url": url,
+                    "name": card.get("name", "Unknown"),
+                    "title": card.get("title", ""),
+                    "company": "",
+                    "first_seen": datetime.now().date().isoformat(),
+                })
 
-            page.evaluate("window.scrollBy(0, 800)")
+            if new_this_round == 0:
+                no_new_count += 1
+                if no_new_count >= 3:
+                    break  # end of list
+            else:
+                no_new_count = 0
+
+            page.evaluate("window.scrollBy(0, 1200)")
             time.sleep(1.5)
 
         print(f"[scraper] connections: {len(connections)} collected", file=sys.stderr)
@@ -215,8 +220,151 @@ def scrape_connections(context: BrowserContext) -> list[dict]:
         page.close()
 
 
+def scrape_profile_about(context: BrowserContext, profile_url: str) -> str:
+    """Visit a LinkedIn profile and extract the About section text (up to 500 chars).
+    Returns empty string on any failure.
+    """
+    page = context.new_page()
+    try:
+        page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+        time.sleep(3)
+        about = page.evaluate("""() => {
+            const anchor = document.querySelector('#about');
+            if (!anchor) return '';
+            let el = anchor.parentElement;
+            for (let i = 0; i < 6; i++) {
+                if (!el) break;
+                const text = (el.innerText || '').trim();
+                if (text.length > 50) {
+                    const lines = text.split('\\n')
+                        .map(l => l.trim())
+                        .filter(l => l && l !== 'About' && l !== 'Over');
+                    return lines.join(' ').slice(0, 500);
+                }
+                el = el.parentElement;
+            }
+            return '';
+        }""")
+        return about or ""
+    except Exception as e:
+        print(f"[scraper] about error for {profile_url}: {e}", file=sys.stderr)
+        return ""
+    finally:
+        page.close()
+
+
+def enrich_connections(context: BrowserContext, urls: list[str]) -> dict[str, str]:
+    """Visit each profile URL and extract About text. Returns {profile_url: about_text}.
+    Tolerates per-URL failures.
+    """
+    results: dict[str, str] = {}
+    for url in urls:
+        try:
+            results[url] = scrape_profile_about(context, url)
+            print(f"[scraper] enriched {url}: {len(results[url])} chars", file=sys.stderr)
+        except Exception as e:
+            print(f"[scraper] enrich skip {url}: {e}", file=sys.stderr)
+            results[url] = ""
+        time.sleep(2)
+    return results
+
+
+def scrape_engagement(context: BrowserContext, post_url: str) -> list[dict]:
+    """Scrape likers and commenters from a LinkedIn post.
+    Returns list of {profile_url, name, title} dicts.
+    """
+    page = context.new_page()
+    try:
+        page.goto(post_url, wait_until="domcontentloaded", timeout=30000)
+        time.sleep(4)
+
+        people: list[dict] = []
+        seen_urls: set[str] = set()
+
+        # ── Commenters ────────────────────────────────────────────────────────
+        comment_cards = page.evaluate("""() => {
+            const links = Array.from(document.querySelectorAll('a[href*="/in/"]'));
+            const seen = new Set();
+            const cards = [];
+            for (const link of links) {
+                const href = link.href.split('?')[0];
+                if (!href.includes('/in/') || seen.has(href)) continue;
+                seen.add(href);
+                const name = (link.innerText || link.textContent || '').trim().split('\\n')[0].trim();
+                if (!name || name.length < 2) continue;
+                cards.push({profile_url: href, name: name, title: ''});
+            }
+            return cards;
+        }""")
+        for card in comment_cards:
+            url = card.get("profile_url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                people.append(card)
+
+        # ── Likers modal ──────────────────────────────────────────────────────
+        reactions_btn = page.query_selector(
+            'button[aria-label*="eaction"], '
+            'span[aria-label*="eaction"]'
+        )
+        if reactions_btn:
+            reactions_btn.click()
+            time.sleep(2)
+            for _ in range(15):
+                modal_cards = page.evaluate("""() => {
+                    const seen = new Set();
+                    const cards = [];
+                    const dialogs = document.querySelectorAll('[role="dialog"]');
+                    for (const dialog of dialogs) {
+                        const links = Array.from(dialog.querySelectorAll('a[href*="/in/"]'));
+                        for (const link of links) {
+                            const href = link.href.split('?')[0];
+                            if (!href.includes('/in/') || seen.has(href)) continue;
+                            seen.add(href);
+                            const name = (link.innerText || '').trim().split('\\n')[0].trim();
+                            cards.push({profile_url: href, name: name, title: ''});
+                        }
+                    }
+                    return cards;
+                }""")
+                new_count = 0
+                for card in modal_cards:
+                    url = card.get("profile_url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        people.append(card)
+                        new_count += 1
+                page.evaluate("""() => {
+                    const d = document.querySelector('[role="dialog"]');
+                    if (d) d.scrollBy(0, 800);
+                }""")
+                time.sleep(1)
+                if new_count == 0:
+                    break
+            page.keyboard.press("Escape")
+            time.sleep(0.5)
+
+        print(f"[scraper] engagement {post_url}: {len(people)} people", file=sys.stderr)
+        return people
+
+    except Exception as e:
+        print(f"[scraper] engagement error for {post_url}: {e}", file=sys.stderr)
+        return []
+    finally:
+        page.close()
+
+
 if __name__ == "__main__":
-    import json
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("date_filter", nargs="?", default="past-24h")
+    parser.add_argument("--enrich-urls", default="[]", help="JSON list of profile URLs to enrich with About text")
+    parser.add_argument("--engagement-urls", default="[]", help="JSON list of post URLs to scrape likes/comments for")
+    args = parser.parse_args()
+
+    enrich_urls: list[str] = json.loads(args.enrich_urls)
+    engagement_urls: list[str] = json.loads(args.engagement_urls)
 
     with sync_playwright() as p:
         context = setup_browser(p)
@@ -224,15 +372,39 @@ if __name__ == "__main__":
         all_posts: list[dict] = []
         seen_post_urls: set[str] = set()
 
-        for keyword in KEYWORDS[:8]:  # limit to 8 keywords per run to avoid rate limiting
-            kw_posts = scrape_keyword(context, keyword)
+        date_filter = args.date_filter
+        kw_limit = None if date_filter != "past-24h" else 8
+        print(f"[scraper] date_filter={date_filter}, keywords={kw_limit or 'all'}", file=sys.stderr)
+
+        for keyword in (KEYWORDS[:kw_limit] if kw_limit else KEYWORDS):
+            kw_posts = scrape_keyword(context, keyword, date_filter=date_filter)
             for post in kw_posts:
                 if post["url"] not in seen_post_urls:
                     seen_post_urls.add(post["url"])
                     all_posts.append(post)
-            time.sleep(3)  # pause between keyword searches
+            time.sleep(4)
 
         connections = scrape_connections(context)
+
+        # Enrich profile About sections
+        about_results: dict[str, str] = {}
+        if enrich_urls:
+            print(f"[scraper] enriching {len(enrich_urls)} profiles...", file=sys.stderr)
+            about_results = enrich_connections(context, enrich_urls)
+
+        # Scrape engagement (likers + commenters) for specified posts
+        engagement_results: dict[str, list[dict]] = {}
+        if engagement_urls:
+            print(f"[scraper] scraping engagement for {len(engagement_urls)} posts...", file=sys.stderr)
+            for post_url in engagement_urls:
+                engagement_results[post_url] = scrape_engagement(context, post_url)
+                time.sleep(3)
+
         context.close()
 
-    print(json.dumps({"posts": all_posts, "connections": connections}))
+    print(json.dumps({
+        "posts": all_posts,
+        "connections": connections,
+        "about": about_results,
+        "engagement": engagement_results,
+    }))
