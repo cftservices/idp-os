@@ -225,7 +225,7 @@ with tab4:
     }
 
     # Get connections from ChromaDB (df_conn already loaded above)
-    all_conns = get_store().get_all_connections() if not df_conn.empty else []
+    all_conns = df_conn.to_dict("records") if not df_conn.empty else []
     # Add contacts that exist only in message store (no ChromaDB entry)
     conn_urls = {c.get("profile_url", "") for c in all_conns}
     for conv in conversations:
@@ -275,7 +275,6 @@ with tab4:
             btn_type = "primary" if is_selected else "secondary"
             if st.button(label, key=f"contact_btn_{url}", type=btn_type, use_container_width=True):
                 st.session_state["selected_contact_url"] = url
-                st.rerun()
 
     with col_right:
         selected_url = st.session_state.get("selected_contact_url", "")
@@ -376,7 +375,7 @@ with tab4:
 
             # Clipboard context
             st.subheader("Context voor Claude Code")
-            all_posts_list = get_store().get_all_posts()
+            all_posts_list = df_posts.to_dict("records")
             if chroma_conn and chroma_conn.get("about"):
                 for p in all_posts_list:
                     if p.get("author_profile_url") == selected_url:
@@ -385,8 +384,7 @@ with tab4:
             st.text_area("Context", value=ctx, height=250, key="contacten_clipboard")
             if st.button("📋 Kopieer naar clipboard", key="contacten_copy_btn"):
                 try:
-                    import subprocess as _sp
-                    _sp.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
+                    subprocess.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
                     st.success("Gekopieerd!")
-                except (FileNotFoundError, _sp.CalledProcessError):
+                except (FileNotFoundError, subprocess.CalledProcessError):
                     st.info("Selecteer tekst hierboven en kopieer handmatig.")
