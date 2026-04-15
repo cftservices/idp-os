@@ -45,7 +45,7 @@ def load_data():
 
 df_posts, df_conn = load_data()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overzicht", "Connecties", "Posts", "Replies", "Berichten"])
+tab1, tab2, tab3, tab4 = st.tabs(["Overzicht", "Posts", "Replies", "Contacten"])
 
 # ── TAB 1: OVERZICHT ──────────────────────────────────────────────────────────
 with tab1:
@@ -94,64 +94,7 @@ with tab1:
         )
         st.dataframe(breakdown, hide_index=True, use_container_width=True)
 
-# Remaining tabs — implemented in later tasks
 with tab2:
-    st.header("Connecties")
-
-    if df_conn.empty:
-        st.info("Nog geen connecties in de database. Run scraper eerst.")
-    else:
-        cls_options = sorted(df_conn["classification"].dropna().unique().tolist())
-        cls_filter = st.multiselect(
-            "Filter op classificatie",
-            options=cls_options,
-            default=cls_options,
-            key="conn_cls_filter",
-        )
-        filtered_conn = df_conn[df_conn["classification"].isin(cls_filter)].copy()
-
-        # Sort: ideal_client first, then influencer, then rest
-        cls_order = {"ideal_client": 0, "influencer": 1, "colleague": 2, "unknown": 3}
-        filtered_conn["_sort"] = filtered_conn["classification"].map(cls_order).fillna(9)
-        filtered_conn = filtered_conn.sort_values("_sort").drop(columns=["_sort"])
-
-        for _, row in filtered_conn.iterrows():
-            label = f"{row.get('name', '?')} — {str(row.get('title', ''))[:80]} [{row.get('classification', '?')}]"
-            with st.expander(label):
-                col1, col2, col3 = st.columns(3)
-                col1.write(f"**Eerste gezien:** {row.get('first_seen', '?')}")
-                col2.write(f"**Laatste activiteit:** {row.get('last_seen', '?')}")
-                col3.write(f"**Posts in DB:** {row.get('post_count', 0)}")
-
-                about = row.get("about", "")
-                if about:
-                    st.caption(f"**About:** {about}")
-
-                profile_url = row.get("profile_url", "")
-                if profile_url:
-                    st.markdown(f"[LinkedIn profiel openen]({profile_url})")
-
-                # Posts van deze connectie
-                if not df_posts.empty and "author_profile_url" in df_posts.columns:
-                    conn_posts = df_posts[df_posts["author_profile_url"] == profile_url].copy()
-                    conn_posts["timestamp"] = pd.to_datetime(conn_posts["timestamp"], errors="coerce")
-                    conn_posts = conn_posts.sort_values("timestamp", ascending=False, na_position="last")
-
-                    if not conn_posts.empty:
-                        st.write(f"**{len(conn_posts)} post(s) gevonden:**")
-                        for _, post in conn_posts.iterrows():
-                            kw = ", ".join(post.get("keywords_matched") or [])
-                            reply_badge = "Reply gestuurd" if post.get("reply_drafted") else "Geen reply"
-                            st.markdown(
-                                f"- **{str(post.get('timestamp', ''))[:10]}** "
-                                f"— {str(post.get('text', ''))[:200]}  \n"
-                                f"  [{str(post.get('url', ''))[:70]}]({post.get('url', '')}) "
-                                f"| `{kw}` | *{reply_badge}*"
-                            )
-                    else:
-                        st.caption("_Geen posts gevonden voor dit profiel._")
-
-with tab3:
     st.header("Posts")
 
     if df_posts.empty:
@@ -217,7 +160,7 @@ with tab3:
                             st.rerun()
                 st.divider()
 
-with tab4:
+with tab3:
     st.header("Reply Tracker")
 
     if df_posts.empty:
@@ -266,114 +209,184 @@ with tab4:
                     st.cache_data.clear()
                     st.rerun()
 
-# ── TAB 5: BERICHTEN ──────────────────────────────────────────────────────────
-with tab5:
-    st.header("Berichten")
+# ── TAB 4: CONTACTEN ──────────────────────────────────────────────────────────
+with tab4:
+    st.header("Contacten")
 
-    # ── Person selection ──────────────────────────────────────────────────────
+    # Build combined contact list from ChromaDB connections + message store
     conversations = ms.list_conversations()
-    conv_options = ["+ Nieuwe persoon"] + [
-        f"{c.get('name', '?')} ({ms.get_slug(c.get('profile_url', ''))})"
+    msg_count_map: dict[str, int] = {
+        c.get("profile_url", ""): len(c.get("messages", []))
         for c in conversations
-    ]
-    selected = st.selectbox("Selecteer persoon", conv_options, key="msg_person_select")
+    }
+    last_msg_map: dict[str, str] = {
+        c.get("profile_url", ""): c.get("_last_date", "")
+        for c in conversations
+    }
 
-    if selected == "+ Nieuwe persoon":
-        new_url = st.text_input("LinkedIn profiel URL", placeholder="https://www.linkedin.com/in/username/", key="msg_new_url")
-        new_name = st.text_input("Naam", key="msg_new_name")
-        new_title = st.text_input("Titel / functie", key="msg_new_title")
-        profile_url = new_url.strip()
-        person_name = new_name.strip()
-        person_title = new_title.strip()
-    else:
-        idx = conv_options.index(selected) - 1  # -1 for "Nieuwe persoon" offset
-        conv_meta = conversations[idx]
-        profile_url = conv_meta.get("profile_url", "")
-        person_name = conv_meta.get("name", "")
-        person_title = conv_meta.get("title", "")
+    # Get connections from ChromaDB (df_conn already loaded above)
+    all_conns = get_store().get_all_connections() if not df_conn.empty else []
+    # Add contacts that exist only in message store (no ChromaDB entry)
+    conn_urls = {c.get("profile_url", "") for c in all_conns}
+    for conv in conversations:
+        url = conv.get("profile_url", "")
+        if url and url not in conn_urls:
+            all_conns.append({
+                "profile_url": url,
+                "name": conv.get("name", "?"),
+                "title": conv.get("title", ""),
+                "classification": "unknown",
+            })
 
-    if not profile_url:
-        st.info("Vul een LinkedIn profiel URL in om te beginnen.")
-    else:
-        conv = ms.load_conversation(profile_url)
-        messages = sorted(conv.get("messages", []), key=lambda m: m.get("date", ""))
+    # Sorting: ideal_client+msgs > ideal_client > influencer+msgs > influencer > rest
+    cls_rank_map = {"ideal_client": 0, "influencer": 2, "colleague": 4, "unknown": 4}
 
-        # ── Conversation timeline ─────────────────────────────────────────────────
-        st.subheader(f"Conversatie — {person_name or profile_url}")
-        if profile_url:
-            st.markdown(f"[LinkedIn profiel openen]({profile_url})")
+    def _contact_sort_key(c: dict) -> tuple:
+        cls = c.get("classification", "unknown")
+        url = c.get("profile_url", "")
+        has_msgs = 1 if msg_count_map.get(url, 0) > 0 else 0
+        last_msg = last_msg_map.get(url, "")
+        rank = cls_rank_map.get(cls, 4) - has_msgs
+        # Negate last_msg for descending date within rank group
+        neg_date = "".join(chr(127 - ord(ch)) for ch in last_msg) if last_msg else "~"
+        return (rank, neg_date)
 
-        if not messages:
-            st.caption("_Nog geen berichten gelogd voor deze persoon._")
+    all_conns_sorted = sorted(all_conns, key=_contact_sort_key)
+
+    col_left, col_right = st.columns([1, 2])
+
+    with col_left:
+        search_q = st.text_input("Zoek contacten", placeholder="naam of trefwoord...", key="contacten_search")
+
+        if "selected_contact_url" not in st.session_state:
+            st.session_state["selected_contact_url"] = ""
+
+        for conn in all_conns_sorted:
+            url = conn.get("profile_url", "")
+            name = conn.get("name", "?")
+            n_msgs = msg_count_map.get(url, 0)
+
+            if search_q and search_q.lower() not in name.lower():
+                continue
+
+            badge = f" 💬{n_msgs}" if n_msgs > 0 else ""
+            label = f"{name}{badge}"
+            is_selected = st.session_state.get("selected_contact_url") == url
+            btn_type = "primary" if is_selected else "secondary"
+            if st.button(label, key=f"contact_btn_{url}", type=btn_type, use_container_width=True):
+                st.session_state["selected_contact_url"] = url
+                st.rerun()
+
+    with col_right:
+        selected_url = st.session_state.get("selected_contact_url", "")
+        if not selected_url:
+            st.info("Selecteer een contact links om de details te zien.")
         else:
-            for msg in messages:
-                mtype = msg.get("type", "?")
-                date = msg.get("date", "?")
-                content = msg.get("content", "")
-                post_url = msg.get("post_url", "")
-                msg_id = msg.get("id", "")
-                badge = "💬 comment" if mtype == "comment" else "✉️ DM"
+            # Find connection data
+            conn_data = next((c for c in all_conns if c.get("profile_url") == selected_url), {})
+            name = conn_data.get("name", "?")
+            title = conn_data.get("title", "")
+            classification = conn_data.get("classification", "unknown")
 
-                with st.container():
+            # Get about from ChromaDB connection record
+            about = ""
+            chroma_conn = get_store().get_connection(selected_url)
+            if chroma_conn:
+                about = chroma_conn.get("about", "")
+
+            st.subheader(name)
+            if title:
+                st.caption(f"{title} · `{classification}`")
+            st.markdown(f"[LinkedIn profiel openen]({selected_url})")
+            if about:
+                st.info(f"**About:** {about}")
+
+            # Posts in DB
+            if not df_posts.empty and "author_profile_url" in df_posts.columns:
+                person_posts = df_posts[df_posts["author_profile_url"] == selected_url].copy()
+                person_posts["timestamp"] = pd.to_datetime(person_posts["timestamp"], errors="coerce")
+                person_posts = person_posts.sort_values("timestamp", ascending=False, na_position="last")
+                if not person_posts.empty:
+                    st.markdown(f"**Posts in DB ({len(person_posts)}):**")
+                    for _, post in person_posts.head(5).iterrows():
+                        date = str(post.get("timestamp", ""))[:10]
+                        excerpt = str(post.get("text", ""))[:120].replace("\n", " ")
+                        url_p = post.get("url", "")
+                        st.markdown(f"- **{date}** — {excerpt}...  [{url_p[:60]}]({url_p})")
+
+            st.divider()
+
+            # Message history
+            conv = ms.load_conversation(selected_url)
+            messages = sorted(conv.get("messages", []), key=lambda m: m.get("date", ""))
+            st.subheader("Berichtenhistorie")
+            if not messages:
+                st.caption("_Nog geen berichten._")
+            else:
+                for msg in messages:
+                    mtype = msg.get("type", "?")
+                    date = msg.get("date", "?")
+                    content = msg.get("content", "")
+                    post_url = msg.get("post_url", "")
+                    msg_id = msg.get("id", "")
+                    badge = "💬 comment" if mtype == "comment" else "✉️ DM"
                     col_a, col_b = st.columns([6, 1])
                     with col_a:
                         st.markdown(f"**{date}** — {badge}")
                         if post_url:
                             st.markdown(f"Op post: [{post_url[:60]}]({post_url})")
-                        post_excerpt = msg.get("post_excerpt", "")
-                        if post_excerpt:
-                            st.caption(f'"{post_excerpt}"')
+                        if msg.get("post_excerpt"):
+                            st.caption(f'"{msg["post_excerpt"]}"')
                         st.write(content)
                     with col_b:
-                        if msg_id and st.button("🗑", key=f"del_{msg_id}", help="Verwijder bericht"):
-                            ms.delete_message(profile_url, msg_id)
+                        if msg_id and st.button("🗑", key=f"contacten_del_{msg_id}", help="Verwijder"):
+                            ms.delete_message(selected_url, msg_id)
                             st.rerun()
                     st.divider()
 
-        # ── New message form ──────────────────────────────────────────────────────
-        st.subheader("Nieuw bericht loggen")
-        with st.form("new_message_form", clear_on_submit=True):
-            msg_type = st.radio("Type", ["comment", "dm"], horizontal=True, key="msg_type")
-            msg_post_url = st.text_input("Post URL (optioneel)", key="msg_post_url")
-            msg_post_excerpt = st.text_input("Post excerpt (optioneel, eerste 150 tekens)", key="msg_post_excerpt")
-            msg_content = st.text_area("Bericht", height=120, key="msg_content")
-            msg_notes = st.text_input("Notities (optioneel)", key="msg_notes")
-            submitted = st.form_submit_button("Opslaan")
+            # New message form
+            st.subheader("Nieuw bericht loggen")
+            with st.form("contacten_new_msg_form", clear_on_submit=True):
+                msg_type = st.radio("Type", ["comment", "dm"], horizontal=True)
+                msg_post_url_input = st.text_input("Post URL (optioneel)")
+                msg_post_excerpt_input = st.text_input("Post excerpt (optioneel, eerste 150 tekens)")
+                msg_content_input = st.text_area("Bericht", height=100)
+                msg_notes_input = st.text_input("Notities (optioneel)")
+                submitted = st.form_submit_button("Opslaan")
 
-        if submitted:
-            if not msg_content.strip():
-                st.warning("Bericht mag niet leeg zijn.")
-            else:
-                ms.save_message(
-                    profile_url,
-                    person_name,
-                    person_title,
-                    {
-                        "date": datetime.now().date().isoformat(),
-                        "type": msg_type,
-                        "post_url": msg_post_url.strip(),
-                        "post_excerpt": msg_post_excerpt.strip()[:150],
-                        "content": msg_content.strip(),
-                        "notes": msg_notes.strip(),
-                    },
-                )
-                st.success("Bericht opgeslagen!")
-                st.rerun()
+            if submitted:
+                if not msg_content_input.strip():
+                    st.warning("Bericht mag niet leeg zijn.")
+                else:
+                    ms.save_message(
+                        selected_url,
+                        conn_data.get("name", ""),
+                        conn_data.get("title", ""),
+                        {
+                            "date": datetime.now().date().isoformat(),
+                            "type": msg_type,
+                            "post_url": msg_post_url_input.strip(),
+                            "post_excerpt": msg_post_excerpt_input.strip()[:150],
+                            "content": msg_content_input.strip(),
+                            "notes": msg_notes_input.strip(),
+                        },
+                    )
+                    st.success("Bericht opgeslagen!")
+                    st.rerun()
 
-        # ── Advies / clipboard ────────────────────────────────────────────────────
-        st.subheader("Advies voor volgend bericht")
-        all_posts = get_store().get_all_posts()
-        # Merge About text from connections into posts for clipboard context
-        conn_data = get_store().get_connection(profile_url)
-        if conn_data and conn_data.get("about"):
-            for p in all_posts:
-                if p.get("author_profile_url") == profile_url:
-                    p["about"] = conn_data["about"]
-        ctx = ms.build_clipboard_context(profile_url, all_posts)
-        st.text_area("Context voor Claude Code", value=ctx, height=300, key="msg_clipboard")
-        if st.button("📋 Kopieer naar clipboard"):
-            try:
-                subprocess.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
-                st.success("Gekopieerd! Plak in een nieuwe Claude Code chat en vraag: 'Geef advies voor mijn volgend bericht'")
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                st.info("Selecteer alle tekst hierboven en kopieer handmatig (Ctrl+A, Ctrl+C).")
+            # Clipboard context
+            st.subheader("Context voor Claude Code")
+            all_posts_list = get_store().get_all_posts()
+            if chroma_conn and chroma_conn.get("about"):
+                for p in all_posts_list:
+                    if p.get("author_profile_url") == selected_url:
+                        p["about"] = chroma_conn["about"]
+            ctx = ms.build_clipboard_context(selected_url, all_posts_list)
+            st.text_area("Context", value=ctx, height=250, key="contacten_clipboard")
+            if st.button("📋 Kopieer naar clipboard", key="contacten_copy_btn"):
+                try:
+                    import subprocess as _sp
+                    _sp.run("clip", input=ctx.encode("utf-8"), check=True, capture_output=True)
+                    st.success("Gekopieerd!")
+                except (FileNotFoundError, _sp.CalledProcessError):
+                    st.info("Selecteer tekst hierboven en kopieer handmatig.")
