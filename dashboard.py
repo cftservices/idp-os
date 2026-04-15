@@ -111,7 +111,7 @@ with tab2:
         filtered_conn = filtered_conn.sort_values("_sort").drop(columns=["_sort"])
 
         for _, row in filtered_conn.iterrows():
-            label = f"**{row.get('name', '?')}** — {str(row.get('title', ''))[:80]} | *{row.get('classification', '?')}*"
+            label = f"{row.get('name', '?')} — {str(row.get('title', ''))[:80]} [{row.get('classification', '?')}]"
             with st.expander(label):
                 col1, col2, col3 = st.columns(3)
                 col1.write(f"**Eerste gezien:** {row.get('first_seen', '?')}")
@@ -124,9 +124,9 @@ with tab2:
 
                 # Posts van deze connectie
                 if not df_posts.empty and "author_profile_url" in df_posts.columns:
-                    conn_posts = df_posts[
-                        df_posts["author_profile_url"] == profile_url
-                    ].sort_values("timestamp", ascending=False)
+                    conn_posts = df_posts[df_posts["author_profile_url"] == profile_url].copy()
+                    conn_posts["timestamp"] = pd.to_datetime(conn_posts["timestamp"], errors="coerce")
+                    conn_posts = conn_posts.sort_values("timestamp", ascending=False, na_position="last")
 
                     if not conn_posts.empty:
                         st.write(f"**{len(conn_posts)} post(s) gevonden:**")
