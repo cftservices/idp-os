@@ -28,12 +28,15 @@ class LinkedInStore:
         metadata = {k: v for k, v in post.items() if k != "text"}
         metadata["keywords_matched"] = json.dumps(metadata.get("keywords_matched", []))
         metadata["reply_drafted"] = bool(metadata.get("reply_drafted", False))
+        metadata["engagement_scraped"] = bool(metadata.get("engagement_scraped", False))
 
         if existing["ids"]:
             # Preserve reply_drafted flag from existing record
             existing_meta = existing["metadatas"][0]
             if existing_meta.get("reply_drafted"):
                 metadata["reply_drafted"] = True
+            if existing_meta.get("engagement_scraped"):
+                metadata["engagement_scraped"] = True
             self.posts.delete(ids=[post_id])
 
         self.posts.add(
@@ -103,8 +106,10 @@ class LinkedInStore:
         existing = self.connections.get(ids=[conn_id], include=["metadatas"])
 
         post_count = 0
+        about = ""
         if existing["ids"]:
             post_count = existing["metadatas"][0].get("post_count", 0)
+            about = existing["metadatas"][0].get("about", "")
             self.connections.delete(ids=[conn_id])
 
         doc = f"{connection['name']} {connection['title']} {connection['company']}"
@@ -117,6 +122,7 @@ class LinkedInStore:
             "first_seen": connection.get("first_seen", datetime.now().date().isoformat()),
             "last_seen": datetime.now().date().isoformat(),
             "post_count": post_count,
+            "about": connection.get("about", about),
         }
         self.connections.add(ids=[conn_id], documents=[doc], metadatas=[metadata])
 
@@ -138,3 +144,13 @@ class LinkedInStore:
         meta["last_seen"] = datetime.now().date().isoformat()
         self.connections.delete(ids=[conn_id])
         self.connections.add(ids=[conn_id], documents=[doc], metadatas=[meta])
+
+    def update_connection_about(self, profile_url: str, about: str) -> None:
+        """Atomically store About section text for a connection. No-op if not found."""
+        conn_id = self._connection_id(profile_url)
+        existing = self.connections.get(ids=[conn_id], include=["metadatas"])
+        if not existing["ids"]:
+            return
+        meta = dict(existing["metadatas"][0])
+        meta["about"] = about
+        self.connections.update(ids=[conn_id], metadatas=[meta])
