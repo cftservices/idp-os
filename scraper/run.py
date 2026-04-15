@@ -21,8 +21,10 @@ ENRICH_LIMIT = 20   # max profiles to enrich per run
 ENGAGE_LIMIT = 5    # max posts to scrape engagement for per run
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from classifier import classify_post, classify_connection
 from store import LinkedInStore
+import message_store as ms
 
 
 def main():
@@ -155,5 +157,59 @@ def main():
     print("[run] Done. Open Claude Code and run /linkedin-leads to generate your report.")
 
 
+def run_scrape_messages():
+    """Scrape LinkedIn DM inbox for outgoing messages and persist them via message_store."""
+    print(f"[run] Starting DM message scrape — {datetime.now().isoformat()}")
+
+    cmd = [
+        sys.executable,
+        str(Path(__file__).parent / "linkedin_scraper.py"),
+        "--scrape-messages",
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if result.returncode != 0:
+        print(f"[run] Scraper stderr:\n{result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    stdout_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
+    if not stdout_lines:
+        print("[run] No output from scraper", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        data = json.loads(stdout_lines[-1])
+    except json.JSONDecodeError as e:
+        print(f"[run] Failed to parse scraper output: {e}", file=sys.stderr)
+        print(f"[run] Raw output: {stdout_lines[-1][:200]}", file=sys.stderr)
+        sys.exit(1)
+
+    conversations = data.get("messages", [])
+    print(f"[run] Found {len(conversations)} conversation(s) in DM inbox")
+
+    total_saved = 0
+    for conv in conversations:
+        profile_url = conv.get("profile_url", "")
+        name = conv.get("name", "")
+        msgs = conv.get("messages", [])
+        if not profile_url:
+            continue
+        saved = ms.save_scraped_messages(profile_url, name, "", msgs)
+        total_saved += saved
+        print(f"[run] {name} ({profile_url}): {saved} new message(s) saved")
+
+    print(f"[run] Done. Total new messages saved: {total_saved}")
+
+
 if __name__ == "__main__":
-    main()
+    import argparse as _argparse
+
+    _parser = _argparse.ArgumentParser()
+    _parser.add_argument("--scrape-messages", action="store_true", default=False,
+                         help="Scrape DM inbox outgoing messages and save to message store")
+    _args = _parser.parse_args()
+
+    if _args.scrape_messages:
+        run_scrape_messages()
+    else:
+        main()

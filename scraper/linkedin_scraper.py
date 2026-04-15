@@ -350,6 +350,106 @@ def scrape_engagement(context: BrowserContext, post_url: str) -> list[dict]:
         page.close()
 
 
+def scrape_messages(context: BrowserContext) -> list[dict]:
+    """
+    Scrape LinkedIn DM inbox outgoing messages only.
+    Returns list of {profile_url, name, messages: [{date, type, content}]}
+    """
+    page = context.new_page()
+    results: list[dict] = []
+    try:
+        page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
+        time.sleep(4)
+
+        # Collect conversation list items from sidebar
+        thread_items = page.query_selector_all("li.msg-conversation-listitem")
+        if not thread_items:
+            thread_items = page.query_selector_all("[data-control-name='view_conversation']")
+
+        print(f"[scrape_messages] Found {len(thread_items)} conversation threads", file=sys.stderr)
+
+        for idx in range(len(thread_items)):
+            try:
+                # Re-query each iteration — DOM may re-render after click
+                items = page.query_selector_all("li.msg-conversation-listitem")
+                if idx >= len(items):
+                    break
+                item = items[idx]
+
+                # Extract profile URL from the link within this thread item
+                link = item.query_selector("a[href*='/in/']")
+                if not link:
+                    continue
+                href = link.get_attribute("href") or ""
+                if href.startswith("/"):
+                    profile_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/") + "/"
+                else:
+                    profile_url = href.split("?")[0].rstrip("/") + "/"
+
+                # Extract name from thread item
+                name_el = item.query_selector(".msg-conversation-listitem__participant-names")
+                name = name_el.inner_text().strip() if name_el else ""
+
+                # Click to open conversation
+                item.click()
+                time.sleep(2)
+
+                # Scrape outgoing messages (sent by self — no "other" class)
+                sent_messages: list[dict] = []
+
+                conv_panel = page.query_selector(".msg-s-message-list")
+                if conv_panel:
+                    page.evaluate("(el) => el.scrollTop = 0", conv_panel)
+                    time.sleep(1)
+
+                msg_events = page.query_selector_all(".msg-s-event-listitem")
+                for ev in msg_events:
+                    group = ev.query_selector(".msg-s-message-group")
+                    if not group:
+                        continue
+                    is_other = "msg-s-message-group--other" in (group.get_attribute("class") or "")
+                    if is_other:
+                        continue
+
+                    body = ev.query_selector(".msg-s-event__content")
+                    if not body:
+                        continue
+                    content = body.inner_text().strip()
+                    if not content:
+                        continue
+
+                    time_el = ev.query_selector("time")
+                    if time_el:
+                        date_str = (time_el.get_attribute("datetime") or datetime.now().date().isoformat())[:10]
+                    else:
+                        date_str = datetime.now().date().isoformat()
+
+                    sent_messages.append({
+                        "date": date_str,
+                        "type": "dm",
+                        "content": content,
+                    })
+
+                if sent_messages or name:
+                    results.append({
+                        "profile_url": profile_url,
+                        "name": name,
+                        "messages": sent_messages,
+                    })
+                    print(f"[scrape_messages] {name}: {len(sent_messages)} outgoing message(s)", file=sys.stderr)
+
+            except Exception as e:
+                print(f"[scrape_messages] Thread {idx} error: {e}", file=sys.stderr)
+                continue
+
+    except Exception as e:
+        print(f"[scrape_messages] Fatal error: {e}", file=sys.stderr)
+    finally:
+        page.close()
+
+    return results
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -357,6 +457,7 @@ if __name__ == "__main__":
     parser.add_argument("date_filter", nargs="?", default="past-24h")
     parser.add_argument("--enrich-urls", default="[]", help="JSON list of profile URLs to enrich with About text")
     parser.add_argument("--engagement-urls", default="[]", help="JSON list of post URLs to scrape likes/comments for")
+    parser.add_argument("--scrape-messages", action="store_true", default=False)
     args = parser.parse_args()
 
     try:
@@ -400,6 +501,11 @@ if __name__ == "__main__":
                 engagement_results[post_url] = scrape_engagement(context, post_url)
                 time.sleep(3)
 
+        # Scrape DM inbox outgoing messages
+        messages_results: list[dict] = []
+        if args.scrape_messages:
+            messages_results = scrape_messages(context)
+
         context.close()
 
     print(json.dumps({
@@ -407,4 +513,5 @@ if __name__ == "__main__":
         "connections": connections,
         "about": about_results,
         "engagement": engagement_results,
+        "messages": messages_results,
     }))
