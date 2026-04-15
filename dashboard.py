@@ -187,7 +187,7 @@ with tab3:
                     st.markdown(
                         f"**{post.get('author_name', '?')}** "
                         f"— `{post.get('classification', '?')}` "
-                        f"— {str(post.get('timestamp', ''))[:10]}"
+                        f"— {str(post['timestamp'])[:10] if pd.notna(post.get('timestamp')) else ''}"
                     )
                     st.write(str(post.get("text", ""))[:350])
                     url = post.get("url", "")
