@@ -1,6 +1,8 @@
 from __future__ import annotations
 import json
+import os
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -22,12 +24,24 @@ def _conversation_path(profile_url: str) -> Path:
     return MESSAGES_DIR / f"{get_slug(profile_url)}.json"
 
 
+def _atomic_write(path: Path, data: dict) -> None:
+    """Write JSON atomically via temp file to avoid corruption on interrupted writes."""
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False,
+                                     suffix=".tmp", encoding="utf-8") as tmp:
+        json.dump(data, tmp, ensure_ascii=False, indent=2)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
+
+
 def load_conversation(profile_url: str) -> dict:
-    """Load conversation JSON or return empty template if not found."""
+    """Load conversation JSON or return empty template if not found or corrupt."""
     path = _conversation_path(profile_url)
     if path.exists():
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
     return {"profile_url": profile_url, "name": "", "title": "", "messages": []}
 
 
@@ -41,8 +55,7 @@ def save_message(profile_url: str, name: str, title: str, message: dict) -> None
         message["id"] = datetime.now().isoformat()
     conv["messages"].append(message)
     path = _conversation_path(profile_url)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(conv, f, ensure_ascii=False, indent=2)
+    _atomic_write(path, conv)
 
 
 def list_conversations() -> list[dict]:
@@ -66,8 +79,7 @@ def delete_message(profile_url: str, message_id: str) -> None:
     conv = load_conversation(profile_url)
     conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
     path = _conversation_path(profile_url)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(conv, f, ensure_ascii=False, indent=2)
+    _atomic_write(path, conv)
 
 
 def build_clipboard_context(profile_url: str, chroma_posts: list[dict]) -> str:
