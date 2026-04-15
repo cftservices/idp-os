@@ -58,6 +58,46 @@ def save_message(profile_url: str, name: str, title: str, message: dict) -> None
     _atomic_write(path, conv)
 
 
+def save_scraped_messages(
+    profile_url: str,
+    name: str,
+    title: str,
+    messages: list[dict],
+) -> int:
+    """
+    Save a batch of scraped messages with deduplication.
+    Deduplication: skip if a message with same content already exists.
+    Returns number of newly saved messages.
+    """
+    conv = load_conversation(profile_url)
+    conv["name"] = name or conv["name"]
+    conv["title"] = title or conv["title"]
+    conv["profile_url"] = profile_url
+
+    existing_contents = {m.get("content", "") for m in conv["messages"]}
+    new_count = 0
+
+    for message in messages:
+        content = message.get("content", "").strip()
+        if not content:
+            continue
+        if content in existing_contents:
+            continue
+        message = dict(message)
+        message["content"] = content
+        if "id" not in message or not message["id"]:
+            message["id"] = datetime.now().isoformat() + f"_{new_count}"
+        conv["messages"].append(message)
+        existing_contents.add(content)
+        new_count += 1
+
+    if new_count > 0:
+        path = _conversation_path(profile_url)
+        _atomic_write(path, conv)
+
+    return new_count
+
+
 def list_conversations() -> list[dict]:
     """List all conversations sorted by most recent message date (newest first)."""
     MESSAGES_DIR.mkdir(parents=True, exist_ok=True)
