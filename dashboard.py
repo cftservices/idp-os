@@ -221,28 +221,28 @@ with tab4:
         if not_replied.empty:
             st.success("Alle priority posts bereikt!")
         else:
-            for _, post in not_replied.iterrows():
+            for i, (_, post) in enumerate(not_replied.iterrows()):
                 url = post.get("url", "")
                 ts = str(post["timestamp"])[:10] if pd.notna(post.get("timestamp")) else ""
                 with st.expander(f"{post.get('author_name', '?')} — {ts} [{post.get('classification', '?')}]"):
                     st.write(str(post.get("text", ""))[:400])
                     if url:
                         st.markdown(f"[Bekijk post op LinkedIn]({url})")
-                    if st.button("Markeer als reply gestuurd", key=f"btn_{url}"):
+                    if st.button("Markeer als reply gestuurd", key=f"btn_{i}_{url}"):
                         get_store().mark_reply_drafted(url, drafted=True)
                         st.cache_data.clear()
                         st.rerun()
 
         if not replied.empty:
             st.subheader("Al bereikt")
-            for _, post in replied.iterrows():
+            for i, (_, post) in enumerate(replied.iterrows()):
                 url = post.get("url", "")
                 ts = str(post["timestamp"])[:10] if pd.notna(post.get("timestamp")) else ""
                 col_a, col_b = st.columns([5, 1])
                 col_a.markdown(
                     f"**{post.get('author_name', '?')}** — {ts} — [{str(url)[:60]}]({url})"
                 )
-                if col_b.button("Ongedaan", key=f"undo_{url}"):
+                if col_b.button("Ongedaan", key=f"undo_{i}_{url}"):
                     get_store().mark_reply_drafted(url, drafted=False)
                     st.cache_data.clear()
                     st.rerun()

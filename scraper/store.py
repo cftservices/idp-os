@@ -83,16 +83,14 @@ class LinkedInStore:
         return [dict(meta) for meta in results["metadatas"]]
 
     def mark_reply_drafted(self, post_url: str, drafted: bool = True) -> None:
-        """Set reply_drafted flag on a post. No-op if URL not found."""
+        """Set reply_drafted flag on a post atomically. No-op if URL not found."""
         post_id = self._post_id(post_url)
-        existing = self.posts.get(ids=[post_id], include=["documents", "metadatas"])
+        existing = self.posts.get(ids=[post_id], include=["metadatas"])
         if not existing["ids"]:
             return
         meta = dict(existing["metadatas"][0])
-        doc = existing["documents"][0]
         meta["reply_drafted"] = drafted
-        self.posts.delete(ids=[post_id])
-        self.posts.add(ids=[post_id], documents=[doc], metadatas=[meta])
+        self.posts.update(ids=[post_id], metadatas=[meta])
 
     # ── Connections ────────────────────────────────────────────────────────
 
