@@ -143,7 +143,60 @@ with tab2:
                         st.caption("_Geen posts gevonden voor dit profiel._")
 
 with tab3:
-    st.info("Posts tab — komt in Task 5")
+    st.header("Posts")
+
+    if df_posts.empty:
+        st.info("Nog geen posts in de database.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            cls_opts = sorted(df_posts["classification"].dropna().unique().tolist())
+            cls_filter_p = st.multiselect(
+                "Classificatie",
+                options=cls_opts,
+                default=[c for c in ["ideal_client", "influencer"] if c in cls_opts],
+                key="posts_cls",
+            )
+        with col2:
+            kw_opts = sorted(df_posts["keyword_source"].dropna().unique().tolist()) if "keyword_source" in df_posts.columns else []
+            kw_filter = st.multiselect("Keyword source", options=kw_opts, default=kw_opts, key="posts_kw")
+        with col3:
+            search = st.text_input("Zoek in tekst", placeholder="bijv. MQTT broker...")
+
+        filtered_p = df_posts.copy()
+        if cls_filter_p:
+            filtered_p = filtered_p[filtered_p["classification"].isin(cls_filter_p)]
+        if kw_filter:
+            filtered_p = filtered_p[filtered_p["keyword_source"].isin(kw_filter)]
+        if search:
+            filtered_p = filtered_p[
+                filtered_p["text"].str.contains(search, case=False, na=False)
+            ]
+
+        filtered_p = filtered_p.copy()
+        filtered_p["timestamp"] = pd.to_datetime(filtered_p["timestamp"], errors="coerce")
+        filtered_p = filtered_p.sort_values("timestamp", ascending=False, na_position="last")
+
+        st.write(f"**{len(filtered_p)} posts**")
+
+        for _, post in filtered_p.iterrows():
+            kw = ", ".join(post.get("keywords_matched") or [])
+            with st.container():
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.markdown(
+                        f"**{post.get('author_name', '?')}** "
+                        f"— `{post.get('classification', '?')}` "
+                        f"— {str(post.get('timestamp', ''))[:10]}"
+                    )
+                    st.write(str(post.get("text", ""))[:350])
+                    url = post.get("url", "")
+                    if url:
+                        st.markdown(f"[Bekijk post]({url}) | Keywords: `{kw}`")
+                with col_b:
+                    if post.get("reply_drafted"):
+                        st.success("Reply gestuurd")
+                st.divider()
 
 with tab4:
     st.info("Replies tab — komt in Task 6")
