@@ -1,6 +1,7 @@
 from __future__ import annotations
 import hashlib
 import json
+import uuid
 from datetime import datetime, timedelta
 import chromadb
 
@@ -23,7 +24,7 @@ class LinkedInStore:
 
     def save_message(self, profile_url: str, name: str, title: str, message: dict) -> None:
         """Upsert a single message into ChromaDB."""
-        msg_id = message.get("id") or datetime.now().isoformat()
+        msg_id = message.get("id") or str(uuid.uuid4())
         chroma_id = self._msg_chroma_id(msg_id)
         content = message.get("content", "").strip()
         if not content:
@@ -49,14 +50,11 @@ class LinkedInStore:
         """Batch upsert messages with dedup. Returns number of newly saved messages."""
         existing_results = self.messages.get(
             where={"profile_url": profile_url},
-            include=["documents", "metadatas"],
+            include=["metadatas"],
         )
         existing_keys = {
-            (doc, meta.get("direction", "sent"))
-            for doc, meta in zip(
-                existing_results.get("documents") or [],
-                existing_results.get("metadatas") or [],
-            )
+            meta.get("msg_id", "")
+            for meta in (existing_results.get("metadatas") or [])
         }
         new_count = 0
         for i, message in enumerate(messages):
@@ -64,9 +62,9 @@ class LinkedInStore:
             if not content:
                 continue
             direction = message.get("direction", "sent")
-            if (content, direction) in existing_keys:
-                continue
             msg_id = message.get("id") or f"{datetime.now().isoformat()}_{i}"
+            if msg_id in existing_keys:
+                continue
             chroma_id = self._msg_chroma_id(msg_id)
             metadata = {
                 "profile_url": profile_url,
@@ -79,7 +77,7 @@ class LinkedInStore:
                 "msg_id": msg_id,
             }
             self.messages.add(ids=[chroma_id], documents=[content], metadatas=[metadata])
-            existing_keys.add((content, direction))
+            existing_keys.add(msg_id)
             new_count += 1
         return new_count
 
@@ -95,8 +93,10 @@ class LinkedInStore:
         name = ""
         title = ""
         for doc, meta in zip(results["documents"], results["metadatas"]):
-            name = meta.get("name", "") or name
-            title = meta.get("title", "") or title
+            if not name:
+                name = meta.get("name", "") or ""
+            if not title:
+                title = meta.get("title", "") or ""
             messages.append({
                 "id": meta.get("msg_id", ""),
                 "date": meta.get("date", ""),
@@ -156,6 +156,8 @@ class LinkedInStore:
         self, query: str, n_results: int = 10, profile_url: str | None = None
     ) -> list[dict]:
         """Semantic search across messages. Optionally filter by profile_url."""
+        if not query or not query.strip():
+            return []
         where = {"profile_url": profile_url} if profile_url else None
         total = self.messages.count()
         if total == 0:
