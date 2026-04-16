@@ -139,14 +139,18 @@ class LinkedInStore:
         convs.sort(key=lambda c: c["_last_date"], reverse=True)
         for c in convs:
             c["messages"].sort(key=lambda m: m.get("date", ""))
+            c.pop("_last_date", None)
         return convs
 
     def delete_message(self, profile_url: str, message_id: str) -> None:
-        """Delete a message by its msg_id. No-op if not found."""
+        """Delete a message by its msg_id. No-op if not found or profile_url mismatch."""
         chroma_id = self._msg_chroma_id(message_id)
-        existing = self.messages.get(ids=[chroma_id])
-        if existing["ids"]:
-            self.messages.delete(ids=[chroma_id])
+        existing = self.messages.get(ids=[chroma_id], include=["metadatas"])
+        if not existing["ids"]:
+            return
+        if existing["metadatas"][0].get("profile_url") != profile_url:
+            return
+        self.messages.delete(ids=[chroma_id])
 
     def search_messages(
         self, query: str, n_results: int = 10, profile_url: str | None = None
