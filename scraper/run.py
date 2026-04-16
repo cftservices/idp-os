@@ -157,6 +157,50 @@ def main():
     print("[run] Done. Open Claude Code and run /linkedin-leads to generate your report.")
 
 
+def run_scrape_all_connections():
+    """Scrape ALL LinkedIn connections and persist them in ChromaDB."""
+    print(f"[run] Starting full connections scrape — {datetime.now().isoformat()}")
+
+    cmd = [
+        sys.executable,
+        str(Path(__file__).parent / "linkedin_scraper.py"),
+        "--scrape-all-connections",
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    if result.returncode != 0:
+        print(f"[run] Scraper stderr:\n{result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    stdout_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
+    if not stdout_lines:
+        print("[run] No output from scraper", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        data = json.loads(stdout_lines[-1])
+    except json.JSONDecodeError as e:
+        print(f"[run] Failed to parse scraper output: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    all_conns = data.get("all_connections", [])
+    print(f"[run] Scraped {len(all_conns)} connections from LinkedIn")
+
+    store = LinkedInStore(CHROMA_PATH)
+    saved = 0
+    for conn in all_conns:
+        if not conn.get("profile_url"):
+            continue
+        # Preserve existing classification if already in DB
+        existing = store.get_connection(conn["profile_url"])
+        if existing and existing.get("classification") not in (None, "", "unknown"):
+            conn["classification"] = existing["classification"]
+        store.upsert_connection(conn)
+        saved += 1
+
+    print(f"[run] Done. {saved} connections stored in ChromaDB.")
+
+
 def run_scrape_messages():
     """Scrape LinkedIn DM inbox for outgoing messages and persist them via message_store."""
     print(f"[run] Starting DM message scrape — {datetime.now().isoformat()}")
@@ -207,9 +251,13 @@ if __name__ == "__main__":
     _parser = _argparse.ArgumentParser()
     _parser.add_argument("--scrape-messages", action="store_true", default=False,
                          help="Scrape DM inbox outgoing messages and save to message store")
+    _parser.add_argument("--scrape-all-connections", action="store_true", default=False,
+                         help="Scrape all 700+ LinkedIn connections and store in ChromaDB")
     _args = _parser.parse_args()
 
     if _args.scrape_messages:
         run_scrape_messages()
+    elif _args.scrape_all_connections:
+        run_scrape_all_connections()
     else:
         main()

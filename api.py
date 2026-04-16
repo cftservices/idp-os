@@ -108,21 +108,46 @@ def get_posts(classification: str = "", search: str = ""):
 def get_connections():
     store = get_store()
     connections = store.get_all_connections()
-    # Attach message count and last message date
     conversations = ms.list_conversations()
     msg_map = {c.get("profile_url", ""): c for c in conversations}
+
+    # Attach message count and last message date to ChromaDB connections
+    conn_urls = {c.get("profile_url", "") for c in connections}
     for conn in connections:
         url = conn.get("profile_url", "")
         conv = msg_map.get(url)
         conn["message_count"] = len(conv.get("messages", [])) if conv else 0
         conn["last_message"] = conv.get("_last_date", "") if conv else ""
-    # Sort: ideal_client+msgs > ideal_client > influencer+msgs > influencer > rest
+
+    # Add contacts that exist only in message store (e.g. DM contacts not yet in ChromaDB)
+    for conv in conversations:
+        url = conv.get("profile_url", "")
+        if url and url not in conn_urls:
+            connections.append({
+                "profile_url": url,
+                "name": conv.get("name", "?"),
+                "title": conv.get("title", ""),
+                "company": "",
+                "classification": "unknown",
+                "first_seen": "",
+                "last_seen": "",
+                "post_count": 0,
+                "about": "",
+                "message_count": len(conv.get("messages", [])),
+                "last_message": conv.get("_last_date", ""),
+            })
+
+    # Sort: ideal_client+msgs first, then ideal_client, influencer+msgs, influencer, rest
+    # Within each group: most recent message first
     cls_rank = {"ideal_client": 0, "influencer": 2, "colleague": 4, "unknown": 4}
 
     def sort_key(c):
         rank = cls_rank.get(c.get("classification", "unknown"), 4)
         has_msgs = 0 if c.get("message_count", 0) > 0 else 1
-        return (rank + has_msgs, c.get("last_message", ""))
+        # Negate last_message for descending date within group
+        last = c.get("last_message", "")
+        neg = "".join(chr(127 - ord(ch)) for ch in last) if last else "~"
+        return (rank + has_msgs, neg)
 
     connections.sort(key=sort_key)
     return connections

@@ -350,6 +350,93 @@ def scrape_engagement(context: BrowserContext, post_url: str) -> list[dict]:
         page.close()
 
 
+def scrape_all_connections(context: BrowserContext) -> list[dict]:
+    """
+    Scrape ALL LinkedIn connections from /mynetwork/invite-connect/connections/.
+    Returns list of {profile_url, name, title, company}.
+    Scrolls until no new connections load (handles 700+ connections).
+    """
+    page = context.new_page()
+    results: list[dict] = []
+    seen_urls: set[str] = set()
+
+    try:
+        page.goto(
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/",
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
+        time.sleep(4)
+
+        prev_count = -1
+        scroll_attempts = 0
+        max_scroll_attempts = 150  # 744 connections / ~10 per scroll = ~75 scrolls, with margin
+
+        while scroll_attempts < max_scroll_attempts:
+            # Extract all visible connection cards
+            # LinkedIn renders connections as list items with profile links
+            cards = page.query_selector_all("li.mn-connection-card")
+            if not cards:
+                # Fallback: broader selector
+                cards = page.query_selector_all("[data-view-name='profile-entity-lockup']")
+
+            for card in cards:
+                try:
+                    link = card.query_selector("a.mn-connection-card__link, a[href*='/in/']")
+                    if not link:
+                        continue
+                    href = link.get_attribute("href") or ""
+                    if "/in/" not in href:
+                        continue
+                    profile_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/") + "/"
+                    if profile_url in seen_urls:
+                        continue
+                    seen_urls.add(profile_url)
+
+                    # Name
+                    name_el = card.query_selector(".mn-connection-card__name, .t-bold")
+                    name = name_el.inner_text().strip() if name_el else ""
+
+                    # Occupation/title
+                    occ_el = card.query_selector(".mn-connection-card__occupation, .t-14.t-black--light")
+                    occupation = occ_el.inner_text().strip() if occ_el else ""
+
+                    results.append({
+                        "profile_url": profile_url,
+                        "name": name,
+                        "title": occupation,
+                        "company": "",
+                        "classification": "unknown",
+                    })
+                except Exception as e:
+                    print(f"[scrape_all_connections] Card parse error: {e}", file=sys.stderr)
+
+            current_count = len(results)
+            print(f"[scrape_all_connections] {current_count} connections found (scroll {scroll_attempts})", file=sys.stderr)
+
+            if current_count == prev_count:
+                # No new connections loaded — check if we hit the end
+                scroll_attempts += 1
+                if scroll_attempts >= 3:
+                    break  # 3 consecutive no-growth scrolls = end of list
+            else:
+                scroll_attempts = 0
+
+            prev_count = current_count
+
+            # Scroll to bottom to trigger lazy load
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(2)
+
+    except Exception as e:
+        print(f"[scrape_all_connections] Fatal error: {e}", file=sys.stderr)
+    finally:
+        page.close()
+
+    print(f"[scrape_all_connections] Done — {len(results)} connections total", file=sys.stderr)
+    return results
+
+
 def scrape_messages(context: BrowserContext) -> list[dict]:
     """
     Scrape LinkedIn DM inbox outgoing messages only.
@@ -458,6 +545,7 @@ if __name__ == "__main__":
     parser.add_argument("--enrich-urls", default="[]", help="JSON list of profile URLs to enrich with About text")
     parser.add_argument("--engagement-urls", default="[]", help="JSON list of post URLs to scrape likes/comments for")
     parser.add_argument("--scrape-messages", action="store_true", default=False)
+    parser.add_argument("--scrape-all-connections", action="store_true", default=False)
     args = parser.parse_args()
 
     try:
@@ -473,9 +561,14 @@ if __name__ == "__main__":
         all_posts: list[dict] = []
         seen_post_urls: set[str] = set()
 
-        # When --scrape-messages is set, skip keyword/connection scraping entirely
+        # When --scrape-messages or --scrape-all-connections is set, skip keyword scraping
         connections: list[dict] = []
-        if not args.scrape_messages:
+        all_connections_full: list[dict] = []
+
+        if args.scrape_all_connections:
+            all_connections_full = scrape_all_connections(context)
+
+        if not args.scrape_messages and not args.scrape_all_connections:
             date_filter = args.date_filter
             kw_limit = None if date_filter != "past-24h" else 8
             print(f"[scraper] date_filter={date_filter}, keywords={kw_limit or 'all'}", file=sys.stderr)
@@ -515,6 +608,7 @@ if __name__ == "__main__":
     print(json.dumps({
         "posts": all_posts,
         "connections": connections,
+        "all_connections": all_connections_full,
         "about": about_results,
         "engagement": engagement_results,
         "messages": messages_results,
