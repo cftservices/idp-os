@@ -47,8 +47,12 @@ def classify_connection(
     connection: dict,
     ideal_client_titles: list[str],
     colleague_names: list[str],
+    influencer_keywords: list[str] | None = None,
 ) -> str:
-    """Returns classification string for a LinkedIn connection."""
+    """Returns classification string for a LinkedIn connection.
+
+    Priority: colleague → ideal_client → influencer → unknown
+    """
     name = connection.get("name", "")
     title = connection.get("title", "").lower()
 
@@ -57,5 +61,9 @@ def classify_connection(
 
     if any(t.lower() in title for t in ideal_client_titles if t):
         return "ideal_client"
+
+    if influencer_keywords:
+        if any(kw.lower() in title for kw in influencer_keywords if kw):
+            return "influencer"
 
     return "unknown"

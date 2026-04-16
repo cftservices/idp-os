@@ -47,7 +47,7 @@ def main() -> None:
             continue
 
         saved = store.save_scraped_messages(profile_url, name, title, messages)
-        print(f"[migrate] {name or path.stem}: {saved}/{len(messages)} message(s) saved → {path.name}")
+        print(f"[migrate] {name or path.stem}: {saved}/{len(messages)} message(s) saved -> {path.name}")
         total_saved += saved
         total_files += 1
 
