@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LinkedIn Intel</title>
+<style>
+/* ── Apple Design System ─────────────────────────────────────────────────── */
+:root {
+  --apple-blue: #007AFF;
+  --apple-blue-dark: #0051D5;
+  --apple-green: #34C759;
+  --apple-red: #FF3B30;
+  --apple-orange: #FF9500;
+  --apple-yellow: #FFCC00;
+  --apple-purple: #AF52DE;
+  --apple-gray: #8E8E93;
+  --apple-gray-light: #C7C7CC;
+  --apple-gray-ultralight: #F2F2F7;
+  --bg-primary: #F5F5F7;
+  --bg-secondary: #FFFFFF;
+  --text-primary: #1D1D1F;
+  --text-secondary: #6E6E73;
+  --border-color: rgba(0,0,0,0.06);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.app-header {
+  position: sticky; top: 0; z-index: 1000;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid var(--border-color);
+  padding: 12px 0;
+}
+.header-content {
+  max-width: 1400px; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; gap: 16px;
+}
+.header-left { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.app-logo { font-size: 22px; }
+.app-title { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+.search-bar { flex: 1; max-width: 320px; position: relative; }
+.search-input {
+  width: 100%; padding: 8px 16px 8px 36px;
+  border: none; background: var(--apple-gray-ultralight); border-radius: 10px;
+  font-size: 14px; color: var(--text-primary);
+  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+.search-input:focus { outline: none; background: var(--bg-secondary); box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--apple-gray); font-size: 14px; }
+.header-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.header-button {
+  padding: 8px 14px; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+.header-button.primary { background: var(--apple-blue); color: white; }
+.header-button.primary:hover { background: var(--apple-blue-dark); }
+.header-button.secondary { background: var(--apple-gray-ultralight); color: var(--text-primary); }
+.header-button.secondary:hover { background: var(--apple-gray-light); }
+.api-status { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+.api-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--apple-gray-light); }
+.api-dot.online { background: var(--apple-green); }
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.app-container { max-width: 1400px; margin: 0 auto; padding: 24px; display: flex; gap: 24px; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar { width: 200px; flex-shrink: 0; position: sticky; top: 68px; height: fit-content; }
+.sidebar-card {
+  background: var(--bg-secondary); border-radius: 16px; padding: 10px 8px;
+  box-shadow: var(--shadow-sm); border: 0.5px solid var(--border-color);
+}
+.sidebar-section-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary); padding: 4px 10px 6px; margin-top: 4px;
+}
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; color: var(--text-primary); cursor: pointer;
+  font-size: 14px; font-weight: 400; text-decoration: none;
+  transition: all 0.15s cubic-bezier(0.4,0,0.2,1);
+}
+.sidebar-item:hover { background: var(--apple-gray-ultralight); }
+.sidebar-item.active { background: var(--apple-blue); color: white; font-weight: 500; }
+.sidebar-icon { font-size: 16px; width: 20px; text-align: center; }
+.sidebar-badge {
+  margin-left: auto; background: var(--apple-red); color: white;
+  font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 10px;
+}
+.sidebar-item.active .sidebar-badge { background: rgba(255,255,255,0.3); }
+
+/* ── Main content ────────────────────────────────────────────────────────── */
+.main-content { flex: 1; min-width: 0; }
+.section { display: none; }
+.section.active { display: block; }
+.section-header { margin-bottom: 20px; }
+.section-title { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); }
+.section-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-secondary); border-radius: 16px; padding: 20px;
+  box-shadow: var(--shadow-sm); border: 0.5px solid var(--border-color);
+  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+.card:hover { box-shadow: var(--shadow-md); }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.card-title-wrap { display: flex; align-items: center; gap: 10px; }
+.card-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; background: var(--apple-gray-ultralight);
+}
+.card-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* ── Metric tiles ────────────────────────────────────────────────────────── */
+.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.metric-card {
+  background: var(--bg-secondary); border-radius: 16px; padding: 20px;
+  box-shadow: var(--shadow-sm); border: 0.5px solid var(--border-color);
+}
+.metric-value { font-size: 32px; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); }
+.metric-label { font-size: 13px; color: var(--text-secondary); margin-top: 2px; font-weight: 500; }
+.metric-icon { font-size: 28px; margin-bottom: 8px; }
+
+/* ── Status badges ───────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 600;
+}
+.badge-ideal { background: rgba(0,122,255,0.1); color: var(--apple-blue); }
+.badge-influencer { background: rgba(175,82,222,0.1); color: var(--apple-purple); }
+.badge-colleague { background: rgba(52,199,89,0.1); color: var(--apple-green); }
+.badge-neutral { background: var(--apple-gray-ultralight); color: var(--apple-gray); }
+.badge-unknown { background: var(--apple-gray-ultralight); color: var(--apple-gray); }
+.badge-replied { background: rgba(52,199,89,0.1); color: var(--apple-green); }
+.badge-pending { background: rgba(255,149,0,0.1); color: var(--apple-orange); }
+
+/* ── Posts table ─────────────────────────────────────────────────────────── */
+.filter-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-select {
+  padding: 8px 12px; border: 0.5px solid var(--border-color);
+  border-radius: 8px; font-size: 13px; color: var(--text-primary);
+  background: var(--bg-secondary); cursor: pointer;
+}
+.filter-search {
+  flex: 1; padding: 8px 14px; border: 0.5px solid var(--border-color);
+  border-radius: 8px; font-size: 13px; color: var(--text-primary); background: var(--bg-secondary);
+}
+.filter-search:focus, .filter-select:focus { outline: none; border-color: var(--apple-blue); box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+.posts-count { font-size: 13px; color: var(--text-secondary); margin-left: auto; }
+
+.posts-list { display: flex; flex-direction: column; gap: 12px; }
+.post-card {
+  background: var(--bg-secondary); border-radius: 14px; padding: 16px 20px;
+  box-shadow: var(--shadow-sm); border: 0.5px solid var(--border-color);
+  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+.post-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.post-author { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.post-date { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
+.post-text { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px; }
+.post-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.post-link { font-size: 12px; color: var(--apple-blue); text-decoration: none; }
+.post-link:hover { text-decoration: underline; }
+.keywords-wrap { font-size: 12px; color: var(--text-secondary); }
+.reply-btn {
+  margin-left: auto; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.2s;
+}
+.reply-btn.not-replied { background: var(--apple-gray-ultralight); color: var(--text-secondary); }
+.reply-btn.not-replied:hover { background: rgba(0,122,255,0.1); color: var(--apple-blue); }
+.reply-btn.replied { background: rgba(52,199,89,0.1); color: var(--apple-green); }
+
+/* ── Contacten two-column ────────────────────────────────────────────────── */
+.contacten-layout { display: flex; gap: 20px; height: calc(100vh - 140px); }
+.contact-list-col { width: 260px; flex-shrink: 0; overflow-y: auto; }
+.contact-detail-col { flex: 1; overflow-y: auto; }
+
+.contact-search { width: 100%; padding: 8px 14px; border: 0.5px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--bg-secondary); margin-bottom: 12px; }
+.contact-search:focus { outline: none; border-color: var(--apple-blue); box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+.contact-list { display: flex; flex-direction: column; gap: 4px; }
+.contact-item {
+  display: flex; align-items: center; padding: 10px 12px; border-radius: 10px;
+  cursor: pointer; transition: all 0.15s; background: var(--bg-secondary);
+  border: 0.5px solid var(--border-color);
+}
+.contact-item:hover { background: var(--apple-gray-ultralight); border-color: var(--apple-gray-light); }
+.contact-item.selected { background: var(--apple-blue); border-color: var(--apple-blue); }
+.contact-item.selected .contact-name, .contact-item.selected .contact-cls { color: white; }
+.contact-name { font-size: 13px; font-weight: 500; color: var(--text-primary); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contact-cls { font-size: 11px; color: var(--text-secondary); }
+.contact-msg-badge {
+  background: var(--apple-blue); color: white; font-size: 11px; font-weight: 600;
+  padding: 1px 6px; border-radius: 10px; margin-left: 6px; flex-shrink: 0;
+}
+.contact-item.selected .contact-msg-badge { background: rgba(255,255,255,0.25); }
+
+/* Contact detail panel */
+.detail-panel { background: var(--bg-secondary); border-radius: 16px; padding: 24px; box-shadow: var(--shadow-sm); border: 0.5px solid var(--border-color); }
+.detail-empty { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.detail-empty-icon { font-size: 40px; margin-bottom: 12px; }
+.detail-name { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.detail-title { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
+.detail-meta { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.detail-link { font-size: 13px; color: var(--apple-blue); text-decoration: none; }
+.detail-link:hover { text-decoration: underline; }
+.detail-about {
+  background: rgba(0,122,255,0.05); border-left: 3px solid var(--apple-blue);
+  border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 13px;
+  color: var(--text-primary); margin-top: 14px; line-height: 1.5;
+}
+.detail-section { margin-top: 20px; }
+.detail-section-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-secondary); margin-bottom: 10px;
+}
+.detail-divider { border: none; border-top: 0.5px solid var(--border-color); margin: 16px 0; }
+
+/* Posts in detail panel */
+.post-item {
+  padding: 10px 0; border-bottom: 0.5px solid var(--border-color);
+  font-size: 13px; color: var(--text-primary);
+}
+.post-item:last-child { border-bottom: none; }
+.post-item-date { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+.post-item-link { color: var(--apple-blue); text-decoration: none; font-size: 12px; }
+
+/* Messages in detail panel */
+.msg-item { padding: 12px 0; border-bottom: 0.5px solid var(--border-color); }
+.msg-item:last-child { border-bottom: none; }
+.msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.msg-date { font-size: 12px; color: var(--text-secondary); }
+.msg-type-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+  background: var(--apple-gray-ultralight); color: var(--apple-gray);
+}
+.msg-delete {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  color: var(--apple-gray); font-size: 14px; padding: 2px 6px; border-radius: 6px;
+  transition: all 0.15s;
+}
+.msg-delete:hover { background: rgba(255,59,48,0.1); color: var(--apple-red); }
+.msg-content { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+.msg-post-url { font-size: 11px; color: var(--apple-blue); text-decoration: none; }
+.msg-post-url:hover { text-decoration: underline; }
+
+/* New message form */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.form-input {
+  padding: 9px 12px; border: 0.5px solid var(--border-color); border-radius: 10px;
+  font-size: 13px; color: var(--text-primary); background: var(--bg-secondary);
+  transition: all 0.2s;
+}
+.form-input:focus { outline: none; border-color: var(--apple-blue); box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+textarea.form-input { resize: vertical; min-height: 80px; font-family: inherit; }
+.form-radio-group { display: flex; gap: 10px; }
+.form-radio { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.btn-save {
+  background: var(--apple-blue); color: white; padding: 10px 20px;
+  border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); margin-top: 4px;
+}
+.btn-save:hover { background: var(--apple-blue-dark); transform: scale(1.02); }
+.btn-save:active { transform: scale(0.98); }
+.btn-secondary {
+  background: var(--apple-gray-ultralight); color: var(--text-primary); padding: 10px 20px;
+  border: none; border-radius: 10px; font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-secondary:hover { background: var(--apple-gray-light); }
+
+/* Clipboard context */
+.context-box {
+  width: 100%; padding: 12px; background: #1D1D1F; color: #F5F5F7;
+  border-radius: 10px; font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+  font-size: 11px; line-height: 1.6; resize: vertical; min-height: 140px; border: none;
+}
+
+/* ── Replies section ─────────────────────────────────────────────────────── */
+.replies-empty { text-align: center; padding: 60px; color: var(--text-secondary); }
+.replies-empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+#toast-container { position: fixed; top: 80px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--bg-secondary); border-radius: 12px; padding: 14px 18px;
+  box-shadow: var(--shadow-lg); border: 0.5px solid var(--border-color);
+  font-size: 14px; color: var(--text-primary); animation: slideInToast 0.3s cubic-bezier(0.4,0,0.2,1);
+  min-width: 240px;
+}
+.toast.success { border-left: 3px solid var(--apple-green); }
+.toast.error { border-left: 3px solid var(--apple-red); }
+@keyframes slideInToast { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--apple-gray-light); border-radius: 3px; }
+
+/* ── Loading ─────────────────────────────────────────────────────────────── */
+.loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text-secondary); gap: 10px; }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--apple-gray-light); border-top-color: var(--apple-blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .contacten-layout { flex-direction: column; height: auto; }
+  .contact-list-col { width: 100%; }
+}
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="app-header">
+  <div class="header-content">
+    <div class="header-left">
+      <div class="app-logo">💼</div>
+      <span class="app-title">LinkedIn Intel</span>
+    </div>
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-input" id="globalSearch" placeholder="Zoek posts, namen..." oninput="onGlobalSearch(this.value)">
+    </div>
+    <div class="header-right">
+      <div class="api-status">
+        <div class="api-dot" id="apiDot"></div>
+        <span id="apiStatusText">Verbinden...</span>
+      </div>
+      <button class="header-button secondary" onclick="refreshAll()">↻ Vernieuwen</button>
+      <button class="header-button primary" onclick="showSection('contacten'); openNewContactForm()">+ Bericht</button>
+    </div>
+  </div>
+</header>
+
+<!-- ── Layout ── -->
+<div class="app-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-card">
+      <div class="sidebar-section-title">Dashboard</div>
+      <a class="sidebar-item active" onclick="showSection('overzicht')" id="nav-overzicht">
+        <span class="sidebar-icon">📊</span>
+        <span>Overzicht</span>
+      </a>
+      <a class="sidebar-item" onclick="showSection('posts')" id="nav-posts">
+        <span class="sidebar-icon">📰</span>
+        <span>Posts</span>
+      </a>
+      <a class="sidebar-item" onclick="showSection('contacten')" id="nav-contacten">
+        <span class="sidebar-icon">👥</span>
+        <span>Contacten</span>
+      </a>
+      <a class="sidebar-item" onclick="showSection('replies')" id="nav-replies">
+        <span class="sidebar-icon">💬</span>
+        <span>Replies</span>
+        <span class="sidebar-badge" id="repliesBadge" style="display:none">0</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+
+    <!-- ── OVERZICHT ── -->
+    <section class="section active" id="section-overzicht">
+      <div class="section-header">
+        <div class="section-title">Overzicht</div>
+        <div class="section-subtitle" id="overzicht-subtitle">Laden...</div>
+      </div>
+      <div class="metrics-grid" id="metrics-grid">
+        <div class="metric-card"><div class="metric-icon">📰</div><div class="metric-value" id="m-posts">—</div><div class="metric-label">Totaal posts</div></div>
+        <div class="metric-card"><div class="metric-icon">🎯</div><div class="metric-value" id="m-ideal">—</div><div class="metric-label">Ideal clients</div></div>
+        <div class="metric-card"><div class="metric-icon">⭐</div><div class="metric-value" id="m-influencer">—</div><div class="metric-label">Influencers</div></div>
+        <div class="metric-card"><div class="metric-icon">👥</div><div class="metric-value" id="m-connections">—</div><div class="metric-label">Connecties</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-wrap">
+            <div class="card-icon">📈</div>
+            <span class="card-title">Posts activiteit</span>
+          </div>
+        </div>
+        <canvas id="activityChart" height="120"></canvas>
+      </div>
+    </section>
+
+    <!-- ── POSTS ── -->
+    <section class="section" id="section-posts">
+      <div class="section-header">
+        <div class="section-title">Posts</div>
+      </div>
+      <div class="filter-bar">
+        <select class="filter-select" id="postsClassFilter" onchange="renderPosts()">
+          <option value="">Alle classificaties</option>
+          <option value="ideal_client">Ideal client</option>
+          <option value="influencer">Influencer</option>
+          <option value="colleague">Collega</option>
+          <option value="neutral">Neutraal</option>
+        </select>
+        <input type="text" class="filter-search" id="postsSearch" placeholder="Zoek in posts..." oninput="renderPosts()">
+        <span class="posts-count" id="postsCount"></span>
+      </div>
+      <div class="posts-list" id="posts-list">
+        <div class="loading"><div class="spinner"></div> Laden...</div>
+      </div>
+    </section>
+
+    <!-- ── CONTACTEN ── -->
+    <section class="section" id="section-contacten">
+      <div class="section-header">
+        <div class="section-title">Contacten</div>
+      </div>
+      <div class="contacten-layout">
+        <div class="contact-list-col">
+          <input type="text" class="contact-search" id="contactSearch" placeholder="Zoek contacten..." oninput="filterContacts(this.value)">
+          <div class="contact-list" id="contact-list">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="contact-detail-col">
+          <div class="detail-panel" id="detail-panel">
+            <div class="detail-empty">
+              <div class="detail-empty-icon">👆</div>
+              <div>Selecteer een contact</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── REPLIES ── -->
+    <section class="section" id="section-replies">
+      <div class="section-header">
+        <div class="section-title">Replies</div>
+        <div class="section-subtitle">Posts van ideal clients en influencers zonder reply</div>
+      </div>
+      <div id="replies-list">
+        <div class="loading"><div class="spinner"></div> Laden...</div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+const API = 'http://localhost:8000';
+let allPosts = [];
+let allConnections = [];
+let selectedContactSlug = null;
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+}
+
+// ── Status check ──────────────────────────────────────────────────────────────
+async function checkApiStatus() {
+  try {
+    await fetch(API + '/api/summary');
+    document.getElementById('apiDot').classList.add('online');
+    document.getElementById('apiStatusText').textContent = 'API online';
+  } catch {
+    document.getElementById('apiStatusText').textContent = 'API offline';
+  }
+}
+
+// ── Summary / Overzicht ───────────────────────────────────────────────────────
+async function loadSummary() {
+  try {
+    const s = await apiFetch('/api/summary');
+    document.getElementById('m-posts').textContent = s.total_posts;
+    document.getElementById('m-ideal').textContent = s.ideal_clients;
+    document.getElementById('m-influencer').textContent = s.influencers;
+    document.getElementById('m-connections').textContent = s.connections;
+    document.getElementById('overzicht-subtitle').textContent =
+      `${s.replied} replies gestuurd · ${s.conversations} actieve gesprekken`;
+    // Replies badge
+    const pending = s.ideal_clients + s.influencers - s.replied;
+    if (pending > 0) {
+      const badge = document.getElementById('repliesBadge');
+      badge.textContent = pending;
+      badge.style.display = '';
+    }
+  } catch (e) { console.error('Summary error:', e); }
+}
+
+// ── Simple bar chart (no library needed) ─────────────────────────────────────
+function renderChart(posts) {
+  const canvas = document.getElementById('activityChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+
+  // Group by date
+  const counts = {};
+  posts.forEach(p => {
+    const d = (p.timestamp || '').slice(0, 10);
+    if (!d) return;
+    if (!counts[d]) counts[d] = { ideal_client: 0, influencer: 0, other: 0 };
+    if (p.classification === 'ideal_client') counts[d].ideal_client++;
+    else if (p.classification === 'influencer') counts[d].influencer++;
+    else counts[d].other++;
+  });
+  const dates = Object.keys(counts).sort().slice(-14);
+  if (!dates.length) return;
+
+  const W = canvas.width, H = canvas.height;
+  const pad = { t: 10, r: 10, b: 24, l: 30 };
+  const bw = Math.max(8, (W - pad.l - pad.r) / dates.length - 6);
+  const maxVal = Math.max(1, ...dates.map(d => counts[d].ideal_client + counts[d].influencer + counts[d].other));
+
+  ctx.clearRect(0, 0, W, H);
+
+  dates.forEach((date, i) => {
+    const x = pad.l + i * ((W - pad.l - pad.r) / dates.length) + bw / 2;
+    const vals = [
+      { v: counts[date].ideal_client, c: '#007AFF' },
+      { v: counts[date].influencer, c: '#AF52DE' },
+      { v: counts[date].other, c: '#C7C7CC' },
+    ];
+    let y = H - pad.b;
+    vals.forEach(({ v, c }) => {
+      if (!v) return;
+      const h = Math.max(2, (v / maxVal) * (H - pad.t - pad.b));
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.roundRect(x - bw / 2, y - h, bw, h, [3, 3, 0, 0]);
+      ctx.fill();
+      y -= h;
+    });
+    // Date label
+    ctx.fillStyle = '#8E8E93';
+    ctx.font = '10px -apple-system';
+    ctx.textAlign = 'center';
+    ctx.fillText(date.slice(5), x, H - 6);
+  });
+
+  // Y axis
+  ctx.fillStyle = '#8E8E93';
+  ctx.font = '10px -apple-system';
+  ctx.textAlign = 'right';
+  [0, Math.round(maxVal / 2), maxVal].forEach(v => {
+    const y = H - pad.b - (v / maxVal) * (H - pad.t - pad.b);
+    ctx.fillText(v, pad.l - 4, y + 4);
+  });
+}
+
+// ── Posts ─────────────────────────────────────────────────────────────────────
+async function loadPosts() {
+  try {
+    allPosts = await apiFetch('/api/posts');
+    renderPosts();
+    renderChart(allPosts);
+  } catch (e) {
+    document.getElementById('posts-list').innerHTML = `<div class="loading">Fout bij laden: ${e.message}</div>`;
+  }
+}
+
+function renderPosts() {
+  const cls = document.getElementById('postsClassFilter').value;
+  const q = (document.getElementById('postsSearch').value || '').toLowerCase();
+  let posts = allPosts;
+  if (cls) posts = posts.filter(p => p.classification === cls);
+  if (q) posts = posts.filter(p => (p.text + p.author_name).toLowerCase().includes(q));
+  document.getElementById('postsCount').textContent = `${posts.length} posts`;
+
+  const list = document.getElementById('posts-list');
+  if (!posts.length) { list.innerHTML = '<div class="loading">Geen posts gevonden.</div>'; return; }
+
+  list.innerHTML = posts.map(p => {
+    const date = (p.timestamp || '').slice(0, 10);
+    const excerpt = (p.text || '').slice(0, 280).replace(/</g, '&lt;');
+    const kw = (p.keywords_matched || []).join(', ');
+    const replied = !!p.reply_drafted;
+    const encodedUrl = encodeURIComponent(p.url);
+    return `<div class="post-card" id="post-${encodedUrl}">
+      <div class="post-header">
+        <span class="badge badge-${p.classification === 'ideal_client' ? 'ideal' : p.classification}">${classLabel(p.classification)}</span>
+        <span class="post-author">${escHtml(p.author_name || '?')}</span>
+        <span class="post-date">${date}</span>
+      </div>
+      <div class="post-text">${excerpt}${p.text && p.text.length > 280 ? '...' : ''}</div>
+      <div class="post-footer">
+        ${p.url ? `<a class="post-link" href="${p.url}" target="_blank">Bekijk post ↗</a>` : ''}
+        ${kw ? `<span class="keywords-wrap">🏷 ${escHtml(kw)}</span>` : ''}
+        <button class="reply-btn ${replied ? 'replied' : 'not-replied'}"
+          onclick="toggleReply('${encodedUrl}', ${replied})">
+          ${replied ? '✓ Reply gestuurd' : 'Markeer reply'}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleReply(encodedUrl, currentState) {
+  const url = decodeURIComponent(encodedUrl);
+  try {
+    await apiFetch('/api/posts/reply', {
+      method: 'PATCH',
+      body: JSON.stringify({ url, drafted: !currentState }),
+    });
+    const post = allPosts.find(p => p.url === url);
+    if (post) post.reply_drafted = !currentState;
+    renderPosts();
+    renderReplies();
+    toast(!currentState ? 'Reply gemarkeerd ✓' : 'Reply ongedaan', 'success');
+  } catch (e) { toast('Fout: ' + e.message, 'error'); }
+}
+
+function onGlobalSearch(q) {
+  document.getElementById('postsSearch').value = q;
+  renderPosts();
+  showSection('posts');
+}
+
+// ── Contacten ─────────────────────────────────────────────────────────────────
+async function loadConnections() {
+  try {
+    allConnections = await apiFetch('/api/connections');
+    renderContactList('');
+  } catch (e) { console.error('Connections error:', e); }
+}
+
+function renderContactList(q) {
+  const list = document.getElementById('contact-list');
+  let conns = allConnections;
+  if (q) conns = conns.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()));
+
+  if (!conns.length) { list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-secondary)">Geen contacten.</div>'; return; }
+
+  list.innerHTML = conns.map(c => {
+    const slug = slugify(c.profile_url || '');
+    const n = c.message_count || 0;
+    const isSelected = slug === selectedContactSlug;
+    return `<div class="contact-item ${isSelected ? 'selected' : ''}" onclick="selectContact('${slug}')">
+      <div style="flex:1;min-width:0">
+        <div class="contact-name">${escHtml(c.name || '?')}</div>
+        <div class="contact-cls">${classLabel(c.classification)}</div>
+      </div>
+      ${n > 0 ? `<div class="contact-msg-badge">💬${n}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function filterContacts(q) { renderContactList(q); }
+
+async function selectContact(slug) {
+  selectedContactSlug = slug;
+  renderContactList(document.getElementById('contactSearch').value);
+  await loadContactDetail(slug);
+}
+
+async function loadContactDetail(slug) {
+  const panel = document.getElementById('detail-panel');
+  panel.innerHTML = '<div class="loading"><div class="spinner"></div> Laden...</div>';
+
+  try {
+    const conn = allConnections.find(c => slugify(c.profile_url || '') === slug);
+    let conv;
+    try { conv = await apiFetch('/api/conversations/' + slug); } catch { conv = { messages: [] }; }
+    const messages = (conv.messages || []).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const name = conn ? (conn.name || '?') : (conv.name || '?');
+    const title = conn ? (conn.title || '') : (conv.title || '');
+    const profileUrl = conn ? (conn.profile_url || '') : (conv.profile_url || '');
+    const about = conn ? (conn.about || '') : '';
+    const classification = conn ? (conn.classification || 'unknown') : 'unknown';
+
+    // Posts from this person
+    const personPosts = allPosts.filter(p => p.author_profile_url === profileUrl).slice(0, 5);
+
+    panel.innerHTML = `
+      <div class="detail-name">${escHtml(name)}</div>
+      ${title ? `<div class="detail-title">${escHtml(title)}</div>` : ''}
+      <div class="detail-meta">
+        <span class="badge badge-${classification === 'ideal_client' ? 'ideal' : classification}">${classLabel(classification)}</span>
+        ${profileUrl ? `<a class="detail-link" href="${profileUrl}" target="_blank">LinkedIn profiel ↗</a>` : ''}
+      </div>
+      ${about ? `<div class="detail-about"><strong>About:</strong> ${escHtml(about)}</div>` : ''}
+
+      ${personPosts.length ? `
+        <div class="detail-section">
+          <div class="detail-section-title">Posts in DB (${personPosts.length})</div>
+          ${personPosts.map(p => `
+            <div class="post-item">
+              <div class="post-item-date">${(p.timestamp || '').slice(0, 10)}</div>
+              <div>${escHtml((p.text || '').slice(0, 150))}...</div>
+              ${p.url ? `<a class="post-item-link" href="${p.url}" target="_blank">Bekijk ↗</a>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
+
+      <hr class="detail-divider">
+      <div class="detail-section">
+        <div class="detail-section-title">Berichtenhistorie (${messages.length})</div>
+        ${messages.length ? messages.map(m => `
+          <div class="msg-item" id="msg-${m.id}">
+            <div class="msg-header">
+              <span class="msg-date">${m.date || '?'}</span>
+              <span class="msg-type-badge">${m.type === 'comment' ? '💬 comment' : '✉️ DM'}</span>
+              ${m.post_url ? `<a class="msg-post-url" href="${m.post_url}" target="_blank">post ↗</a>` : ''}
+              <button class="msg-delete" onclick="deleteMsg('${slug}','${escAttr(m.id)}')">🗑</button>
+            </div>
+            ${m.post_excerpt ? `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">"${escHtml(m.post_excerpt)}"</div>` : ''}
+            <div class="msg-content">${escHtml(m.content || '')}</div>
+          </div>`).join('') : '<div style="font-size:13px;color:var(--text-secondary);padding:8px 0">Nog geen berichten.</div>'}
+      </div>
+
+      <hr class="detail-divider">
+      <div class="detail-section">
+        <div class="detail-section-title">Nieuw bericht loggen</div>
+        <div class="form-grid">
+          <div class="form-group full">
+            <div class="form-radio-group">
+              <label class="form-radio"><input type="radio" name="msgType_${slug}" value="comment" checked> 💬 Comment</label>
+              <label class="form-radio"><input type="radio" name="msgType_${slug}" value="dm"> ✉️ DM</label>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Post URL</label><input class="form-input" id="msgPostUrl_${slug}" placeholder="https://linkedin.com/posts/..."></div>
+          <div class="form-group"><label class="form-label">Post excerpt</label><input class="form-input" id="msgExcerpt_${slug}" placeholder="Eerste 150 tekens..."></div>
+          <div class="form-group full"><label class="form-label">Bericht *</label><textarea class="form-input" id="msgContent_${slug}" placeholder="Jouw bericht..."></textarea></div>
+          <div class="form-group full"><label class="form-label">Notities</label><input class="form-input" id="msgNotes_${slug}" placeholder="Intern notitie..."></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn-save" onclick="saveMessage('${slug}','${escAttr(name)}','${escAttr(title)}')">Opslaan</button>
+          <button class="btn-secondary" onclick="copyContext('${slug}')">📋 Kopieer context</button>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    panel.innerHTML = `<div class="loading">Fout: ${e.message}</div>`;
+  }
+}
+
+async function saveMessage(slug, name, title) {
+  const type = document.querySelector(`input[name="msgType_${slug}"]:checked`)?.value || 'comment';
+  const content = document.getElementById(`msgContent_${slug}`)?.value?.trim();
+  if (!content) { toast('Bericht mag niet leeg zijn', 'error'); return; }
+  const body = {
+    name, title, type,
+    post_url: document.getElementById(`msgPostUrl_${slug}`)?.value?.trim() || '',
+    post_excerpt: (document.getElementById(`msgExcerpt_${slug}`)?.value?.trim() || '').slice(0, 150),
+    content,
+    notes: document.getElementById(`msgNotes_${slug}`)?.value?.trim() || '',
+  };
+  try {
+    await apiFetch(`/api/conversations/${slug}/messages`, { method: 'POST', body: JSON.stringify(body) });
+    toast('Bericht opgeslagen ✓', 'success');
+    await loadConnections();
+    await loadContactDetail(slug);
+  } catch (e) { toast('Fout: ' + e.message, 'error'); }
+}
+
+async function deleteMsg(slug, msgId) {
+  if (!confirm('Verwijder dit bericht?')) return;
+  try {
+    await apiFetch(`/api/conversations/${slug}/messages/${encodeURIComponent(msgId)}`, { method: 'DELETE' });
+    toast('Bericht verwijderd', 'success');
+    await loadConnections();
+    await loadContactDetail(slug);
+  } catch (e) { toast('Fout: ' + e.message, 'error'); }
+}
+
+async function copyContext(slug) {
+  try {
+    const data = await apiFetch(`/api/context/${slug}`);
+    await navigator.clipboard.writeText(data.context);
+    toast('Context gekopieerd naar clipboard ✓', 'success');
+  } catch (e) { toast('Clipboard niet beschikbaar — kopieer handmatig', 'error'); }
+}
+
+// ── Replies ───────────────────────────────────────────────────────────────────
+function renderReplies() {
+  const list = document.getElementById('replies-list');
+  const pending = allPosts.filter(p =>
+    (p.classification === 'ideal_client' || p.classification === 'influencer') && !p.reply_drafted
+  );
+  if (!pending.length) {
+    list.innerHTML = '<div class="replies-empty"><div class="replies-empty-icon">✅</div><div>Alle priority posts bereikt!</div></div>';
+    return;
+  }
+  list.innerHTML = `<div class="posts-list">${pending.map(p => {
+    const date = (p.timestamp || '').slice(0, 10);
+    const excerpt = (p.text || '').slice(0, 300).replace(/</g, '&lt;');
+    const encodedUrl = encodeURIComponent(p.url);
+    return `<div class="post-card">
+      <div class="post-header">
+        <span class="badge badge-${p.classification === 'ideal_client' ? 'ideal' : 'influencer'}">${classLabel(p.classification)}</span>
+        <span class="post-author">${escHtml(p.author_name || '?')}</span>
+        <span class="post-date">${date}</span>
+      </div>
+      <div class="post-text">${excerpt}${p.text && p.text.length > 300 ? '...' : ''}</div>
+      <div class="post-footer">
+        ${p.url ? `<a class="post-link" href="${p.url}" target="_blank">Bekijk post ↗</a>` : ''}
+        <button class="reply-btn not-replied" onclick="toggleReply('${encodedUrl}', false)">Markeer reply gestuurd</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function classLabel(cls) {
+  return { ideal_client: 'Ideal client', influencer: 'Influencer', colleague: 'Collega', neutral: 'Neutraal', unknown: 'Onbekend' }[cls] || cls || '?';
+}
+
+function slugify(profileUrl) {
+  const m = profileUrl.match(/\/in\/([^/?]+)/);
+  if (m) return m[1].replace(/\/$/, '');
+  return profileUrl.replace(/[^\w-]/g, '-').slice(-50);
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s).replace(/'/g, "\\'"); }
+
+function toast(msg, type = 'success') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function openNewContactForm() { /* future: focus new person in contacten */ }
+
+async function refreshAll() {
+  allPosts = [];
+  allConnections = [];
+  await Promise.all([loadSummary(), loadPosts(), loadConnections()]);
+  renderReplies();
+  toast('Data vernieuwd ✓', 'success');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await checkApiStatus();
+  await Promise.all([loadSummary(), loadPosts(), loadConnections()]);
+  renderReplies();
+}
+
+init();
+</script>
+</body>
+</html>
