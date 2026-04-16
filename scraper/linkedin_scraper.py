@@ -354,7 +354,7 @@ def scrape_all_connections(context: BrowserContext) -> list[dict]:
     """
     Scrape ALL LinkedIn connections from /mynetwork/invite-connect/connections/.
     Returns list of {profile_url, name, title, company}.
-    Scrolls until no new connections load (handles 700+ connections).
+    Uses broad link-scanning approach to survive LinkedIn DOM changes.
     """
     page = context.new_page()
     results: list[dict] = []
@@ -366,67 +366,82 @@ def scrape_all_connections(context: BrowserContext) -> list[dict]:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        time.sleep(4)
+        time.sleep(6)
 
+        title = page.title()
+        print(f"[scrape_all_connections] Page: {title}", file=sys.stderr)
+
+        no_growth_streak = 0
         prev_count = -1
-        scroll_attempts = 0
-        max_scroll_attempts = 150  # 744 connections / ~10 per scroll = ~75 scrolls, with margin
+        scroll_round = 0
+        max_rounds = 300
 
-        while scroll_attempts < max_scroll_attempts:
-            # Extract all visible connection cards
-            # LinkedIn renders connections as list items with profile links
-            cards = page.query_selector_all("li.mn-connection-card")
-            if not cards:
-                # Fallback: broader selector
-                cards = page.query_selector_all("[data-view-name='profile-entity-lockup']")
+        # Move mouse to center of page so mouse.wheel works on the right element
+        page.mouse.move(800, 400)
 
-            for card in cards:
-                try:
-                    link = card.query_selector("a.mn-connection-card__link, a[href*='/in/']")
-                    if not link:
-                        continue
-                    href = link.get_attribute("href") or ""
-                    if "/in/" not in href:
-                        continue
-                    profile_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/") + "/"
-                    if profile_url in seen_urls:
-                        continue
-                    seen_urls.add(profile_url)
+        while scroll_round < max_rounds:
+            # Extract all /in/ links. LinkedIn renders each connection with 2 links:
+            # - link 1: image link (empty text)
+            # - link 2: text link with "Name\n\nOccupation"
+            # We take only links with non-empty text and parse Name + Title from it.
+            links = page.evaluate("""() => {
+                const seen = new Set();
+                const results = [];
+                document.querySelectorAll('a[href*="/in/"]').forEach(link => {
+                    const href = link.href;
+                    if (!href || !href.includes('/in/')) return;
+                    const clean = href.split('?')[0].replace(/\\/+$/, '') + '/';
+                    // Only basic /in/slug/ URLs (skip /in/slug/detail/ etc)
+                    const parts = clean.replace('https://www.linkedin.com', '').split('/').filter(Boolean);
+                    if (parts.length !== 2 || parts[0] !== 'in') return;
+                    if (seen.has(clean)) return;
+                    const text = link.innerText.trim();
+                    if (!text) return;  // Skip image-only links
+                    seen.add(clean);
+                    // text format: "Name\\n\\nOccupation" or just "Name"
+                    const parts2 = text.split('\\n\\n');
+                    results.push({
+                        profile_url: clean,
+                        name: parts2[0].trim(),
+                        title: parts2.slice(1).join(' ').trim(),
+                    });
+                });
+                return results;
+            }""")
 
-                    # Name
-                    name_el = card.query_selector(".mn-connection-card__name, .t-bold")
-                    name = name_el.inner_text().strip() if name_el else ""
-
-                    # Occupation/title
-                    occ_el = card.query_selector(".mn-connection-card__occupation, .t-14.t-black--light")
-                    occupation = occ_el.inner_text().strip() if occ_el else ""
-
-                    results.append({
-                        "profile_url": profile_url,
-                        "name": name,
-                        "title": occupation,
-                        "company": "",
-                        "classification": "unknown",
-                    })
-                except Exception as e:
-                    print(f"[scrape_all_connections] Card parse error: {e}", file=sys.stderr)
+            for item in links:
+                url = item.get("profile_url", "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                results.append({
+                    "profile_url": url,
+                    "name": item.get("name", ""),
+                    "title": item.get("title", ""),
+                    "company": "",
+                    "classification": "unknown",
+                })
 
             current_count = len(results)
-            print(f"[scrape_all_connections] {current_count} connections found (scroll {scroll_attempts})", file=sys.stderr)
+            if scroll_round % 10 == 0 or current_count != prev_count:
+                print(f"[scrape_all_connections] {current_count} connections (round {scroll_round})", file=sys.stderr)
 
             if current_count == prev_count:
-                # No new connections loaded — check if we hit the end
-                scroll_attempts += 1
-                if scroll_attempts >= 3:
-                    break  # 3 consecutive no-growth scrolls = end of list
+                no_growth_streak += 1
+                if no_growth_streak >= 6:
+                    print("[scrape_all_connections] No new connections for 6 rounds — done", file=sys.stderr)
+                    break
             else:
-                scroll_attempts = 0
+                no_growth_streak = 0
 
             prev_count = current_count
 
-            # Scroll to bottom to trigger lazy load
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(2)
+            # Use mouse wheel events — these are the only scroll method LinkedIn's
+            # virtual scroll actually responds to (scrollTop assignments are ignored).
+            # Scroll 3000px per round (LinkedIn loads ~10 connections per batch).
+            page.mouse.wheel(0, 3000)
+            time.sleep(2.5)
+            scroll_round += 1
 
     except Exception as e:
         print(f"[scrape_all_connections] Fatal error: {e}", file=sys.stderr)
@@ -448,11 +463,25 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
         page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
         time.sleep(4)
 
-        # Collect conversation list items from sidebar
-        thread_items = page.query_selector_all("li.msg-conversation-listitem")
-        if not thread_items:
-            thread_items = page.query_selector_all("[data-control-name='view_conversation']")
+        # Build name→canonical-URL lookup from ChromaDB so we can resolve ACoAAA URLs to slugs
+        name_to_url: dict[str, str] = {}
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent.parent))
+            from store import LinkedInStore as _Store
+            import os as _os
+            _chroma = _os.getenv("CHROMA_PATH", "c:/tools/linkedin-intel/db/chroma")
+            _store = _Store(_chroma)
+            for conn in _store.get_all_connections():
+                _name = conn.get("name", "").strip().lower()
+                _url = conn.get("profile_url", "")
+                if _name and _url:
+                    name_to_url[_name] = _url
+            print(f"[scrape_messages] Loaded {len(name_to_url)} connection names for URL resolution", file=sys.stderr)
+        except Exception as _e:
+            print(f"[scrape_messages] Could not load ChromaDB for name resolution: {_e}", file=sys.stderr)
 
+        thread_items = page.query_selector_all("li.msg-conversation-listitem")
         print(f"[scrape_messages] Found {len(thread_items)} conversation threads", file=sys.stderr)
 
         for idx in range(len(thread_items)):
@@ -463,23 +492,29 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
                     break
                 item = items[idx]
 
-                # Extract profile URL from the link within this thread item
-                link = item.query_selector("a[href*='/in/']")
-                if not link:
-                    continue
-                href = link.get_attribute("href") or ""
-                if href.startswith("/"):
-                    profile_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/") + "/"
-                else:
-                    profile_url = href.split("?")[0].rstrip("/") + "/"
-
-                # Extract name from thread item
+                # Extract name from thread item (works reliably)
                 name_el = item.query_selector(".msg-conversation-listitem__participant-names")
                 name = name_el.inner_text().strip() if name_el else ""
 
-                # Click to open conversation
+                # Click to open conversation — profile link appears in panel header
                 item.click()
                 time.sleep(2)
+
+                # Get profile URL from conversation header (ACoAAA format from LinkedIn messaging)
+                header_link = page.query_selector(".msg-thread__link-to-profile")
+                aco_url = ""
+                if header_link:
+                    href = header_link.get_attribute("href") or ""
+                    if href.startswith("/"):
+                        aco_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/") + "/"
+                    else:
+                        aco_url = href.split("?")[0].rstrip("/") + "/"
+
+                # Prefer canonical slug URL from ChromaDB (matched by name); fall back to ACoAAA
+                profile_url = name_to_url.get(name.strip().lower(), aco_url)
+                if not profile_url:
+                    print(f"[scrape_messages] No profile URL for '{name}' — skipping", file=sys.stderr)
+                    continue
 
                 # Scrape outgoing messages (sent by self — no "other" class)
                 sent_messages: list[dict] = []
@@ -491,14 +526,16 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
 
                 msg_events = page.query_selector_all(".msg-s-event-listitem")
                 for ev in msg_events:
-                    group = ev.query_selector(".msg-s-message-group")
-                    if not group:
-                        continue
-                    is_other = "msg-s-message-group--other" in (group.get_attribute("class") or "")
-                    if is_other:
+                    # Skip messages from the other person
+                    ev_class = ev.get_attribute("class") or ""
+                    if "msg-s-event-listitem--other" in ev_class:
                         continue
 
-                    body = ev.query_selector(".msg-s-event__content")
+                    # LinkedIn changed content container from .msg-s-event__content
+                    # to .msg-s-event-listitem__message-bubble
+                    body = ev.query_selector(
+                        ".msg-s-event-listitem__message-bubble, .msg-s-event__content"
+                    )
                     if not body:
                         continue
                     content = body.inner_text().strip()
