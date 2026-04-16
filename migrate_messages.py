@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / "scraper" / ".env")
 
-CHROMA_PATH = os.getenv("CHROMA_PATH", "c:/tools/linkedin-intel/db/chroma")
+CHROMA_PATH = os.getenv("CHROMA_PATH", str(Path(__file__).parent / "db" / "chroma"))
 MESSAGES_DIR = Path(__file__).parent / "messages"
 
 sys.path.insert(0, str(Path(__file__).parent / "scraper"))
@@ -46,11 +46,15 @@ def main() -> None:
             print(f"[migrate] SKIP {path.name}: no profile_url")
             continue
 
-        saved = store.save_scraped_messages(profile_url, name, title, messages)
+        try:
+            saved = store.save_scraped_messages(profile_url, name, title, messages)
+        except Exception as e:
+            print(f"[migrate] SKIP {path.name}: store error: {e}")
+            continue
+
         print(f"[migrate] {name or path.stem}: {saved}/{len(messages)} message(s) saved -> {path.name}")
         total_saved += saved
         total_files += 1
-
         path.unlink()
         print(f"[migrate]   Deleted {path.name}")
 
