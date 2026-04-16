@@ -108,6 +108,9 @@ def test_build_clipboard_context_includes_chroma_posts():
 def test_build_clipboard_context_includes_about():
     url = "https://linkedin.com/in/alice"
     ms.save_message(url, "Alice", "PLC Engineer", {"date": "2026-04-15", "type": "dm", "post_url": "", "post_excerpt": "", "content": "Hi", "notes": ""})
-    posts = [{"author_profile_url": url, "classification": "ideal_client", "timestamp": "2026-04-15T10:00:00", "text": "MQTT rocks", "url": "https://linkedin.com/posts/x", "about": "I build SCADA systems for 10 years."}]
+    # Store the about text in the connections collection (not posts)
+    from message_store import _get_store
+    _get_store().upsert_connection({"profile_url": url, "name": "Alice", "title": "PLC Engineer", "company": "", "about": "I build SCADA systems for 10 years."})
+    posts = [{"author_profile_url": url, "classification": "ideal_client", "timestamp": "2026-04-15T10:00:00", "text": "MQTT rocks", "url": "https://linkedin.com/posts/x"}]
     ctx = ms.build_clipboard_context(url, posts)
     assert "I build SCADA systems" in ctx

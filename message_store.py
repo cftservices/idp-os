@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / "scraper" / ".env")
 
+sys.path.insert(0, str(Path(__file__).parent / "scraper"))
+from store import LinkedInStore
+
 CHROMA_PATH = os.getenv("CHROMA_PATH", "c:/tools/linkedin-intel/db/chroma")
 
 # Lazy singleton — replaced in tests via set_store()
@@ -17,8 +20,6 @@ _store = None
 def _get_store():
     global _store
     if _store is None:
-        sys.path.insert(0, str(Path(__file__).parent / "scraper"))
-        from store import LinkedInStore
         _store = LinkedInStore(chroma_path=CHROMA_PATH)
     return _store
 
@@ -70,7 +71,8 @@ def build_clipboard_context(profile_url: str, chroma_posts: list[dict]) -> str:
 
     author_posts = [p for p in chroma_posts if p.get("author_profile_url") == profile_url]
     classification = author_posts[0].get("classification", "unknown") if author_posts else "unknown"
-    about_text = author_posts[0].get("about", "") if author_posts else ""
+    connection = _get_store().get_connection(profile_url)
+    about_text = (connection or {}).get("about", "") if connection else ""
 
     lines = [
         "## LinkedIn Conversatie Context",
