@@ -1,61 +1,48 @@
 from __future__ import annotations
-import json
 import os
 import re
-import tempfile
-from datetime import datetime
+import sys
 from pathlib import Path
 
-MESSAGES_DIR = Path(__file__).parent / "messages"
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / "scraper" / ".env")
+
+CHROMA_PATH = os.getenv("CHROMA_PATH", "c:/tools/linkedin-intel/db/chroma")
+
+# Lazy singleton — replaced in tests via set_store()
+_store = None
+
+
+def _get_store():
+    global _store
+    if _store is None:
+        sys.path.insert(0, str(Path(__file__).parent / "scraper"))
+        from store import LinkedInStore
+        _store = LinkedInStore(chroma_path=CHROMA_PATH)
+    return _store
+
+
+def set_store(store) -> None:
+    """Inject a store instance (used in tests)."""
+    global _store
+    _store = store
 
 
 def get_slug(profile_url: str) -> str:
-    """Extract slug from LinkedIn profile URL.
-    'https://linkedin.com/in/metin-capraz-7b65364a/' -> 'metin-capraz-7b65364a'
-    """
+    """Extract slug from LinkedIn profile URL."""
     match = re.search(r'/in/([^/?]+)', profile_url)
     if match:
         return match.group(1).rstrip("/")
     return re.sub(r'[^\w-]', '-', profile_url)[-50:]
 
 
-def _conversation_path(profile_url: str) -> Path:
-    MESSAGES_DIR.mkdir(parents=True, exist_ok=True)
-    return MESSAGES_DIR / f"{get_slug(profile_url)}.json"
-
-
-def _atomic_write(path: Path, data: dict) -> None:
-    """Write JSON atomically via temp file to avoid corruption on interrupted writes."""
-    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False,
-                                     suffix=".tmp", encoding="utf-8") as tmp:
-        json.dump(data, tmp, ensure_ascii=False, indent=2)
-        tmp_path = tmp.name
-    os.replace(tmp_path, path)
-
-
 def load_conversation(profile_url: str) -> dict:
-    """Load conversation JSON or return empty template if not found or corrupt."""
-    path = _conversation_path(profile_url)
-    if path.exists():
-        try:
-            with open(path, encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {"profile_url": profile_url, "name": "", "title": "", "messages": []}
+    return _get_store().load_conversation(profile_url)
 
 
 def save_message(profile_url: str, name: str, title: str, message: dict) -> None:
-    """Append a message to the conversation. Creates file if not exists."""
-    conv = load_conversation(profile_url)
-    conv["name"] = name or conv["name"]
-    conv["title"] = title or conv["title"]
-    conv["profile_url"] = profile_url
-    if "id" not in message or not message["id"]:
-        message["id"] = datetime.now().isoformat()
-    conv["messages"].append(message)
-    path = _conversation_path(profile_url)
-    _atomic_write(path, conv)
+    _get_store().save_message(profile_url, name, title, message)
 
 
 def save_scraped_messages(
@@ -64,68 +51,15 @@ def save_scraped_messages(
     title: str,
     messages: list[dict],
 ) -> int:
-    """
-    Save a batch of scraped messages with deduplication.
-    Deduplication: skip if a message with same content already exists.
-    Returns number of newly saved messages.
-    """
-    conv = load_conversation(profile_url)
-    conv["name"] = name or conv["name"]
-    conv["title"] = title or conv["title"]
-    conv["profile_url"] = profile_url
-
-    # Dedup key: content + direction (both sides can theoretically send the same text)
-    existing_keys = {
-        (m.get("content", ""), m.get("direction", "sent"))
-        for m in conv["messages"]
-    }
-    new_count = 0
-
-    for message in messages:
-        content = message.get("content", "").strip()
-        if not content:
-            continue
-        direction = message.get("direction", "sent")
-        key = (content, direction)
-        if key in existing_keys:
-            continue
-        message = dict(message)
-        message["content"] = content
-        if "id" not in message or not message["id"]:
-            message["id"] = datetime.now().isoformat() + f"_{new_count}"
-        conv["messages"].append(message)
-        existing_keys.add(key)
-        new_count += 1
-
-    if new_count > 0:
-        path = _conversation_path(profile_url)
-        _atomic_write(path, conv)
-
-    return new_count
+    return _get_store().save_scraped_messages(profile_url, name, title, messages)
 
 
 def list_conversations() -> list[dict]:
-    """List all conversations sorted by most recent message date (newest first)."""
-    MESSAGES_DIR.mkdir(parents=True, exist_ok=True)
-    conversations = []
-    for path in MESSAGES_DIR.glob("*.json"):
-        try:
-            with open(path, encoding="utf-8") as f:
-                conv = json.load(f)
-            dates = [m.get("date", "") for m in conv.get("messages", [])]
-            conv["_last_date"] = max(dates) if dates else ""
-            conversations.append(conv)
-        except Exception:
-            continue
-    return sorted(conversations, key=lambda c: c["_last_date"], reverse=True)
+    return _get_store().list_conversations()
 
 
 def delete_message(profile_url: str, message_id: str) -> None:
-    """Remove a message by ID. No-op if not found."""
-    conv = load_conversation(profile_url)
-    conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
-    path = _conversation_path(profile_url)
-    _atomic_write(path, conv)
+    _get_store().delete_message(profile_url, message_id)
 
 
 def build_clipboard_context(profile_url: str, chroma_posts: list[dict]) -> str:

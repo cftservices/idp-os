@@ -1,18 +1,19 @@
 from __future__ import annotations
-import json
 import sys
 from pathlib import Path
 import pytest
 
-# message_store.py is at project root, not in scraper/
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 import message_store as ms
+from store import LinkedInStore
 
 
 @pytest.fixture(autouse=True)
-def tmp_messages(tmp_path, monkeypatch):
-    """Redirect MESSAGES_DIR to a temp directory for all tests."""
-    monkeypatch.setattr(ms, "MESSAGES_DIR", tmp_path / "messages")
+def tmp_store(tmp_path):
+    """Inject a fresh ChromaDB store for all tests."""
+    store = LinkedInStore(str(tmp_path / "chroma"))
+    ms.set_store(store)
 
 
 def test_get_slug_standard_url():
