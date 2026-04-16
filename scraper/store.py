@@ -14,6 +14,163 @@ class LinkedInStore:
         # Use chromadb default embedding (no external deps needed)
         self.posts = self.client.get_or_create_collection(name="posts")
         self.connections = self.client.get_or_create_collection(name="connections")
+        self.messages = self.client.get_or_create_collection(name="messages")
+
+    # ── Messages ────────────────────────────────────────────────────────────
+
+    def _msg_chroma_id(self, message_id: str) -> str:
+        return hashlib.sha256(message_id.encode()).hexdigest()[:16]
+
+    def save_message(self, profile_url: str, name: str, title: str, message: dict) -> None:
+        """Upsert a single message into ChromaDB."""
+        msg_id = message.get("id") or datetime.now().isoformat()
+        chroma_id = self._msg_chroma_id(msg_id)
+        content = message.get("content", "").strip()
+        if not content:
+            return
+        metadata = {
+            "profile_url": profile_url,
+            "name": name or "",
+            "title": title or "",
+            "date": message.get("date", ""),
+            "type": message.get("type", "dm"),
+            "direction": message.get("direction", "sent"),
+            "post_url": message.get("post_url", "") or "",
+            "msg_id": msg_id,
+        }
+        existing = self.messages.get(ids=[chroma_id])
+        if existing["ids"]:
+            return  # already stored
+        self.messages.add(ids=[chroma_id], documents=[content], metadatas=[metadata])
+
+    def save_scraped_messages(
+        self, profile_url: str, name: str, title: str, messages: list[dict]
+    ) -> int:
+        """Batch upsert messages with dedup. Returns number of newly saved messages."""
+        existing_results = self.messages.get(
+            where={"profile_url": profile_url},
+            include=["documents", "metadatas"],
+        )
+        existing_keys = {
+            (doc, meta.get("direction", "sent"))
+            for doc, meta in zip(
+                existing_results.get("documents") or [],
+                existing_results.get("metadatas") or [],
+            )
+        }
+        new_count = 0
+        for i, message in enumerate(messages):
+            content = message.get("content", "").strip()
+            if not content:
+                continue
+            direction = message.get("direction", "sent")
+            if (content, direction) in existing_keys:
+                continue
+            msg_id = message.get("id") or f"{datetime.now().isoformat()}_{i}"
+            chroma_id = self._msg_chroma_id(msg_id)
+            metadata = {
+                "profile_url": profile_url,
+                "name": name or "",
+                "title": title or "",
+                "date": message.get("date", ""),
+                "type": message.get("type", "dm"),
+                "direction": direction,
+                "post_url": message.get("post_url", "") or "",
+                "msg_id": msg_id,
+            }
+            self.messages.add(ids=[chroma_id], documents=[content], metadatas=[metadata])
+            existing_keys.add((content, direction))
+            new_count += 1
+        return new_count
+
+    def load_conversation(self, profile_url: str) -> dict:
+        """Return all messages for a profile as {profile_url, name, title, messages}."""
+        results = self.messages.get(
+            where={"profile_url": profile_url},
+            include=["documents", "metadatas"],
+        )
+        if not results["ids"]:
+            return {"profile_url": profile_url, "name": "", "title": "", "messages": []}
+        messages = []
+        name = ""
+        title = ""
+        for doc, meta in zip(results["documents"], results["metadatas"]):
+            name = meta.get("name", "") or name
+            title = meta.get("title", "") or title
+            messages.append({
+                "id": meta.get("msg_id", ""),
+                "date": meta.get("date", ""),
+                "type": meta.get("type", "dm"),
+                "direction": meta.get("direction", "sent"),
+                "content": doc,
+                "post_url": meta.get("post_url", ""),
+            })
+        messages.sort(key=lambda m: m.get("date", ""))
+        return {"profile_url": profile_url, "name": name, "title": title, "messages": messages}
+
+    def list_conversations(self) -> list[dict]:
+        """All conversations sorted by most recent message date (newest first)."""
+        results = self.messages.get(include=["documents", "metadatas"])
+        if not results["ids"]:
+            return []
+        profiles: dict[str, dict] = {}
+        for doc, meta in zip(results["documents"], results["metadatas"]):
+            url = meta.get("profile_url", "")
+            if url not in profiles:
+                profiles[url] = {
+                    "profile_url": url,
+                    "name": meta.get("name", ""),
+                    "title": meta.get("title", ""),
+                    "messages": [],
+                    "_last_date": "",
+                }
+            profiles[url]["messages"].append({
+                "id": meta.get("msg_id", ""),
+                "date": meta.get("date", ""),
+                "type": meta.get("type", "dm"),
+                "direction": meta.get("direction", "sent"),
+                "content": doc,
+                "post_url": meta.get("post_url", ""),
+            })
+            d = meta.get("date", "")
+            if d > profiles[url]["_last_date"]:
+                profiles[url]["_last_date"] = d
+        convs = list(profiles.values())
+        convs.sort(key=lambda c: c["_last_date"], reverse=True)
+        for c in convs:
+            c["messages"].sort(key=lambda m: m.get("date", ""))
+        return convs
+
+    def delete_message(self, profile_url: str, message_id: str) -> None:
+        """Delete a message by its msg_id. No-op if not found."""
+        chroma_id = self._msg_chroma_id(message_id)
+        existing = self.messages.get(ids=[chroma_id])
+        if existing["ids"]:
+            self.messages.delete(ids=[chroma_id])
+
+    def search_messages(
+        self, query: str, n_results: int = 10, profile_url: str | None = None
+    ) -> list[dict]:
+        """Semantic search across messages. Optionally filter by profile_url."""
+        where = {"profile_url": profile_url} if profile_url else None
+        total = self.messages.count()
+        if total == 0:
+            return []
+        actual_n = min(n_results, total)
+        kwargs: dict = {"query_texts": [query], "n_results": actual_n, "include": ["documents", "metadatas"]}
+        if where:
+            kwargs["where"] = where
+        results = self.messages.query(**kwargs)
+        output = []
+        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
+            output.append({
+                "profile_url": meta.get("profile_url", ""),
+                "name": meta.get("name", ""),
+                "date": meta.get("date", ""),
+                "direction": meta.get("direction", ""),
+                "content": doc,
+            })
+        return output
 
     # ── Posts ──────────────────────────────────────────────────────────────
 
