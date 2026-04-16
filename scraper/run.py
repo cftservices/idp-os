@@ -245,6 +245,92 @@ def run_scrape_messages():
     print(f"[run] Done. Total new messages saved: {total_saved}")
 
 
+def run_enrich_targets(queue_path: str = "") -> None:
+    """Enrich About/Info text for FB outreach targets (or all connections without about)."""
+    print(f"[run] Starting About enrichment — {datetime.now().isoformat()}")
+
+    store = LinkedInStore(CHROMA_PATH)
+
+    # Determine which URLs to enrich
+    if queue_path:
+        import json as _json
+        with open(queue_path, encoding="utf-8") as _f:
+            queue = _json.load(_f)
+        urls = [item["profile_url"] for item in queue if not item.get("sent")]
+    else:
+        # Fall back: all connections without about text
+        all_conns = store.get_all_connections()
+        urls = [c["profile_url"] for c in all_conns if not c.get("about")]
+
+    print(f"[run] {len(urls)} profiles to enrich")
+
+    # Enrich in batches via scraper subprocess (reuses existing enrich_connections())
+    import json as _json
+    BATCH = 30
+    total_enriched = 0
+    for i in range(0, len(urls), BATCH):
+        batch = urls[i:i + BATCH]
+        print(f"[run] Enriching batch {i // BATCH + 1}: {len(batch)} profiles...")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).parent / "linkedin_scraper.py"),
+                "--enrich-urls", _json.dumps(batch),
+            ],
+            capture_output=True, text=True, timeout=600,
+        )
+        if result.returncode != 0:
+            print(f"[run] Scraper error:\n{result.stderr}", file=sys.stderr)
+            continue
+
+        stdout_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
+        if not stdout_lines:
+            continue
+        try:
+            data = _json.loads(stdout_lines[-1])
+        except Exception:
+            continue
+
+        about_results: dict = data.get("about", {})
+        for profile_url, about_text in about_results.items():
+            if about_text:
+                store.update_connection_about(profile_url, about_text)
+                total_enriched += 1
+        print(f"[run] Batch done — {sum(1 for t in about_results.values() if t)} enriched")
+
+    print(f"[run] Done. Total About texts stored: {total_enriched}")
+
+
+def run_send_dms(queue_path: str = "") -> None:
+    """Send LinkedIn DMs via Playwright based on a queue JSON file."""
+    print(f"[run] Starting DM send — {datetime.now().isoformat()}")
+
+    if not queue_path:
+        queue_path = str(Path(REPORT_OUTPUT) / "fb-community-queue.json")
+
+    if not Path(queue_path).exists():
+        print(f"[run] Queue file not found: {queue_path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).parent / "linkedin_scraper.py"),
+            "--send-dms", queue_path,
+        ],
+        capture_output=True, text=True, timeout=3600,
+    )
+    if result.returncode != 0:
+        print(f"[run] Scraper stderr:\n{result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    # Print scraper progress (stderr was captured but logged live to terminal
+    # by the scraper itself writing to its own stderr)
+    for line in result.stderr.splitlines():
+        print(line)
+    print("[run] DM send complete.")
+
+
 if __name__ == "__main__":
     import argparse as _argparse
 
@@ -253,11 +339,20 @@ if __name__ == "__main__":
                          help="Scrape DM inbox outgoing messages and save to message store")
     _parser.add_argument("--scrape-all-connections", action="store_true", default=False,
                          help="Scrape all 700+ LinkedIn connections and store in ChromaDB")
+    _parser.add_argument("--enrich-targets", action="store_true", default=False,
+                         help="Bulk-enrich About/Info text for FB outreach targets")
+    _parser.add_argument("--send-dms", metavar="QUEUE_JSON", nargs="?", const="",
+                         default=None,
+                         help="Send DMs via Playwright using queue JSON (default: fb-community-queue.json)")
     _args = _parser.parse_args()
 
     if _args.scrape_messages:
         run_scrape_messages()
     elif _args.scrape_all_connections:
         run_scrape_all_connections()
+    elif _args.enrich_targets:
+        run_enrich_targets()
+    elif _args.send_dms is not None:
+        run_send_dms(_args.send_dms or "")
     else:
         main()

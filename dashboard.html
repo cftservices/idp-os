@@ -102,6 +102,30 @@ body {
 }
 .sidebar-item.active .sidebar-badge { background: rgba(255,255,255,0.3); }
 
+/* ── Skill guide ─────────────────────────────────────────────────────────── */
+.skill-guide {
+  margin-top: 10px; padding: 10px 8px 8px;
+  border-top: 0.5px solid var(--border-color);
+}
+.skill-guide-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-secondary); padding: 0 4px 6px;
+}
+.skill-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 8px; border-radius: 8px; cursor: pointer;
+  transition: background 0.15s; margin-bottom: 3px;
+  border: 0.5px solid transparent;
+}
+.skill-item:hover { background: var(--apple-gray-ultralight); border-color: var(--border-color); }
+.skill-cmd {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 11px; font-weight: 600; color: var(--apple-blue);
+  background: rgba(0,122,255,0.08); padding: 2px 6px; border-radius: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.skill-desc { font-size: 11px; color: var(--text-secondary); padding-left: 2px; }
+
 /* ── Main content ────────────────────────────────────────────────────────── */
 .main-content { flex: 1; min-width: 0; }
 .section { display: none; }
@@ -402,6 +426,11 @@ textarea.form-input { resize: vertical; min-height: 80px; font-family: inherit; 
         <span>Replies</span>
         <span class="sidebar-badge" id="repliesBadge" style="display:none">0</span>
       </a>
+
+      <div class="skill-guide">
+        <div class="skill-guide-title">💡 Claude Skills</div>
+        <div id="skill-guide-items"></div>
+      </div>
     </div>
   </aside>
 
@@ -509,11 +538,57 @@ async function apiFetch(path, options = {}) {
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
+const SKILL_MAP = {
+  overzicht: [
+    { cmd: 'python scraper/run.py',                desc: 'Dagelijkse feed scrapen' },
+    { cmd: 'python scraper/run.py --scrape-all-connections', desc: 'Alle 700+ connecties scrapen' },
+    { cmd: 'python scraper/run.py --scrape-messages', desc: 'DM inbox synchroniseren' },
+    { cmd: 'python scraper/run.py --enrich-targets', desc: 'About/Info tekst scrapen' },
+  ],
+  posts: [
+    { cmd: '/linkedin-leads',          desc: 'Dagelijkse feed analyseren' },
+    { cmd: '/linkedin-reply <url>',    desc: 'Reply genereren voor post' },
+  ],
+  contacten: [
+    { cmd: '/linkedin-contacten',      desc: 'Wie benaderen vandaag?' },
+    { cmd: '/linkedin-reply <url>',    desc: 'Reply genereren voor post' },
+    { cmd: 'python generate_fb_outreach.py', desc: 'FB uitnodigingen genereren' },
+    { cmd: 'python scraper/run.py --send-dms', desc: 'DMs automatisch versturen' },
+  ],
+  replies: [
+    { cmd: '/linkedin-reply <url>',    desc: 'Reply genereren voor post' },
+    { cmd: '/linkedin-leads',          desc: 'Feed opnieuw laden' },
+  ],
+};
+
+function renderSkillGuide(section) {
+  const items = SKILL_MAP[section] || [];
+  document.getElementById('skill-guide-items').innerHTML = items.map(s => `
+    <div class="skill-item" onclick="copySkill(${JSON.stringify(s.cmd)})" title="Klik om te kopiëren">
+      <code class="skill-cmd">${escHtml(s.cmd)}</code>
+      <span class="skill-desc">${escHtml(s.desc)}</span>
+    </div>`).join('');
+}
+
+function copySkill(cmd) {
+  navigator.clipboard.writeText(cmd).then(() => toast('Gekopieerd: ' + cmd)).catch(() => {
+    // Fallback for file:// protocol
+    const el = document.createElement('textarea');
+    el.value = cmd;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    toast('Gekopieerd: ' + cmd);
+  });
+}
+
 function showSection(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
+  renderSkillGuide(name);
 }
 
 // ── Status check ──────────────────────────────────────────────────────────────
@@ -912,6 +987,7 @@ async function init() {
   await checkApiStatus();
   await Promise.all([loadSummary(), loadPosts(), loadConnections()]);
   renderReplies();
+  renderSkillGuide('overzicht'); // default section
 }
 
 init();

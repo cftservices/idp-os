@@ -574,6 +574,107 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
     return results
 
 
+def send_dms(context: BrowserContext, queue_path: str) -> None:
+    """
+    Send LinkedIn DMs via Playwright based on a queue JSON file.
+    Only sends entries where selected=true AND sent=false.
+    Updates the queue file after each send (incremental progress).
+    """
+    with open(queue_path, encoding="utf-8") as f:
+        queue: list[dict] = json.load(f)
+
+    pending = [item for item in queue if item.get("selected", True) and not item.get("sent", False)]
+    print(f"[send_dms] {len(pending)} messages to send (of {len(queue)} total)", file=sys.stderr)
+
+    sent_count = 0
+
+    for item in pending:
+        profile_url = item.get("profile_url", "")
+        name = item.get("name", "?")
+        message = item.get("message", "")
+
+        if not profile_url or not message:
+            print(f"[send_dms] Skipping {name} — missing profile_url or message", file=sys.stderr)
+            continue
+
+        page = context.new_page()
+        try:
+            print(f"[send_dms] Opening profile: {name} ({profile_url})", file=sys.stderr)
+            page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(3)
+
+            # Find and click the Message / Bericht button on the profile
+            msg_btn = page.query_selector(
+                'button[aria-label*="Bericht sturen"], '
+                'button[aria-label*="Send a message"], '
+                'button[aria-label*="Message"], '
+                'a[href*="/messaging/compose"]'
+            )
+            if not msg_btn:
+                print(f"[send_dms] No message button found for {name} — skipping", file=sys.stderr)
+                continue
+
+            msg_btn.click()
+            time.sleep(2.5)
+
+            # Find the message compose textarea
+            compose = page.query_selector(
+                '.msg-form__contenteditable, '
+                '[role="textbox"][aria-label*="ericht"], '
+                '[role="textbox"][aria-label*="essage"], '
+                '.msg-form__message-texteditor [contenteditable="true"]'
+            )
+            if not compose:
+                print(f"[send_dms] No compose area found for {name} — skipping", file=sys.stderr)
+                continue
+
+            compose.click()
+            time.sleep(0.5)
+
+            # Type the message line by line (Shift+Enter for newlines inside compose box)
+            lines = message.split("\n")
+            for i, line in enumerate(lines):
+                if line:
+                    page.keyboard.type(line)
+                if i < len(lines) - 1:
+                    page.keyboard.press("Shift+Enter")
+            time.sleep(1)
+
+            # Find and click the Send button
+            send_btn = page.query_selector(
+                'button[aria-label*="Verzenden"], '
+                'button[aria-label*="Send now"], '
+                'button[aria-label*="Send message"], '
+                '.msg-form__send-button'
+            )
+            if not send_btn:
+                print(f"[send_dms] No send button found for {name} — skipping", file=sys.stderr)
+                continue
+
+            send_btn.click()
+            time.sleep(2)
+
+            # Mark as sent and save progress
+            item["sent"] = True
+            item["sent_at"] = datetime.now().isoformat()
+            with open(queue_path, "w", encoding="utf-8") as f:
+                json.dump(queue, f, ensure_ascii=False, indent=2)
+
+            sent_count += 1
+            print(f"[send_dms] \u2713 Sent to {name} ({sent_count}/{len(pending)})", file=sys.stderr)
+
+            # Random delay between sends to avoid rate limiting (6-10 seconds)
+            import random
+            time.sleep(random.uniform(6, 10))
+
+        except Exception as e:
+            print(f"[send_dms] Error sending to {name}: {e}", file=sys.stderr)
+        finally:
+            page.close()
+
+    print(f"[send_dms] Done — {sent_count} messages sent", file=sys.stderr)
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -583,6 +684,8 @@ if __name__ == "__main__":
     parser.add_argument("--engagement-urls", default="[]", help="JSON list of post URLs to scrape likes/comments for")
     parser.add_argument("--scrape-messages", action="store_true", default=False)
     parser.add_argument("--scrape-all-connections", action="store_true", default=False)
+    parser.add_argument("--send-dms", metavar="QUEUE_JSON", default=None,
+                        help="Send DMs via Playwright using a queue JSON file")
     args = parser.parse_args()
 
     try:
@@ -591,6 +694,14 @@ if __name__ == "__main__":
     except json.JSONDecodeError as e:
         print(f"[scraper] Invalid JSON in --enrich-urls or --engagement-urls: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # --send-dms is handled entirely inside the browser context — no JSON output
+    if args.send_dms:
+        with sync_playwright() as p:
+            context = setup_browser(p)
+            send_dms(context, args.send_dms)
+            context.close()
+        sys.exit(0)
 
     with sync_playwright() as p:
         context = setup_browser(p)
