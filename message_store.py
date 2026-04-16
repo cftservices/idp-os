@@ -74,21 +74,27 @@ def save_scraped_messages(
     conv["title"] = title or conv["title"]
     conv["profile_url"] = profile_url
 
-    existing_contents = {m.get("content", "") for m in conv["messages"]}
+    # Dedup key: content + direction (both sides can theoretically send the same text)
+    existing_keys = {
+        (m.get("content", ""), m.get("direction", "sent"))
+        for m in conv["messages"]
+    }
     new_count = 0
 
     for message in messages:
         content = message.get("content", "").strip()
         if not content:
             continue
-        if content in existing_contents:
+        direction = message.get("direction", "sent")
+        key = (content, direction)
+        if key in existing_keys:
             continue
         message = dict(message)
         message["content"] = content
         if "id" not in message or not message["id"]:
             message["id"] = datetime.now().isoformat() + f"_{new_count}"
         conv["messages"].append(message)
-        existing_contents.add(content)
+        existing_keys.add(key)
         new_count += 1
 
     if new_count > 0:

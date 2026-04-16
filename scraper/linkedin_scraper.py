@@ -526,10 +526,9 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
 
                 msg_events = page.query_selector_all(".msg-s-event-listitem")
                 for ev in msg_events:
-                    # Skip messages from the other person
                     ev_class = ev.get_attribute("class") or ""
-                    if "msg-s-event-listitem--other" in ev_class:
-                        continue
+                    # direction: "received" if message from the contact, "sent" if from us
+                    direction = "received" if "msg-s-event-listitem--other" in ev_class else "sent"
 
                     # LinkedIn changed content container from .msg-s-event__content
                     # to .msg-s-event-listitem__message-bubble
@@ -551,6 +550,7 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
                     sent_messages.append({
                         "date": date_str,
                         "type": "dm",
+                        "direction": direction,
                         "content": content,
                     })
 

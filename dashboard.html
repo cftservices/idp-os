@@ -240,24 +240,47 @@ body {
 .post-item-date { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
 .post-item-link { color: var(--apple-blue); text-decoration: none; font-size: 12px; }
 
-/* Messages in detail panel */
-.msg-item { padding: 12px 0; border-bottom: 0.5px solid var(--border-color); }
-.msg-item:last-child { border-bottom: none; }
-.msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.msg-date { font-size: 12px; color: var(--text-secondary); }
+/* Messages in detail panel — chat bubbles */
+.msg-thread { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 12px; }
+.msg-item {
+  display: flex; flex-direction: column; max-width: 82%;
+}
+.msg-item.sent { align-self: flex-end; align-items: flex-end; }
+.msg-item.received { align-self: flex-start; align-items: flex-start; }
+.msg-bubble {
+  padding: 9px 13px; border-radius: 18px; font-size: 13px; line-height: 1.5;
+  word-break: break-word; white-space: pre-wrap;
+}
+.msg-item.sent .msg-bubble {
+  background: var(--apple-blue); color: #fff;
+  border-bottom-right-radius: 5px;
+}
+.msg-item.received .msg-bubble {
+  background: var(--apple-gray-ultralight); color: var(--text-primary);
+  border-bottom-left-radius: 5px;
+}
+.msg-meta {
+  display: flex; align-items: center; gap: 6px; margin-top: 3px;
+  font-size: 11px; color: var(--text-secondary);
+}
 .msg-type-badge {
-  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 5px;
   background: var(--apple-gray-ultralight); color: var(--apple-gray);
 }
 .msg-delete {
-  margin-left: auto; background: none; border: none; cursor: pointer;
-  color: var(--apple-gray); font-size: 14px; padding: 2px 6px; border-radius: 6px;
-  transition: all 0.15s;
+  background: none; border: none; cursor: pointer;
+  color: var(--apple-gray); font-size: 13px; padding: 1px 4px; border-radius: 5px;
+  transition: all 0.15s; opacity: 0.5;
 }
-.msg-delete:hover { background: rgba(255,59,48,0.1); color: var(--apple-red); }
-.msg-content { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+.msg-delete:hover { background: rgba(255,59,48,0.1); color: var(--apple-red); opacity: 1; }
 .msg-post-url { font-size: 11px; color: var(--apple-blue); text-decoration: none; }
 .msg-post-url:hover { text-decoration: underline; }
+/* Legacy flat items (manually logged comments/notes) */
+.msg-item-flat { padding: 12px 0; border-bottom: 0.5px solid var(--border-color); }
+.msg-item-flat:last-child { border-bottom: none; }
+.msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.msg-date { font-size: 12px; color: var(--text-secondary); }
+.msg-content { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
 
 /* New message form */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -731,17 +754,32 @@ async function loadContactDetail(slug) {
       <hr class="detail-divider">
       <div class="detail-section">
         <div class="detail-section-title">Berichtenhistorie (${messages.length})</div>
-        ${messages.length ? messages.map(m => `
-          <div class="msg-item" id="msg-${m.id}">
-            <div class="msg-header">
-              <span class="msg-date">${m.date || '?'}</span>
-              <span class="msg-type-badge">${m.type === 'comment' ? '💬 comment' : '✉️ DM'}</span>
-              ${m.post_url ? `<a class="msg-post-url" href="${m.post_url}" target="_blank">post ↗</a>` : ''}
-              <button class="msg-delete" onclick="deleteMsg('${slug}','${escAttr(m.id)}')">🗑</button>
-            </div>
-            ${m.post_excerpt ? `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">"${escHtml(m.post_excerpt)}"</div>` : ''}
-            <div class="msg-content">${escHtml(m.content || '')}</div>
-          </div>`).join('') : '<div style="font-size:13px;color:var(--text-secondary);padding:8px 0">Nog geen berichten.</div>'}
+        ${messages.length ? `<div class="msg-thread">${messages.map(m => {
+          const isDM = m.type === 'dm';
+          const dir = m.direction || 'sent';
+          if (isDM) {
+            // Chat bubble style for DMs
+            return `<div class="msg-item ${dir}" id="msg-${m.id}">
+              <div class="msg-bubble">${escHtml(m.content || '')}</div>
+              <div class="msg-meta">
+                <span>${m.date || '?'}</span>
+                <button class="msg-delete" onclick="deleteMsg('${slug}','${escAttr(m.id)}')">🗑</button>
+              </div>
+            </div>`;
+          } else {
+            // Flat style for manually logged comments/notes
+            return `<div class="msg-item-flat" id="msg-${m.id}">
+              <div class="msg-header">
+                <span class="msg-date">${m.date || '?'}</span>
+                <span class="msg-type-badge">${m.type === 'comment' ? '💬 comment' : '✉️ DM'}</span>
+                ${m.post_url ? `<a class="msg-post-url" href="${m.post_url}" target="_blank">post ↗</a>` : ''}
+                <button class="msg-delete" onclick="deleteMsg('${slug}','${escAttr(m.id)}')">🗑</button>
+              </div>
+              ${m.post_excerpt ? `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">"${escHtml(m.post_excerpt)}"</div>` : ''}
+              <div class="msg-content">${escHtml(m.content || '')}</div>
+            </div>`;
+          }
+        }).join('')}</div>` : '<div style="font-size:13px;color:var(--text-secondary);padding:8px 0">Nog geen berichten.</div>'}
       </div>
 
       <hr class="detail-divider">
