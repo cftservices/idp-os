@@ -6,6 +6,7 @@ Run: python api.py
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -67,6 +68,10 @@ class ReplyPatch(BaseModel):
 
 class ConnectionPatch(BaseModel):
     classification: str
+
+
+class ClipboardBody(BaseModel):
+    text: str
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -253,6 +258,16 @@ def get_post_context(post_id: str):
         "author_connection": conn,
         "author_messages": conv.get("messages", []),
     }
+
+
+@app.post("/api/clipboard")
+def set_clipboard(body: ClipboardBody):
+    """Copy text to Windows clipboard via clip.exe (works on file:// origin)."""
+    try:
+        subprocess.run("clip", input=body.text.encode("utf-16-le"), check=True)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

@@ -112,7 +112,8 @@ body {
   color: var(--text-secondary); padding: 0 4px 6px;
 }
 .skill-item {
-  display: flex; flex-direction: column; gap: 2px;
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto;
+  gap: 2px 6px; align-items: center;
   padding: 7px 8px; border-radius: 8px; cursor: pointer;
   transition: background 0.15s; margin-bottom: 3px;
   border: 0.5px solid transparent;
@@ -124,7 +125,9 @@ body {
   background: rgba(0,122,255,0.08); padding: 3px 6px; border-radius: 5px;
   white-space: pre-wrap; word-break: break-all; display: block;
 }
-.skill-desc { font-size: 11px; color: var(--text-secondary); padding-left: 2px; }
+.skill-cmd  { grid-column: 1; }
+.skill-desc { font-size: 11px; color: var(--text-secondary); padding-left: 2px; grid-column: 1; }
+.skill-copy-badge { grid-column: 2; grid-row: 1 / span 2; font-size: 14px; align-self: center; transition: color 0.2s; }
 
 /* ── Main content ────────────────────────────────────────────────────────── */
 .main-content { flex: 1; min-width: 0; }
@@ -563,30 +566,72 @@ const SKILL_MAP = {
 
 function renderSkillGuide(section) {
   const items = SKILL_MAP[section] || [];
-  document.getElementById('skill-guide-items').innerHTML = items.map(s => `
-    <div class="skill-item" onclick="copySkill(${JSON.stringify(s.cmd)})" title="Klik om te kopiëren">
+  document.getElementById('skill-guide-items').innerHTML = items.map((s, i) => `
+    <div class="skill-item" id="skill-item-${i}" onclick="copySkill(${JSON.stringify(s.cmd)}, this)" title="Klik om te kopiëren">
       <code class="skill-cmd">${escHtml(s.cmd)}</code>
       <span class="skill-desc">${escHtml(s.desc)}</span>
+      <span class="skill-copy-badge" id="skill-badge-${i}">📋</span>
     </div>`).join('');
 }
 
-function copySkill(cmd) {
-  // navigator.clipboard requires HTTPS — always use execCommand on file://
-  const el = document.createElement('textarea');
-  el.value = cmd;
-  el.style.position = 'fixed';
-  el.style.top = '-9999px';
-  el.style.left = '-9999px';
-  document.body.appendChild(el);
-  el.focus();
-  el.select();
-  try {
-    document.execCommand('copy');
-    toast('📋 Gekopieerd!');
-  } catch (e) {
-    toast('Kopieer handmatig: ' + cmd, 'error');
-  }
-  document.body.removeChild(el);
+function copySkill(cmd, el) {
+  // Try API clipboard (works on file://) — gives instant visual feedback
+  fetch('http://localhost:8000/api/clipboard', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text: cmd}),
+  })
+  .then(r => {
+    if (r.ok) {
+      // Green flash on the clicked item
+      el.style.background = '#d4f5d4';
+      el.style.borderColor = '#28a745';
+      const badge = el.querySelector('.skill-copy-badge');
+      if (badge) { badge.textContent = '✅'; badge.style.color = '#28a745'; }
+      setTimeout(() => {
+        el.style.background = '';
+        el.style.borderColor = '';
+        if (badge) { badge.textContent = '📋'; badge.style.color = ''; }
+      }, 1500);
+    } else {
+      fallbackCopy(cmd, el);
+    }
+  })
+  .catch(() => fallbackCopy(cmd, el));
+}
+
+function fallbackCopy(cmd, el) {
+  // Fallback: show popup with pre-selected text + Ctrl+C instruction
+  el.style.background = '#fff3cd';
+  el.style.borderColor = '#ffc107';
+  const badge = el.querySelector('.skill-copy-badge');
+  if (badge) { badge.textContent = '⌨️'; }
+  setTimeout(() => {
+    el.style.background = '';
+    el.style.borderColor = '';
+    if (badge) { badge.textContent = '📋'; }
+  }, 5000);
+
+  const existing = document.getElementById('skill-copy-box');
+  if (existing) existing.remove();
+  const box = document.createElement('div');
+  box.id = 'skill-copy-box';
+  box.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+    'background:#fff;border:1.5px solid #ffc107;border-radius:12px;padding:12px 16px;' +
+    'box-shadow:0 8px 30px rgba(0,0,0,0.15);z-index:9999;min-width:320px;max-width:90vw;';
+  box.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:#856404;margin-bottom:6px;">⌨️ API niet bereikbaar — druk Ctrl+C</div>
+    <input id="skill-copy-input" readonly value="${cmd.replace(/"/g, '&quot;')}"
+      style="width:100%;font-family:monospace;font-size:12px;padding:6px 8px;border:1px solid #e0e0e0;
+             border-radius:6px;background:#f5f5f7;color:#1c1c1e;box-sizing:border-box;">
+    <button onclick="document.getElementById('skill-copy-box').remove()"
+      style="position:absolute;top:8px;right:10px;border:none;background:none;font-size:16px;
+             cursor:pointer;color:#888;line-height:1;">×</button>`;
+  document.body.appendChild(box);
+  const input = document.getElementById('skill-copy-input');
+  input.focus();
+  input.select();
+  setTimeout(() => { if (box.parentNode) box.remove(); }, 8000);
 }
 
 function showSection(name) {
