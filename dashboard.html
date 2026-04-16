@@ -528,6 +528,7 @@ textarea.form-input { resize: vertical; min-height: 80px; font-family: inherit; 
 const API = 'http://localhost:8000';
 let allPosts = [];
 let allConnections = [];
+let allConversations = [];   // [{profile_url, name, messages:[...]}]
 let selectedContactSlug = null;
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -805,30 +806,77 @@ function onGlobalSearch(q) {
 // ── Contacten ─────────────────────────────────────────────────────────────────
 async function loadConnections() {
   try {
-    allConnections = await apiFetch('/api/connections');
+    [allConnections, allConversations] = await Promise.all([
+      apiFetch('/api/connections'),
+      apiFetch('/api/conversations').catch(() => []),
+    ]);
+
+    // Build last-message lookup: slug → {date, snippet, direction}
+    window._lastMsgBySlug = {};
+    for (const conv of allConversations) {
+      if (!conv.messages || !conv.messages.length) continue;
+      const sorted = [...conv.messages].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const last = sorted[0];
+      const slug = slugify(conv.profile_url || '');
+      window._lastMsgBySlug[slug] = {
+        date: last.date || '',
+        snippet: (last.content || '').replace(/\n/g, ' ').slice(0, 60),
+        direction: last.direction || 'sent',
+      };
+    }
+
     renderContactList('');
   } catch (e) { console.error('Connections error:', e); }
 }
 
 function renderContactList(q) {
   const list = document.getElementById('contact-list');
-  let conns = allConnections;
+  let conns = [...allConnections];
   if (q) conns = conns.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()));
+
+  // Sort: contacts with messages first (most recent first), then rest alphabetically
+  const lm = window._lastMsgBySlug || {};
+  conns.sort((a, b) => {
+    const sa = slugify(a.profile_url || ''), sb = slugify(b.profile_url || '');
+    const da = lm[sa]?.date || '', db = lm[sb]?.date || '';
+    if (da && db) return db.localeCompare(da);
+    if (da) return -1;
+    if (db) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
 
   if (!conns.length) { list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-secondary)">Geen contacten.</div>'; return; }
 
   list.innerHTML = conns.map(c => {
     const slug = slugify(c.profile_url || '');
-    const n = c.message_count || 0;
     const isSelected = slug === selectedContactSlug;
+    const msg = lm[slug];
+    const dirIcon = msg ? (msg.direction === 'received' ? '←' : '→') : '';
+    const dateStr = msg ? fmtDate(msg.date) : '';
     return `<div class="contact-item ${isSelected ? 'selected' : ''}" onclick="selectContact('${slug}')">
       <div style="flex:1;min-width:0">
-        <div class="contact-name">${escHtml(c.name || '?')}</div>
-        <div class="contact-cls">${classLabel(c.classification)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px">
+          <div class="contact-name" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.name || '?')}</div>
+          ${dateStr ? `<div style="font-size:10px;color:var(--text-secondary);white-space:nowrap;flex-shrink:0">${escHtml(dateStr)}</div>` : ''}
+        </div>
+        ${msg
+          ? `<div style="font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${escHtml(dirIcon + ' ' + msg.snippet)}</div>`
+          : `<div class="contact-cls">${classLabel(c.classification)}</div>`}
       </div>
-      ${n > 0 ? `<div class="contact-msg-badge">💬${n}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 86400000) return d.toLocaleTimeString('nl', {hour:'2-digit',minute:'2-digit'});
+    if (diff < 604800000) return d.toLocaleDateString('nl', {weekday:'short'});
+    return d.toLocaleDateString('nl', {day:'numeric',month:'short'});
+  } catch { return ''; }
 }
 
 function filterContacts(q) { renderContactList(q); }

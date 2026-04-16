@@ -262,12 +262,31 @@ def get_post_context(post_id: str):
 
 @app.post("/api/clipboard")
 def set_clipboard(body: ClipboardBody):
-    """Copy text to Windows clipboard via clip.exe (works on file:// origin)."""
+    """Copy text to Windows clipboard via PowerShell (works from background service)."""
+    import tempfile, os
+    tmp = None
     try:
-        subprocess.run("clip", input=body.text.encode("utf-16-le"), check=True)
+        # Write to temp file, then use PowerShell to read + Set-Clipboard
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         suffix=".txt", delete=False) as f:
+            f.write(body.text)
+            tmp = f.name
+        result = subprocess.run(
+            ["powershell", "-noprofile", "-noninteractive",
+             "-command", f'Get-Content -Raw -Path "{tmp}" | Set-Clipboard'],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=result.stderr.strip())
         return {"ok": True}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if tmp:
+            try: os.unlink(tmp)
+            except Exception: pass
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
