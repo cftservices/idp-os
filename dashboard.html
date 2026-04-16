@@ -120,9 +120,9 @@ body {
 .skill-item:hover { background: var(--apple-gray-ultralight); border-color: var(--border-color); }
 .skill-cmd {
   font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
-  font-size: 11px; font-weight: 600; color: var(--apple-blue);
-  background: rgba(0,122,255,0.08); padding: 2px 6px; border-radius: 5px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10.5px; font-weight: 600; color: var(--apple-blue);
+  background: rgba(0,122,255,0.08); padding: 3px 6px; border-radius: 5px;
+  white-space: pre-wrap; word-break: break-all; display: block;
 }
 .skill-desc { font-size: 11px; color: var(--text-secondary); padding-left: 2px; }
 
@@ -571,16 +571,22 @@ function renderSkillGuide(section) {
 }
 
 function copySkill(cmd) {
-  navigator.clipboard.writeText(cmd).then(() => toast('Gekopieerd: ' + cmd)).catch(() => {
-    // Fallback for file:// protocol
-    const el = document.createElement('textarea');
-    el.value = cmd;
-    document.body.appendChild(el);
-    el.select();
+  // navigator.clipboard requires HTTPS — always use execCommand on file://
+  const el = document.createElement('textarea');
+  el.value = cmd;
+  el.style.position = 'fixed';
+  el.style.top = '-9999px';
+  el.style.left = '-9999px';
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  try {
     document.execCommand('copy');
-    document.body.removeChild(el);
-    toast('Gekopieerd: ' + cmd);
-  });
+    toast('📋 Gekopieerd!');
+  } catch (e) {
+    toast('Kopieer handmatig: ' + cmd, 'error');
+  }
+  document.body.removeChild(el);
 }
 
 function showSection(name) {
