@@ -538,7 +538,14 @@ async function apiFetch(path, options = {}) {
     ...options,
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
-  return res.json();
+  const text = await res.text();
+  if (!text) { console.error('[apiFetch] empty body from', path); return {}; }
+  try {
+    return JSON.parse(text);
+  } catch(e) {
+    console.error('[apiFetch] JSON parse error on', path, '— first 100 chars:', text.slice(0, 100));
+    throw e;
+  }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
