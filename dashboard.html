@@ -815,11 +815,12 @@ async function loadConnections() {
     window._lastMsgBySlug = {};
     for (const conv of allConversations) {
       if (!conv.messages || !conv.messages.length) continue;
-      const sorted = [...conv.messages].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const sorted = [...conv.messages].sort((a, b) => (b.id || b.date || '').localeCompare(a.id || a.date || ''));
       const last = sorted[0];
       const slug = slugify(conv.profile_url || '');
       window._lastMsgBySlug[slug] = {
         date: last.date || '',
+        id: last.id || last.date || '',
         snippet: (last.content || '').replace(/\n/g, ' ').slice(0, 60),
         direction: last.direction || 'sent',
       };
@@ -838,7 +839,7 @@ function renderContactList(q) {
   const lm = window._lastMsgBySlug || {};
   conns.sort((a, b) => {
     const sa = slugify(a.profile_url || ''), sb = slugify(b.profile_url || '');
-    const da = lm[sa]?.date || '', db = lm[sb]?.date || '';
+    const da = lm[sa]?.id || lm[sa]?.date || '', db = lm[sb]?.id || lm[sb]?.date || '';
     if (da && db) return db.localeCompare(da);
     if (da) return -1;
     if (db) return 1;
