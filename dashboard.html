@@ -1015,9 +1015,9 @@ async function deleteMsg(slug, msgId) {
 async function copyContext(slug) {
   try {
     const data = await apiFetch(`/api/context/${slug}`);
-    await navigator.clipboard.writeText(data.context);
+    await apiFetch('/api/clipboard', { method: 'POST', body: JSON.stringify({ text: data.context }) });
     toast('Context gekopieerd naar clipboard ✓', 'success');
-  } catch (e) { toast('Clipboard niet beschikbaar — kopieer handmatig', 'error'); }
+  } catch (e) { toast('Clipboard fout: ' + e.message, 'error'); }
 }
 
 // ── Replies ───────────────────────────────────────────────────────────────────
