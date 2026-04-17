@@ -1,13 +1,17 @@
 from __future__ import annotations
 import json
 import os
+import random
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, BrowserContext
+from playwright_stealth import Stealth
+
+_stealth = Stealth(navigator_webdriver=True)
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -21,13 +25,18 @@ KEYWORDS = [k.strip() for k in os.getenv(
 
 def setup_browser(playwright) -> BrowserContext:
     """Launch Chromium with persistent profile (stays logged in)."""
-    return playwright.chromium.launch_persistent_context(
+    try:
+        _stealth.hook_playwright_context(playwright)
+    except Exception:
+        pass  # playwright_stealth v2 may not support persistent contexts
+    context = playwright.chromium.launch_persistent_context(
         user_data_dir=CHROMIUM_PROFILE,
         headless=False,
         args=["--start-maximized"],
         no_viewport=True,
         permissions=["clipboard-read", "clipboard-write"],
     )
+    return context
 
 
 def scrape_keyword(context: BrowserContext, keyword: str, date_filter: str = "past-24h") -> list[dict]:
@@ -47,7 +56,7 @@ def scrape_keyword(context: BrowserContext, keyword: str, date_filter: str = "pa
             f"?keywords={keyword}&sortBy=%22date_posted%22&datePosted=%22{date_filter}%22"
         )
         page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-        time.sleep(6)
+        time.sleep(random.uniform(4.5, 8.0))
 
         # Override clipboard.writeText to capture URLs
         page.evaluate("""() => {
@@ -59,7 +68,7 @@ def scrape_keyword(context: BrowserContext, keyword: str, date_filter: str = "pa
         }""")
 
         page.evaluate("window.scrollBy(0, 400)")
-        time.sleep(2)
+        time.sleep(random.uniform(1.5, 3.0))
 
         posts = []
         seen_urls: set[str] = set()
@@ -117,7 +126,7 @@ def scrape_keyword(context: BrowserContext, keyword: str, date_filter: str = "pa
                 # Click ... menu and copy link
                 pre_count = len(captured_urls)
                 btn.click()
-                time.sleep(1.2)
+                time.sleep(random.uniform(0.8, 1.8))
 
                 copy_btn = page.query_selector(
                     'p:text("Link naar bijdrage kopiëren"), '
@@ -128,12 +137,12 @@ def scrape_keyword(context: BrowserContext, keyword: str, date_filter: str = "pa
                 post_url = ""
                 if copy_btn:
                     copy_btn.click()
-                    time.sleep(0.8)
+                    time.sleep(random.uniform(0.5, 1.2))
                     if len(captured_urls) > pre_count:
                         post_url = captured_urls[-1].split("?")[0]  # strip tracking params
 
                 page.keyboard.press("Escape")
-                time.sleep(0.8)
+                time.sleep(random.uniform(0.5, 1.2))
 
                 if not post_url or post_url in seen_urls:
                     continue
@@ -180,7 +189,7 @@ def scrape_connections(context: BrowserContext) -> list[dict]:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        time.sleep(5)
+        time.sleep(random.uniform(4.0, 7.0))
 
         connections: list[dict] = []
         seen_urls: set[str] = set()
@@ -212,7 +221,7 @@ def scrape_connections(context: BrowserContext) -> list[dict]:
                 no_new_count = 0
 
             page.evaluate("window.scrollBy(0, 1200)")
-            time.sleep(1.5)
+            time.sleep(random.uniform(1.0, 2.5))
 
         print(f"[scraper] connections: {len(connections)} collected", file=sys.stderr)
         return connections
@@ -222,12 +231,13 @@ def scrape_connections(context: BrowserContext) -> list[dict]:
 
 def scrape_profile_about(context: BrowserContext, profile_url: str) -> str:
     """Visit a LinkedIn profile and extract the About section text (up to 500 chars).
-    Returns empty string on any failure.
+    Returns empty string on any failure. Raises TargetClosedError if context is dead.
     """
-    page = context.new_page()
+    page = None
     try:
+        page = context.new_page()
         page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
-        time.sleep(3)
+        time.sleep(random.uniform(2.0, 4.5))
         about = page.evaluate("""() => {
             const anchor = document.querySelector('#about');
             if (!anchor) return '';
@@ -247,21 +257,32 @@ def scrape_profile_about(context: BrowserContext, profile_url: str) -> str:
         }""")
         return about or ""
     except Exception as e:
+        err = str(e)
+        if "TargetClosedError" in err or "Target page, context or browser has been closed" in err:
+            raise  # propagate so enrich_connections can stop cleanly
         print(f"[scraper] about error for {profile_url}: {e}", file=sys.stderr)
         return ""
     finally:
-        page.close()
+        if page:
+            try: page.close()
+            except Exception: pass
 
 
 def enrich_connections(context: BrowserContext, urls: list[str]) -> dict[str, str]:
     """Visit each profile URL and extract About text. Returns {profile_url: about_text}.
-    Tolerates per-URL failures.
+    Stops early if the browser context is closed, tolerates other per-URL failures.
     """
     results: dict[str, str] = {}
     for url in urls:
-        results[url] = scrape_profile_about(context, url)
-        print(f"[scraper] enriched {url}: {len(results[url])} chars", file=sys.stderr)
-        time.sleep(2)
+        try:
+            results[url] = scrape_profile_about(context, url)
+            print(f"[scraper] enriched {url}: {len(results[url])} chars", file=sys.stderr)
+            time.sleep(random.uniform(2.5, 5.0))
+        except Exception as e:
+            if "TargetClosedError" in str(e) or "Target page, context or browser has been closed" in str(e):
+                print(f"[scraper] browser context closed during enrichment — stopping early", file=sys.stderr)
+                break
+            print(f"[scraper] enrichment error for {url}: {e}", file=sys.stderr)
     return results
 
 
@@ -272,7 +293,7 @@ def scrape_engagement(context: BrowserContext, post_url: str) -> list[dict]:
     page = context.new_page()
     try:
         page.goto(post_url, wait_until="domcontentloaded", timeout=30000)
-        time.sleep(4)
+        time.sleep(random.uniform(3.0, 5.5))
 
         people: list[dict] = []
         seen_urls: set[str] = set()
@@ -305,7 +326,7 @@ def scrape_engagement(context: BrowserContext, post_url: str) -> list[dict]:
         )
         if reactions_btn:
             reactions_btn.click()
-            time.sleep(2)
+            time.sleep(random.uniform(1.5, 3.0))
             for _ in range(15):
                 modal_cards = page.evaluate("""() => {
                     const seen = new Set();
@@ -334,11 +355,11 @@ def scrape_engagement(context: BrowserContext, post_url: str) -> list[dict]:
                     const d = document.querySelector('[role="dialog"]');
                     if (d) d.scrollBy(0, 800);
                 }""")
-                time.sleep(1)
+                time.sleep(random.uniform(0.7, 1.5))
                 if new_count == 0:
                     break
             page.keyboard.press("Escape")
-            time.sleep(0.5)
+            time.sleep(random.uniform(0.4, 0.9))
 
         print(f"[scraper] engagement {post_url}: {len(people)} people", file=sys.stderr)
         return people
@@ -366,7 +387,7 @@ def scrape_all_connections(context: BrowserContext) -> list[dict]:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        time.sleep(6)
+        time.sleep(random.uniform(4.5, 8.0))
 
         title = page.title()
         print(f"[scrape_all_connections] Page: {title}", file=sys.stderr)
@@ -440,7 +461,7 @@ def scrape_all_connections(context: BrowserContext) -> list[dict]:
             # virtual scroll actually responds to (scrollTop assignments are ignored).
             # Scroll 3000px per round (LinkedIn loads ~10 connections per batch).
             page.mouse.wheel(0, 3000)
-            time.sleep(2.5)
+            time.sleep(random.uniform(1.8, 3.5))
             scroll_round += 1
 
     except Exception as e:
@@ -452,16 +473,22 @@ def scrape_all_connections(context: BrowserContext) -> list[dict]:
     return results
 
 
-def scrape_messages(context: BrowserContext) -> list[dict]:
+def scrape_messages(context: BrowserContext, days: int = 0) -> list[dict]:
     """
     Scrape LinkedIn DM inbox outgoing messages only.
+    days: if > 0, only return messages from the last N days (0 = all).
     Returns list of {profile_url, name, messages: [{date, type, content}]}
     """
     page = context.new_page()
     results: list[dict] = []
     try:
         page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
-        time.sleep(4)
+        # Wait for conversations list to render (LinkedIn SPA needs extra time)
+        try:
+            page.wait_for_selector("li.msg-conversation-listitem", timeout=15000)
+        except Exception:
+            pass
+        time.sleep(random.uniform(2.0, 3.5))
 
         # Build name→canonical-URL lookup from ChromaDB so we can resolve ACoAAA URLs to slugs
         name_to_url: dict[str, str] = {}
@@ -498,7 +525,7 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
 
                 # Click to open conversation — profile link appears in panel header
                 item.click()
-                time.sleep(2)
+                time.sleep(random.uniform(1.5, 3.0))
 
                 # Get profile URL from conversation header (ACoAAA format from LinkedIn messaging)
                 header_link = page.query_selector(".msg-thread__link-to-profile")
@@ -506,9 +533,9 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
                 if header_link:
                     href = header_link.get_attribute("href") or ""
                     if href.startswith("/"):
-                        aco_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/") + "/"
+                        aco_url = "https://www.linkedin.com" + href.split("?")[0].rstrip("/")
                     else:
-                        aco_url = href.split("?")[0].rstrip("/") + "/"
+                        aco_url = href.split("?")[0].rstrip("/")
 
                 # Prefer canonical slug URL from ChromaDB (matched by name); fall back to ACoAAA
                 profile_url = name_to_url.get(name.strip().lower(), aco_url)
@@ -522,7 +549,7 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
                 conv_panel = page.query_selector(".msg-s-message-list")
                 if conv_panel:
                     page.evaluate("(el) => el.scrollTop = 0", conv_panel)
-                    time.sleep(1)
+                    time.sleep(random.uniform(0.7, 1.5))
 
                 msg_events = page.query_selector_all(".msg-s-event-listitem")
                 for ev in msg_events:
@@ -543,9 +570,9 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
 
                     time_el = ev.query_selector("time")
                     if time_el:
-                        date_str = (time_el.get_attribute("datetime") or datetime.now().date().isoformat())[:10]
+                        date_str = (time_el.get_attribute("datetime") or "")[:10]
                     else:
-                        date_str = datetime.now().date().isoformat()
+                        date_str = ""
 
                     sent_messages.append({
                         "date": date_str,
@@ -554,13 +581,18 @@ def scrape_messages(context: BrowserContext) -> list[dict]:
                         "content": content,
                     })
 
-                if sent_messages or name:
+                # Apply days filter if requested
+                if days > 0:
+                    cutoff = (datetime.now().date() - timedelta(days=days - 1)).isoformat()
+                    sent_messages = [m for m in sent_messages if m.get("date", "") >= cutoff]
+
+                if sent_messages:
                     results.append({
                         "profile_url": profile_url,
                         "name": name,
                         "messages": sent_messages,
                     })
-                    print(f"[scrape_messages] {name}: {len(sent_messages)} outgoing message(s)", file=sys.stderr)
+                    print(f"[scrape_messages] {name}: {len(sent_messages)} message(s) within last {days} days", file=sys.stderr)
 
             except Exception as e:
                 print(f"[scrape_messages] Thread {idx} error: {e}", file=sys.stderr)
@@ -601,7 +633,7 @@ def send_dms(context: BrowserContext, queue_path: str) -> None:
         try:
             print(f"[send_dms] Opening profile: {name} ({profile_url})", file=sys.stderr)
             page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(3)
+            time.sleep(random.uniform(2.5, 4.5))
 
             # Find and click the Message / Bericht button on the profile
             msg_btn = page.query_selector(
@@ -615,7 +647,7 @@ def send_dms(context: BrowserContext, queue_path: str) -> None:
                 continue
 
             msg_btn.click()
-            time.sleep(2.5)
+            time.sleep(random.uniform(2.0, 3.5))
 
             # Find the message compose textarea
             compose = page.query_selector(
@@ -629,7 +661,7 @@ def send_dms(context: BrowserContext, queue_path: str) -> None:
                 continue
 
             compose.click()
-            time.sleep(0.5)
+            time.sleep(random.uniform(0.4, 0.9))
 
             # Type the message line by line (Shift+Enter for newlines inside compose box)
             lines = message.split("\n")
@@ -638,7 +670,7 @@ def send_dms(context: BrowserContext, queue_path: str) -> None:
                     page.keyboard.type(line)
                 if i < len(lines) - 1:
                     page.keyboard.press("Shift+Enter")
-            time.sleep(1)
+            time.sleep(random.uniform(0.8, 1.5))
 
             # Find and click the Send button
             send_btn = page.query_selector(
@@ -652,7 +684,7 @@ def send_dms(context: BrowserContext, queue_path: str) -> None:
                 continue
 
             send_btn.click()
-            time.sleep(2)
+            time.sleep(random.uniform(1.5, 3.0))
 
             # Mark as sent and save progress
             item["sent"] = True
@@ -663,9 +695,8 @@ def send_dms(context: BrowserContext, queue_path: str) -> None:
             sent_count += 1
             print(f"[send_dms] \u2713 Sent to {name} ({sent_count}/{len(pending)})", file=sys.stderr)
 
-            # Random delay between sends to avoid rate limiting (6-10 seconds)
-            import random
-            time.sleep(random.uniform(6, 10))
+            # Random delay between sends to avoid rate limiting
+            time.sleep(random.uniform(8, 15))
 
         except Exception as e:
             print(f"[send_dms] Error sending to {name}: {e}", file=sys.stderr)
@@ -682,7 +713,10 @@ if __name__ == "__main__":
     parser.add_argument("date_filter", nargs="?", default="past-24h")
     parser.add_argument("--enrich-urls", default="[]", help="JSON list of profile URLs to enrich with About text")
     parser.add_argument("--engagement-urls", default="[]", help="JSON list of post URLs to scrape likes/comments for")
+    parser.add_argument("--kw-limit", type=int, default=3, help="Max keywords to scrape (default: 3)")
+    parser.add_argument("--posts-per-kw", type=int, default=3, help="Max posts per keyword (default: 3)")
     parser.add_argument("--scrape-messages", action="store_true", default=False)
+    parser.add_argument("--days", type=int, default=0, help="Filter messages to last N days (0=all)")
     parser.add_argument("--scrape-all-connections", action="store_true", default=False)
     parser.add_argument("--send-dms", metavar="QUEUE_JSON", default=None,
                         help="Send DMs via Playwright using a queue JSON file")
@@ -718,16 +752,21 @@ if __name__ == "__main__":
 
         if not args.scrape_messages and not args.scrape_all_connections:
             date_filter = args.date_filter
-            kw_limit = None if date_filter != "past-24h" else 8
-            print(f"[scraper] date_filter={date_filter}, keywords={kw_limit or 'all'}", file=sys.stderr)
+            kw_limit = args.kw_limit
+            posts_per_kw = args.posts_per_kw
+            print(f"[scraper] date_filter={date_filter}, keywords={kw_limit}, posts_per_kw={posts_per_kw}", file=sys.stderr)
 
-            for keyword in (KEYWORDS[:kw_limit] if kw_limit else KEYWORDS):
+            for keyword in KEYWORDS[:kw_limit]:
                 kw_posts = scrape_keyword(context, keyword, date_filter=date_filter)
+                added = 0
                 for post in kw_posts:
+                    if added >= posts_per_kw:
+                        break
                     if post["url"] not in seen_post_urls:
                         seen_post_urls.add(post["url"])
                         all_posts.append(post)
-                time.sleep(4)
+                        added += 1
+                time.sleep(random.uniform(3.0, 6.0))
 
             connections = scrape_connections(context)
 
@@ -743,11 +782,11 @@ if __name__ == "__main__":
             print(f"[scraper] scraping engagement for {len(engagement_urls)} posts...", file=sys.stderr)
             for post_url in engagement_urls:
                 engagement_results[post_url] = scrape_engagement(context, post_url)
-                time.sleep(3)
+                time.sleep(random.uniform(2.5, 5.0))
 
         # Scrape DM inbox outgoing messages
         if args.scrape_messages:
-            messages_results: list[dict] = scrape_messages(context)
+            messages_results: list[dict] = scrape_messages(context, days=args.days)
         else:
             messages_results = []
 

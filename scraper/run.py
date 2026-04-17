@@ -17,8 +17,10 @@ INFLUENCER_KEYWORDS = [k.strip() for k in os.getenv("INFLUENCER_KEYWORDS", "").s
 IDEAL_CLIENT_TITLES = [k.strip() for k in os.getenv("IDEAL_CLIENT_TITLES", "").split(",") if k.strip()]
 COLLEAGUE_NAMES = [k.strip() for k in os.getenv("COLLEAGUE_NAMES", "").split(",") if k.strip()]
 
-ENRICH_LIMIT = 20   # max profiles to enrich per run
-ENGAGE_LIMIT = 5    # max posts to scrape engagement for per run
+KW_LIMIT = 3        # max keywords per run (detection reduction)
+POSTS_PER_KW = 8    # max posts per keyword to scrape
+NEW_CONN_LIMIT = 10 # max new connections to process per run
+MSG_DAYS = 2        # scrape DM inbox for last N days each run
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -31,41 +33,31 @@ def main():
     date_filter = sys.argv[1] if len(sys.argv) > 1 else "past-24h"
     print(f"[run] Starting LinkedIn Intel — {datetime.now().isoformat()} — filter: {date_filter}")
 
-    # 1. Init DB early so we can query for enrichment/engagement URLs
+    # 1. Init DB — load known URLs so we can skip existing posts/connections
     store = LinkedInStore(chroma_path=CHROMA_PATH)
+    known_post_urls = {p["url"] for p in store.get_all_posts()}
+    known_conn_urls = {c["profile_url"] for c in store.get_all_connections()}
+    print(f"[run] DB: {len(known_post_urls)} posts, {len(known_conn_urls)} connections known")
 
-    # 2. Determine which connections need About enrichment (no 'about' field yet)
-    all_connections_pre = store.get_all_connections()
-    to_enrich = [c["profile_url"] for c in all_connections_pre if not c.get("about")][:ENRICH_LIMIT]
-    print(f"[run] {len(to_enrich)} connections queued for About enrichment")
-
-    # 3. Determine which posts need engagement scraping (ideal_client/influencer, not yet scraped)
-    all_posts_pre = store.get_all_posts()
-    to_engage = [
-        p["url"] for p in all_posts_pre
-        if p.get("classification") in ("ideal_client", "influencer")
-        and not p.get("engagement_scraped")
-    ][:ENGAGE_LIMIT]
-    print(f"[run] {len(to_engage)} posts queued for engagement scraping")
-
-    # 4. Run Playwright scraper as subprocess (outputs JSON to stdout)
-    print("[run] Launching Playwright scraper...")
-    timeout = 1800 if date_filter == "past-week" else 600
+    # 2. Run Playwright scraper — limited keywords, no enrichment, no engagement
+    print(f"[run] Launching scraper (max {KW_LIMIT} keywords, {POSTS_PER_KW} posts each)...")
     result = subprocess.run(
         [
             sys.executable,
             str(Path(__file__).parent / "linkedin_scraper.py"),
             date_filter,
-            "--enrich-urls", json.dumps(to_enrich),
-            "--engagement-urls", json.dumps(to_engage),
+            "--kw-limit", str(KW_LIMIT),
+            "--posts-per-kw", str(POSTS_PER_KW),
+            "--enrich-urls", json.dumps([]),
+            "--engagement-urls", json.dumps([]),
         ],
-        capture_output=True, text=True, timeout=timeout,
+        capture_output=True, text=True, timeout=300,
     )
     if result.returncode != 0:
         print(f"[run] Scraper stderr:\n{result.stderr}", file=sys.stderr)
         sys.exit(1)
 
-    # 5. Parse JSON output
+    # 3. Parse JSON output
     stdout_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
     if not stdout_lines:
         print("[run] No output from scraper", file=sys.stderr)
@@ -79,57 +71,58 @@ def main():
 
     raw_posts = data.get("posts", [])
     raw_connections = data.get("connections", [])
-    about_results: dict[str, str] = data.get("about", {})
-    engagement_results: dict[str, list] = data.get("engagement", {})
-
     print(f"[run] Scraped {len(raw_posts)} posts, {len(raw_connections)} connections")
-    print(f"[run] About enrichments: {len(about_results)}, Engagement batches: {len(engagement_results)}")
 
-    # 6. Classify and store connections
-    for conn in raw_connections:
-        conn["classification"] = classify_connection(conn, IDEAL_CLIENT_TITLES, COLLEAGUE_NAMES, INFLUENCER_KEYWORDS)
-        store.upsert_connection(conn)
+    # 4. Only process NEW connections (not yet in DB) — enrich About immediately
+    new_conns = [c for c in raw_connections if c.get("profile_url") and c["profile_url"] not in known_conn_urls]
+    new_conns = new_conns[:NEW_CONN_LIMIT]
+    print(f"[run] {len(new_conns)} new connections (skipping {len(raw_connections) - len(new_conns)} known)")
 
-    # 7. Classify and store posts
+    if new_conns:
+        new_urls = [c["profile_url"] for c in new_conns]
+        print(f"[run] Enriching About for {len(new_urls)} new connections...")
+        enrich_result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).parent / "linkedin_scraper.py"),
+                "--enrich-urls", json.dumps(new_urls),
+            ],
+            capture_output=True, text=True, timeout=300,
+        )
+        about_results: dict[str, str] = {}
+        if enrich_result.returncode == 0:
+            enrich_lines = [l for l in enrich_result.stdout.strip().split("\n") if l.strip()]
+            if enrich_lines:
+                try:
+                    about_results = json.loads(enrich_lines[-1]).get("about", {})
+                except Exception:
+                    pass
+        else:
+            print(f"[run] Enrichment stderr:\n{enrich_result.stderr[:500]}", file=sys.stderr)
+
+        for conn in new_conns:
+            url = conn["profile_url"]
+            conn["classification"] = classify_connection(conn, IDEAL_CLIENT_TITLES, COLLEAGUE_NAMES, INFLUENCER_KEYWORDS)
+            if url in about_results and about_results[url]:
+                conn["about"] = about_results[url]
+            store.upsert_connection(conn)
+            print(f"[run] New connection: {conn.get('name','?')} — {conn['classification']}")
+
+    # 5. Only store NEW posts (not yet in DB)
     classified_posts = []
+    new_post_count = 0
     for post in raw_posts:
+        if post.get("url") in known_post_urls:
+            continue
         classified = classify_post(post, KEYWORDS, INFLUENCER_KEYWORDS, COLLEAGUE_NAMES)
         store.add_post(classified)
+        new_post_count += 1
         if classified.get("author_profile_url"):
             store.increment_post_count(classified["author_profile_url"])
         if classified["classification"] != "neutral":
             classified_posts.append(classified)
 
-    print(f"[run] {len(classified_posts)} relevant posts (non-neutral)")
-
-    # 8. Store About enrichments
-    for profile_url, about_text in about_results.items():
-        if about_text:
-            store.update_connection_about(profile_url, about_text)
-    if about_results:
-        enriched_count = sum(1 for t in about_results.values() if t)
-        print(f"[run] Stored About text for {enriched_count} profiles")
-
-    # 9. Store engagement (likers + commenters) as connections, mark posts as scraped
-    total_people = 0
-    for post_url, people in engagement_results.items():
-        for person in people:
-            if not person.get("profile_url"):
-                continue
-            conn = {
-                "profile_url": person["profile_url"],
-                "name": person.get("name", "Unknown"),
-                "title": person.get("title", ""),
-                "company": "",
-                "first_seen": datetime.now().date().isoformat(),
-            }
-            conn["classification"] = classify_connection(conn, IDEAL_CLIENT_TITLES, COLLEAGUE_NAMES, INFLUENCER_KEYWORDS)
-            store.upsert_connection(conn)
-            total_people += 1
-        # Mark post as engagement-scraped
-        store.mark_engagement_scraped(post_url)
-    if engagement_results:
-        print(f"[run] Stored {total_people} engagement contacts from {len(engagement_results)} posts")
+    print(f"[run] {new_post_count} new posts stored, {len(classified_posts)} relevant (non-neutral)")
 
     # 10. Build connections lookup for sidecar
     connections_lookup: dict[str, dict] = {}
@@ -154,6 +147,41 @@ def main():
         }, f, ensure_ascii=False, indent=2)
 
     print(f"[run] Raw data saved to {sidecar_path}")
+
+    # 12. Scrape DM inbox for last MSG_DAYS days and update message store
+    print(f"[run] Scraping DM inbox (last {MSG_DAYS} days)...")
+    msg_result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).parent / "linkedin_scraper.py"),
+            "--scrape-messages",
+            "--days", str(MSG_DAYS),
+        ],
+        capture_output=True, text=True, timeout=300,
+    )
+    if msg_result.returncode != 0:
+        print(f"[run] Message scraper error:\n{msg_result.stderr[:500]}", file=sys.stderr)
+    else:
+        msg_lines = [l for l in msg_result.stdout.strip().split("\n") if l.strip()]
+        if msg_lines:
+            try:
+                msg_data = json.loads(msg_lines[-1])
+                conversations = msg_data.get("messages", [])
+                total_saved = 0
+                for conv in conversations:
+                    profile_url = conv.get("profile_url", "")
+                    name = conv.get("name", "")
+                    msgs = conv.get("messages", [])
+                    if not profile_url:
+                        continue
+                    saved = ms.save_scraped_messages(profile_url, name, "", msgs)
+                    if saved:
+                        print(f"[run] {name}: {saved} new message(s)")
+                    total_saved += saved
+                print(f"[run] DM inbox: {total_saved} new messages saved")
+            except Exception as e:
+                print(f"[run] Failed to parse message output: {e}", file=sys.stderr)
+
     print("[run] Done. Open Claude Code and run /linkedin-leads to generate your report.")
 
 
@@ -201,15 +229,20 @@ def run_scrape_all_connections():
     print(f"[run] Done. {saved} connections stored in ChromaDB.")
 
 
-def run_scrape_messages():
-    """Scrape LinkedIn DM inbox for outgoing messages and persist them via message_store."""
-    print(f"[run] Starting DM message scrape — {datetime.now().isoformat()}")
+def run_scrape_messages(days: int = 0):
+    """Scrape LinkedIn DM inbox for outgoing messages and persist them via message_store.
+    days: if > 0, only process messages from the last N days.
+    """
+    days_label = f"last {days} days" if days > 0 else "all time"
+    print(f"[run] Starting DM message scrape ({days_label}) — {datetime.now().isoformat()}")
 
     cmd = [
         sys.executable,
         str(Path(__file__).parent / "linkedin_scraper.py"),
         "--scrape-messages",
     ]
+    if days > 0:
+        cmd += ["--days", str(days)]
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
@@ -251,52 +284,52 @@ def run_enrich_targets(queue_path: str = "") -> None:
 
     store = LinkedInStore(CHROMA_PATH)
 
+    ENRICH_TARGET_LIMIT = 30  # max profiles per run to avoid LinkedIn detection
+
     # Determine which URLs to enrich
+    import json as _json
     if queue_path:
-        import json as _json
         with open(queue_path, encoding="utf-8") as _f:
             queue = _json.load(_f)
         urls = [item["profile_url"] for item in queue if not item.get("sent")]
     else:
-        # Fall back: all connections without about text
+        # Only connections without about text, prioritise ideal_client/influencer
         all_conns = store.get_all_connections()
-        urls = [c["profile_url"] for c in all_conns if not c.get("about")]
+        without_about = [c for c in all_conns if not c.get("about")]
+        priority = [c for c in without_about if c.get("classification") in ("ideal_client", "influencer")]
+        rest = [c for c in without_about if c not in priority]
+        urls = [c["profile_url"] for c in (priority + rest)]
 
-    print(f"[run] {len(urls)} profiles to enrich")
+    urls = urls[:ENRICH_TARGET_LIMIT]
+    print(f"[run] {len(urls)} profiles queued for enrichment (capped at {ENRICH_TARGET_LIMIT})")
 
-    # Enrich in batches via scraper subprocess (reuses existing enrich_connections())
-    import json as _json
-    BATCH = 30
+    # Enrich all in ONE subprocess call (one browser, no repeated launches)
     total_enriched = 0
-    for i in range(0, len(urls), BATCH):
-        batch = urls[i:i + BATCH]
-        print(f"[run] Enriching batch {i // BATCH + 1}: {len(batch)} profiles...")
+    if urls:
+        print(f"[run] Enriching {len(urls)} profiles in one browser session...")
         result = subprocess.run(
             [
                 sys.executable,
                 str(Path(__file__).parent / "linkedin_scraper.py"),
-                "--enrich-urls", _json.dumps(batch),
+                "--enrich-urls", _json.dumps(urls),
             ],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=900,
         )
         if result.returncode != 0:
             print(f"[run] Scraper error:\n{result.stderr}", file=sys.stderr)
-            continue
-
-        stdout_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
-        if not stdout_lines:
-            continue
-        try:
-            data = _json.loads(stdout_lines[-1])
-        except Exception:
-            continue
-
-        about_results: dict = data.get("about", {})
-        for profile_url, about_text in about_results.items():
-            if about_text:
-                store.update_connection_about(profile_url, about_text)
-                total_enriched += 1
-        print(f"[run] Batch done — {sum(1 for t in about_results.values() if t)} enriched")
+        else:
+            stdout_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
+            if stdout_lines:
+                try:
+                    data = _json.loads(stdout_lines[-1])
+                    about_results: dict = data.get("about", {})
+                    for profile_url, about_text in about_results.items():
+                        if about_text:
+                            store.update_connection_about(profile_url, about_text)
+                            total_enriched += 1
+                    print(f"[run] Enriched {total_enriched} profiles")
+                except Exception:
+                    pass
 
     print(f"[run] Done. Total About texts stored: {total_enriched}")
 
@@ -337,6 +370,8 @@ if __name__ == "__main__":
     _parser = _argparse.ArgumentParser()
     _parser.add_argument("--scrape-messages", action="store_true", default=False,
                          help="Scrape DM inbox outgoing messages and save to message store")
+    _parser.add_argument("--days", type=int, default=3,
+                         help="With --scrape-messages: only process messages from last N days (default: 3, 0=all)")
     _parser.add_argument("--scrape-all-connections", action="store_true", default=False,
                          help="Scrape all 700+ LinkedIn connections and store in ChromaDB")
     _parser.add_argument("--enrich-targets", action="store_true", default=False,
@@ -347,7 +382,7 @@ if __name__ == "__main__":
     _args = _parser.parse_args()
 
     if _args.scrape_messages:
-        run_scrape_messages()
+        run_scrape_messages(days=_args.days)
     elif _args.scrape_all_connections:
         run_scrape_all_connections()
     elif _args.enrich_targets:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import hashlib
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
 import chromadb
@@ -19,11 +20,17 @@ class LinkedInStore:
 
     # ── Messages ────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """Strip query params and trailing slash for consistent dedup keys."""
+        return url.split("?")[0].rstrip("/") if url else url
+
     def _msg_chroma_id(self, message_id: str) -> str:
         return hashlib.sha256(message_id.encode()).hexdigest()[:16]
 
     def save_message(self, profile_url: str, name: str, title: str, message: dict) -> None:
         """Upsert a single message into ChromaDB."""
+        profile_url = self._normalize_url(profile_url)
         msg_id = message.get("id") or str(uuid.uuid4())
         chroma_id = self._msg_chroma_id(msg_id)
         content = message.get("content", "").strip()
@@ -48,6 +55,7 @@ class LinkedInStore:
         self, profile_url: str, name: str, title: str, messages: list[dict]
     ) -> int:
         """Batch upsert messages with dedup. Returns number of newly saved messages."""
+        profile_url = self._normalize_url(profile_url)
         existing_results = self.messages.get(
             where={"profile_url": profile_url},
             include=["metadatas"],
@@ -62,10 +70,20 @@ class LinkedInStore:
             if not content:
                 continue
             direction = message.get("direction", "sent")
-            msg_id = message.get("id") or f"{datetime.now().isoformat()}_{i}"
+            if message.get("id"):
+                msg_id = message["id"]
+            else:
+                # Stable dedup key: normalize whitespace so minor DOM variations don't break dedup
+                content_norm = re.sub(r'\s+', ' ', content)
+                key = f"{profile_url}|{message.get('date','')}|{direction}|{content_norm[:80]}"
+                msg_id = hashlib.sha256(key.encode()).hexdigest()[:24]
             if msg_id in existing_keys:
                 continue
             chroma_id = self._msg_chroma_id(msg_id)
+            # Belt-and-suspenders: check chroma_id directly in case profile_url changed
+            if self.messages.get(ids=[chroma_id])["ids"]:
+                existing_keys.add(msg_id)
+                continue
             metadata = {
                 "profile_url": profile_url,
                 "name": name or "",
@@ -83,6 +101,7 @@ class LinkedInStore:
 
     def load_conversation(self, profile_url: str) -> dict:
         """Return all messages for a profile as {profile_url, name, title, messages}."""
+        profile_url = self._normalize_url(profile_url)
         results = self.messages.get(
             where={"profile_url": profile_url},
             include=["documents", "metadatas"],

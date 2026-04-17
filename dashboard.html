@@ -218,8 +218,11 @@ body {
 .contact-list-col { width: 260px; flex-shrink: 0; overflow-y: auto; }
 .contact-detail-col { flex: 1; overflow-y: auto; }
 
-.contact-search { width: 100%; padding: 8px 14px; border: 0.5px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--bg-secondary); margin-bottom: 12px; }
+.contact-search { width: 100%; padding: 8px 14px; border: 0.5px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--bg-secondary); margin-bottom: 8px; box-sizing: border-box; }
 .contact-search:focus { outline: none; border-color: var(--apple-blue); box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+.preset-btn { font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 0.5px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; white-space: nowrap; }
+.preset-btn:hover { background: var(--apple-blue); color: white; border-color: var(--apple-blue); }
+.semantic-excerpt { font-size: 11px; color: var(--text-secondary); font-style: italic; padding: 2px 8px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .contact-list { display: flex; flex-direction: column; gap: 4px; }
 .contact-item {
   display: flex; align-items: center; padding: 10px 12px; border-radius: 10px;
@@ -491,7 +494,15 @@ textarea.form-input { resize: vertical; min-height: 80px; font-family: inherit; 
       </div>
       <div class="contacten-layout">
         <div class="contact-list-col">
-          <input type="text" class="contact-search" id="contactSearch" placeholder="Zoek contacten..." oninput="filterContacts(this.value)">
+          <input type="text" class="contact-search" id="contactSearch" placeholder="Naam of inhoud gesprek..." oninput="filterContacts(this.value)">
+          <div id="semantic-presets" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+            <button class="preset-btn" onclick="runPreset('positief gereageerd wants to learn more')">👍 Positief</button>
+            <button class="preset-btn" onclick="runPreset('interested in course training platform')">📚 Cursus</button>
+            <button class="preset-btn" onclick="runPreset('freelancer independent own company')">🧑‍💻 Freelancer</button>
+            <button class="preset-btn" onclick="runPreset('Grafana MQTT dashboard data platform')">📊 Grafana/MQTT</button>
+            <button class="preset-btn" onclick="runPreset('wants demo show me more information')">🎯 Wil demo</button>
+            <button class="preset-btn" onclick="clearSearch()">✕ Reset</button>
+          </div>
           <div class="contact-list" id="contact-list">
             <div class="loading"><div class="spinner"></div></div>
           </div>
@@ -887,7 +898,74 @@ function fmtDate(iso) {
   } catch { return ''; }
 }
 
-function filterContacts(q) { renderContactList(q); }
+let _semanticTimer = null;
+let _semanticExcerpts = {};  // slug → excerpt
+
+function filterContacts(q) {
+  clearTimeout(_semanticTimer);
+  if (!q) { _semanticExcerpts = {}; renderContactList(''); return; }
+
+  // Direct name match → filter immediately
+  const nameMatches = allConnections.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()));
+  if (nameMatches.length > 0) {
+    _semanticExcerpts = {};
+    renderContactList(q);
+    return;
+  }
+
+  // No name match → semantic search after short debounce
+  _semanticTimer = setTimeout(() => runSemanticSearch(q), 350);
+}
+
+async function runSemanticSearch(q) {
+  document.getElementById('contact-list').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(q)}&n=20`);
+    const hits = await res.json();
+    if (!hits.length) {
+      document.getElementById('contact-list').innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-secondary)">Geen resultaten.</div>';
+      return;
+    }
+    // Build ordered list of connections from hits
+    _semanticExcerpts = {};
+    const orderedSlugs = [];
+    const connBySlug = {};
+    allConnections.forEach(c => { connBySlug[slugify(c.profile_url || '')] = c; });
+    hits.forEach(h => {
+      const slug = slugify(h.profile_url || '');
+      if (!orderedSlugs.includes(slug)) {
+        orderedSlugs.push(slug);
+        _semanticExcerpts[slug] = h.content ? h.content.substring(0, 80) + '…' : '';
+      }
+    });
+    const lm = window._lastMsgBySlug || {};
+    const list = document.getElementById('contact-list');
+    list.innerHTML = orderedSlugs.map(slug => {
+      const c = connBySlug[slug] || { name: hits.find(h => slugify(h.profile_url||'') === slug)?.name || '?', profile_url: '' };
+      const isSelected = slug === selectedContactSlug;
+      const excerpt = _semanticExcerpts[slug] || '';
+      return `<div class="contact-item ${isSelected ? 'selected' : ''}" onclick="selectContact('${slug}')">
+        <div style="flex:1;min-width:0">
+          <div class="contact-name">${escHtml(c.name || '?')}</div>
+          <div class="semantic-excerpt">${escHtml(excerpt)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('contact-list').innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-secondary)">Fout bij zoeken.</div>';
+  }
+}
+
+function runPreset(q) {
+  document.getElementById('contactSearch').value = q;
+  runSemanticSearch(q);
+}
+
+function clearSearch() {
+  document.getElementById('contactSearch').value = '';
+  _semanticExcerpts = {};
+  renderContactList('');
+}
 
 async function selectContact(slug) {
   selectedContactSlug = slug;

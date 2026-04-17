@@ -260,6 +260,24 @@ def get_post_context(post_id: str):
     }
 
 
+@app.get("/api/search")
+def semantic_search(q: str, n: int = 15):
+    """Semantic search across all messages using ChromaDB embeddings."""
+    if not q or not q.strip():
+        return []
+    store = get_store()
+    results = store.search_messages(q.strip(), n_results=n)
+    # Deduplicate by profile_url, keep first (highest similarity) hit per person
+    seen: set[str] = set()
+    out = []
+    for r in results:
+        url = r.get("profile_url", "")
+        if url and url not in seen:
+            seen.add(url)
+            out.append(r)
+    return out
+
+
 @app.post("/api/clipboard")
 def set_clipboard(body: ClipboardBody):
     """Copy text to Windows clipboard via PowerShell (works from background service)."""
