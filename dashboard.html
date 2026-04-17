@@ -575,7 +575,7 @@ const SKILL_MAP = {
 function renderSkillGuide(section) {
   const items = SKILL_MAP[section] || [];
   document.getElementById('skill-guide-items').innerHTML = items.map((s, i) => `
-    <div class="skill-item" id="skill-item-${i}" onclick="copySkill(${JSON.stringify(s.cmd)}, this)" title="Klik om te kopiëren">
+    <div class="skill-item" id="skill-item-${i}" onclick='copySkill(${JSON.stringify(s.cmd)}, this)' title="Klik om te kopiëren">
       <code class="skill-cmd">${escHtml(s.cmd)}</code>
       <span class="skill-desc">${escHtml(s.desc)}</span>
       <span class="skill-copy-badge" id="skill-badge-${i}">📋</span>
