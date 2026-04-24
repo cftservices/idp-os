@@ -6,10 +6,8 @@ networks:
 
 volumes:
   mongo-data:
-  grafana-data:
-  n8n-data:
   portainer-data:
-  rabbitmq-data:
+  monstermq-data:
 
 services:
 
@@ -45,39 +43,6 @@ services:
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
 
-  # ── MOSQUITTO ─────────────────────────────────────────
-  mosquitto:
-    image: eclipse-mosquitto:2
-    container_name: mosquitto
-    restart: unless-stopped
-    ports:
-      - "1883:1883"
-    volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
-    networks:
-      - idp-network
-
-  # ── RABBITMQ ──────────────────────────────────────────
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    networks:
-      - idp-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.${DOMAIN}`)"
-      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
-      - "traefik.http.routers.rabbitmq.tls.certresolver=letsencrypt"
-      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
-
   # ── MONGODB ───────────────────────────────────────────
   mongo:
     image: mongo:7
@@ -91,68 +56,80 @@ services:
     networks:
       - idp-network
 
-  # ── FASTAPI ───────────────────────────────────────────
-  fastapi:
-    build: ./fastapi
-    container_name: fastapi
+  # ── OPC-UA SIMULATOR ──────────────────────────────────
+  # Simulates 3 PLCs (PLC_01, PLC_02, PLC_03) with realistic process data.
+  # MonsterMQ subscribes to this via OPC-UA client.
+  opcua-sim:
+    build: ./opcua-simulator
+    container_name: opcua-sim
     restart: unless-stopped
-    environment:
-      MONGO_URL: ${MONGO_URL}
-      MONGO_DB: ${MONGO_DB}
-      API_SECRET_KEY: ${API_SECRET_KEY}
+    networks:
+      - idp-network
+
+  # ── MONSTERMQ ─────────────────────────────────────────
+  # Industrial MQTT broker with native OPC-UA client, MongoDB storage backend,
+  # flow engine, REST API, GraphQL, and web dashboard.
+  monstermq:
+    image: rocworks/monstermq:latest
+    container_name: monstermq
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./monstermq/config.yaml:/app/config.yaml:ro
+      - monstermq-data:/app/data
     depends_on:
       - mongo
+      - opcua-sim
     networks:
       - idp-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`api.${DOMAIN}`)"
-      - "traefik.http.routers.fastapi.entrypoints=websecure"
-      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
-      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+      - "traefik.http.routers.monstermq.rule=Host(`mqtt.${DOMAIN}`)"
+      - "traefik.http.routers.monstermq.entrypoints=websecure"
+      - "traefik.http.routers.monstermq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.monstermq.loadbalancer.server.port=4000"
 
-  # ── N8N ───────────────────────────────────────────────
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: n8n
-    restart: unless-stopped
-    environment:
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      WEBHOOK_URL: https://n8n.${DOMAIN}
+  # ── INIT OPC-UA (one-shot) ────────────────────────────
+  # Registers the 3 OPC-UA PLCs in MonsterMQ via GraphQL mutations.
+  # Configs persist in MongoDB — only needs to run once on first deploy.
+  init-opcua:
+    image: curlimages/curl:latest
+    container_name: init-opcua
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init-opcua.sh"]
     volumes:
-      - n8n-data:/home/node/.n8n
-    networks:
-      - idp-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.n8n.rule=Host(`n8n.${DOMAIN}`)"
-      - "traefik.http.routers.n8n.entrypoints=websecure"
-      - "traefik.http.routers.n8n.tls.certresolver=letsencrypt"
-      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
-
-  # ── GRAFANA ───────────────────────────────────────────
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    restart: unless-stopped
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      GF_INSTALL_PLUGINS: marcusolsson-json-datasource
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monstermq/init-opcua.sh:/init-opcua.sh:ro
     depends_on:
-      - fastapi
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── WEBAPP (Next.js Dashboard) ────────────────────────
+  # Live PLC data dashboard: OPC-UA sim → MonsterMQ → MongoDB → Next.js.
+  # Queries MongoDB archive collection (plc_data) every 5 seconds.
+  webapp:
+    build: ./webapp
+    container_name: webapp
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: ${MONGODB_URI}
+      MONGODB_DATABASE: ${MONGODB_DATABASE}
+    depends_on:
+      - mongo
+      - monstermq
     networks:
       - idp-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
-      - "traefik.http.routers.grafana.entrypoints=websecure"
-      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
-      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.webapp.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.webapp.entrypoints=websecure"
+      - "traefik.http.routers.webapp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webapp.loadbalancer.server.port=3000"

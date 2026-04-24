@@ -1,0 +1,18 @@
+# MonsterMQ — Industrial Data Platform v2
+TCP: 1883
+WSS: 8083
+HTTP: 4000
+
+MongoDB:
+  Url: "mongodb://admin:changeme@mongo:27017"
+  Database: "idp"
+
+DefaultStoreType: MONGODB
+
+Archive:
+  Groups:
+    - Name: plc_data
+      Topics:
+        - "idp/#"
+      Enabled: true
+      RetentionDays: 30
