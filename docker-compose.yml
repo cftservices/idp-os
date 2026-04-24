@@ -8,6 +8,7 @@ volumes:
   mongo-data:
   portainer-data:
   monstermq-data:
+  grafana-data:
 
 services:
 
@@ -111,6 +112,53 @@ services:
         condition: service_healthy
     networks:
       - idp-network
+
+  # ── FASTAPI ───────────────────────────────────────────
+  # REST API reading from MongoDB. Used by Grafana as JSON datasource.
+  fastapi:
+    build: ./fastapi
+    container_name: fastapi
+    restart: unless-stopped
+    environment:
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DB: ${MONGO_DB}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+    depends_on:
+      - mongo
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.fastapi.entrypoints=websecure"
+      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+
+  # ── GRAFANA ───────────────────────────────────────────
+  # Dashboards reading from FastAPI (JSON datasource). Complementary to
+  # the Next.js webapp — use for time-series analysis and ad-hoc queries.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: marcusolsson-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - fastapi
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
   # ── WEBAPP (Next.js Dashboard) ────────────────────────
   # Live PLC data dashboard: OPC-UA sim → MonsterMQ → MongoDB → Next.js.

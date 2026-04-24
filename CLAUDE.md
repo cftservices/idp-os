@@ -29,8 +29,8 @@
   Draait op techflow24.com
 ```
 
-**Wat vervalt t.o.v. v1:** Mosquitto, N8N, Grafana, RabbitMQ, FastAPI  
-**Wat blijft:** Traefik, Portainer  
+**Wat vervalt t.o.v. v1:** Mosquitto, N8N, RabbitMQ  
+**Wat blijft:** Traefik, Portainer, FastAPI, Grafana  
 **Wat nieuw is:** MonsterMQ, OPC-UA simulator, Next.js webapp
 
 ---
@@ -42,6 +42,8 @@
 | Traefik | techflow24.com | Reverse proxy + SSL (Let's Encrypt) |
 | Next.js webapp | techflow24.com | Live PLC data dashboard |
 | MonsterMQ | mqtt.techflow24.com | MQTT broker + OPC-UA client + web UI |
+| FastAPI | api.techflow24.com | REST API voor process data (Grafana datasource) |
+| Grafana | grafana.techflow24.com | Time-series dashboards + ad-hoc queries |
 | Portainer | portainer.techflow24.com | Container management UI |
 | OPC-UA sim | intern (port 4840) | 3 gesimuleerde PLCs (asyncua) |
 | MongoDB | intern | Process data store |
@@ -126,9 +128,9 @@ Stack is de technische basis voor de Industrial Data Platform cursus:
 ### v2 (2026-04-24)
 - **Vervangen:** Mosquitto → MonsterMQ (native OPC-UA client + MongoDB storage)
 - **Vervangen:** N8N (data routing) → MonsterMQ flow engine
-- **Vervangen:** Grafana → Next.js custom webapp
-- **Vervangen:** FastAPI → MonsterMQ REST API / GraphQL
 - **Vervangen:** RabbitMQ → niet meer nodig
+- **Behouden:** FastAPI (REST API + Grafana datasource)
+- **Behouden:** Grafana (time-series dashboards)
 - **Nieuw:** OPC-UA Simulator (Python asyncua, 3 PLCs)
 - **Nieuw:** MonsterMQ (rocworks/monstermq:latest)
 - **Nieuw:** Next.js webapp (live MongoDB dashboard)
