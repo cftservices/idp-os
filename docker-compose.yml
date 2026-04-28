@@ -9,6 +9,8 @@ volumes:
   portainer-data:
   monstermq-data:
   grafana-data:
+  neo4j-data:
+  n8n-data:
 
 services:
 
@@ -181,3 +183,44 @@ services:
       - "traefik.http.routers.webapp.entrypoints=websecure"
       - "traefik.http.routers.webapp.tls.certresolver=letsencrypt"
       - "traefik.http.services.webapp.loadbalancer.server.port=3000"
+
+  # ── NEO4J ─────────────────────────────────────────────
+  # Knowledge graph: asset relationships, P&ID topology, root cause tracing.
+  # Step 3b — from ISA-95 hierarchy to connected asset graph.
+  # UI: http://localhost:7474  |  Bolt: bolt://localhost:7687
+  neo4j:
+    image: neo4j:5-community
+    container_name: neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/changeme}
+    volumes:
+      - neo4j-data:/data
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt protocol (used by FastAPI / Python)
+    networks:
+      - idp-network
+
+  # ── N8N ───────────────────────────────────────────────
+  # Workflow orchestration: interval, event-driven and on-demand pipelines.
+  # Step 5 — Orchestrate. Connects MonsterMQ alarms → Teams/email/MongoDB actions.
+  # UI: http://localhost:5678
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      DB_TYPE: sqlite
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-changeme}
+    volumes:
+      - n8n-data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    depends_on:
+      - mongo
+      - monstermq
+    networks:
+      - idp-network
