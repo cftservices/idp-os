@@ -1,0 +1,112 @@
+{
+  "name": "WF-004 Product Scan (End-of-Line)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scan/product",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf004-webhook",
+      "name": "Webhook — POST /scan/product",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "wf004-product-scan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nif (!body.barcode || !body.batch_id) {\n  throw new Error('Missing: barcode, batch_id');\n}\nreturn [{ json: { barcode: body.barcode, batch_id: body.batch_id, qc_pass: body.qc_pass !== false, scanned_at: new Date().toISOString() } }];"
+      },
+      "id": "wf004-validate",
+      "name": "Valideer Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "production_log",
+        "fields": "={{ { barcode: $json.barcode, batch_id: $json.batch_id, qc_pass: $json.qc_pass, timestamp: $json.scanned_at, work_center: 'WC-FG-01' } }}",
+        "options": {}
+      },
+      "id": "wf004-log",
+      "name": "MongoDB — Log Product",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "production_orders",
+        "filter": "={{ { order_id: $('Valideer Input').item.json.batch_id } }}",
+        "updateKey": "order_id",
+        "fields": "={{ { $inc: { actual_quantity: 1 } } }}",
+        "options": {}
+      },
+      "id": "wf004-increment",
+      "name": "MongoDB — Increment Batch Teller",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "production_orders",
+        "query": "={{ { order_id: $('Valideer Input').item.json.batch_id } }}",
+        "limit": 1,
+        "options": {}
+      },
+      "id": "wf004-getorder",
+      "name": "MongoDB — Haal Order Op",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: true, batch_id: $('Valideer Input').item.json.batch_id, qc_pass: $('Valideer Input').item.json.qc_pass, batch_total: $('MongoDB — Haal Order Op').item.json?.actual_quantity, target: $('MongoDB — Haal Order Op').item.json?.target_quantity } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "wf004-respond",
+      "name": "Response 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook — POST /scan/product": {
+      "main": [[{ "node": "Valideer Input", "type": "main", "index": 0 }]]
+    },
+    "Valideer Input": {
+      "main": [[{ "node": "MongoDB — Log Product", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Log Product": {
+      "main": [[{ "node": "MongoDB — Increment Batch Teller", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Increment Batch Teller": {
+      "main": [[{ "node": "MongoDB — Haal Order Op", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Haal Order Op": {
+      "main": [[{ "node": "Response 200", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "factory" }, { "name": "production" }],
+  "_comment": "Test: POST /webhook/scan/product  Body: {barcode: 'PROD-00001', batch_id: 'ORD-20260501-001', qc_pass: true}"
+}

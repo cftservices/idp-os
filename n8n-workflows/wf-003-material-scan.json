@@ -1,0 +1,126 @@
+{
+  "name": "WF-003 Materiaal Scan (Intake)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scan/material",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf003-webhook",
+      "name": "Webhook — POST /scan/material",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "wf003-material-scan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nif (!body.barcode || !body.quantity) {\n  throw new Error('Missing: barcode, quantity');\n}\nreturn [{ json: { barcode: body.barcode, quantity: Number(body.quantity), lot: body.lot || 'UNKNOWN', scanned_at: new Date().toISOString() } }];"
+      },
+      "id": "wf003-validate",
+      "name": "Valideer Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "material_catalog",
+        "query": "={{ { barcode: $json.barcode } }}",
+        "limit": 1,
+        "options": {}
+      },
+      "id": "wf003-lookup",
+      "name": "MongoDB — Zoek Materiaal",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json._id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "wf003-found",
+      "name": "Gevonden?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "inventory_log",
+        "fields": "={{ { type: 'intake', barcode: $('Valideer Input').item.json.barcode, material_name: $('MongoDB — Zoek Materiaal').item.json.name, quantity: $('Valideer Input').item.json.quantity, lot: $('Valideer Input').item.json.lot, timestamp: $('Valideer Input').item.json.scanned_at, work_center: 'WC-RM-01' } }}",
+        "options": {}
+      },
+      "id": "wf003-logintake",
+      "name": "MongoDB — Log Intake",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [1120, 200],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: true, material: $('MongoDB — Zoek Materiaal').item.json.name, lot: $('Valideer Input').item.json.lot, quantity: $('Valideer Input').item.json.quantity, logged_at: $('Valideer Input').item.json.scanned_at } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "wf003-respond-ok",
+      "name": "Response 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: false, error: 'Barcode niet gevonden in material_catalog', barcode: $('Valideer Input').item.json.barcode } }}",
+        "options": { "responseCode": 404 }
+      },
+      "id": "wf003-respond-404",
+      "name": "Response 404 Niet Gevonden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Webhook — POST /scan/material": {
+      "main": [[{ "node": "Valideer Input", "type": "main", "index": 0 }]]
+    },
+    "Valideer Input": {
+      "main": [[{ "node": "MongoDB — Zoek Materiaal", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Zoek Materiaal": {
+      "main": [[{ "node": "Gevonden?", "type": "main", "index": 0 }]]
+    },
+    "Gevonden?": {
+      "main": [
+        [{ "node": "MongoDB — Log Intake", "type": "main", "index": 0 }],
+        [{ "node": "Response 404 Niet Gevonden", "type": "main", "index": 0 }]
+      ]
+    },
+    "MongoDB — Log Intake": {
+      "main": [[{ "node": "Response 200 OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "factory" }, { "name": "warehouse" }],
+  "_comment": "Test: POST /webhook/scan/material  Body: {barcode: 'RAW-WATER-001', quantity: 100, lot: 'LOT-2026-05'}  Vereist: MongoDB collectie material_catalog gevuld met {barcode, name} documenten."
+}

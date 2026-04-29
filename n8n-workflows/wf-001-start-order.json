@@ -1,0 +1,71 @@
+{
+  "name": "WF-001 Start Productieorder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "production/start",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf001-webhook",
+      "name": "Webhook — POST /production/start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "wf001-start-order"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst now = new Date();\nconst pad = n => String(n).padStart(3, '0');\nconst dateStr = now.toISOString().slice(0,10).replace(/-/g,'');\n\nif (!body.recipe_id || !body.target_quantity) {\n  throw new Error('Missing required fields: recipe_id, target_quantity');\n}\n\nconst recipeMap = { 101: 'Water', 102: 'Juice', 103: 'Sauce', 201: 'Special' };\nconst recipeName = recipeMap[body.recipe_id] || 'Unknown';\n\nreturn [{\n  json: {\n    order_id: `ORD-${dateStr}-${pad(Math.floor(Math.random()*999)+1)}`,\n    recipe_id: body.recipe_id,\n    recipe_name: recipeName,\n    target_quantity: body.target_quantity,\n    actual_quantity: 0,\n    operator: body.operator || 'unknown',\n    status: 'started',\n    started_at: now.toISOString(),\n    completed_at: null\n  }\n}];"
+      },
+      "id": "wf001-prepare",
+      "name": "Valideer & Maak Order aan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "production_orders",
+        "fields": "={{ $json }}",
+        "options": {}
+      },
+      "id": "wf001-mongo",
+      "name": "MongoDB — Insert Order",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { order_id: $('Valideer & Maak Order aan').item.json.order_id, recipe: $('Valideer & Maak Order aan').item.json.recipe_name, target_quantity: $('Valideer & Maak Order aan').item.json.target_quantity, status: 'started', started_at: $('Valideer & Maak Order aan').item.json.started_at } }}",
+        "options": { "responseCode": 201 }
+      },
+      "id": "wf001-respond",
+      "name": "Response 201",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook — POST /production/start": {
+      "main": [[{ "node": "Valideer & Maak Order aan", "type": "main", "index": 0 }]]
+    },
+    "Valideer & Maak Order aan": {
+      "main": [[{ "node": "MongoDB — Insert Order", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Insert Order": {
+      "main": [[{ "node": "Response 201", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "factory" }, { "name": "production" }],
+  "_comment": "Test: POST http://localhost:5678/webhook/production/start  Body: {recipe_id: 101, target_quantity: 500, operator: 'Jan'}"
+}

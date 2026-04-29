@@ -1,0 +1,107 @@
+{
+  "name": "WF-006 Storing Detectie (FaultBits)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fault/plc02",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf006-webhook",
+      "name": "Webhook — MonsterMQ FaultBits",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "wf006-fault",
+      "_comment": "Configure in MonsterMQ: Flow → on topic idp/plc02/fault_bits where value != 0 → HTTP POST http://n8n:5678/webhook/fault/plc02"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst faultBits = parseInt(body.value ?? body.fault_bits ?? 0);\n\nif (faultBits === 0) return [];\n\nconst bitMap = {\n  0: { name: 'infeed_conveyor', label: 'Infeed Conveyor', priority: 'HIGH' },\n  1: { name: 'labeler', label: 'Labelaar', priority: 'MEDIUM' },\n  2: { name: 'sealer', label: 'Sealer', priority: 'HIGH' },\n  3: { name: 'vision_system', label: 'Vision Systeem', priority: 'LOW' }\n};\n\nconst activeFaults = [];\nfor (let bit = 0; bit <= 3; bit++) {\n  if (faultBits & (1 << bit)) {\n    activeFaults.push(bitMap[bit]);\n  }\n}\n\nreturn [{\n  json: {\n    fault_bits_raw: faultBits,\n    active_faults: activeFaults,\n    fault_count: activeFaults.length,\n    has_high_priority: activeFaults.some(f => f.priority === 'HIGH'),\n    detected_at: new Date().toISOString(),\n    plc: 'PLC_02',\n    work_center: 'WC-CONV-01'\n  }\n}];"
+      },
+      "id": "wf006-decode",
+      "name": "Decodeer FaultBits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "faults",
+        "fields": "={{ $json }}",
+        "options": {}
+      },
+      "id": "wf006-log",
+      "name": "MongoDB — Log Storing",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Decodeer FaultBits').item.json.has_high_priority }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "wf006-checkpriority",
+      "name": "Hoge Prioriteit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TEAMS_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🔴 STORING — TechFlow Plant A\\nPLC_02 / WC-CONV-01\\nActieve storingen: {{ $('Decodeer FaultBits').item.json.active_faults.map(f => f.label + ' [' + f.priority + ']').join(', ') }}\\nFaultBits: {{ $('Decodeer FaultBits').item.json.fault_bits_raw }}\\nTijdstip: {{ new Date($('Decodeer FaultBits').item.json.detected_at).toLocaleString('nl-NL') }}\\nActie: check WC-CONV-01 conveyor & sealer"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf006-teams",
+      "name": "Teams Notificatie (Hoge Prio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    }
+  ],
+  "connections": {
+    "Webhook — MonsterMQ FaultBits": {
+      "main": [[{ "node": "Decodeer FaultBits", "type": "main", "index": 0 }]]
+    },
+    "Decodeer FaultBits": {
+      "main": [[{ "node": "MongoDB — Log Storing", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Log Storing": {
+      "main": [[{ "node": "Hoge Prioriteit?", "type": "main", "index": 0 }]]
+    },
+    "Hoge Prioriteit?": {
+      "main": [
+        [{ "node": "Teams Notificatie (Hoge Prio)", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "factory" }, { "name": "maintenance" }],
+  "_comment": "Bit decoding: 1=infeed_conveyor, 2=labeler, 4=sealer, 8=vision. Combinaties: 3=infeed+labeler, 5=infeed+sealer, etc. Vereist: TEAMS_WEBHOOK_URL env var."
+}

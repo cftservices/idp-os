@@ -1,0 +1,346 @@
+{
+  "schema_version": "1.0",
+  "standard": "ISA-95 / IEC 62264",
+  "description": "TechFlow Plant A — Beverage & Sauce Packaging Line. Complete factory hierarchy with ISA-95 context metadata. Every tag includes engineering unit, normal range, and relationships to other assets.",
+  "namespace_convention": "Walker Reynolds UNS — topic = Enterprise/Site/Area/WorkCenter/Tag (Functional namespace)",
+  "enterprise": {
+    "id": "ENT-001",
+    "name": "TechFlow Industrial BV",
+    "description": "Open source Industrial Data Platform demonstration plant. Replaces AVEVA Connect (€40K/year) with a €8/month VPS stack.",
+    "sites": [
+      {
+        "id": "SITE-AMS",
+        "name": "Plant A — Amsterdam",
+        "description": "Single-site beverage and sauce packaging facility. Three production PLCs + conveyor system.",
+        "location": {
+          "city": "Amsterdam",
+          "country": "NL",
+          "timezone": "Europe/Amsterdam"
+        },
+        "areas": [
+          {
+            "id": "AREA-PROD",
+            "name": "Production Hall",
+            "description": "Main production area containing pasteurisation, conveyor, and batch control units.",
+            "work_centers": [
+              {
+                "id": "WC-PAST-01",
+                "name": "Pasteurisatie & Mix Unit",
+                "description": "Verwarmt en mengt vloeistof voor de vullijn. Verantwoordelijk voor temperatuur (55-75°C), procesdruk (4.2-4.8 bar) en doorvoer (230-270 m³/h). Alarmeert als temperatuur buiten bereik valt.",
+                "plc": "PLC_01",
+                "mqtt_namespace": "idp/plc01",
+                "opc_ua_namespace": "ns=1;s=PLC_01",
+                "parent_id": "AREA-PROD",
+                "related_to": ["WC-CONV-01"],
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  {
+                    "id": "TIC-001",
+                    "name": "Temperature",
+                    "display_name": "Pasteurisatie Temperatuur",
+                    "description": "Procestemperatuur van de vloeistof in de warmtewisselaar. Doelwaarde 65°C voor pasteurisatie.",
+                    "mqtt_topic": "idp/plc01/temperature",
+                    "opc_ua_node": "ns=1;s=PLC_01/Temperature",
+                    "engineering_unit": "°C",
+                    "data_type": "float",
+                    "normal_range": { "min": 55, "max": 75 },
+                    "setpoint": 65,
+                    "alarm_high": 78,
+                    "alarm_low": 50,
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "PIC-001",
+                    "name": "Pressure",
+                    "display_name": "Procesdruk",
+                    "description": "Druk in het pasteurisatiesysteem. Bewaakt integriteit van het gesloten systeem.",
+                    "mqtt_topic": "idp/plc01/pressure",
+                    "opc_ua_node": "ns=1;s=PLC_01/Pressure",
+                    "engineering_unit": "bar",
+                    "data_type": "float",
+                    "normal_range": { "min": 4.2, "max": 4.8 },
+                    "setpoint": 4.5,
+                    "alarm_high": 5.2,
+                    "alarm_low": 3.8,
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "FIC-001",
+                    "name": "Flow",
+                    "display_name": "Vloeistofdoorvoer",
+                    "description": "Volumetrische doorvoer vanuit de mix-tank naar de vullijn. Bepaalt vulsnelheid en koppelt aan productietempo.",
+                    "mqtt_topic": "idp/plc01/flow",
+                    "opc_ua_node": "ns=1;s=PLC_01/Flow",
+                    "engineering_unit": "m³/h",
+                    "data_type": "float",
+                    "normal_range": { "min": 230, "max": 270 },
+                    "setpoint": 250,
+                    "alarm_high": 280,
+                    "alarm_low": 210,
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "ALM-001",
+                    "name": "ProcessAlarm",
+                    "display_name": "Procesalarm",
+                    "description": "Gecombineerd procesalarm. True als temperatuur, druk of flow buiten bereik valt. Trigger voor N8N alarm workflow.",
+                    "mqtt_topic": "idp/plc01/alarm",
+                    "opc_ua_node": "ns=1;s=PLC_01/Alarm",
+                    "engineering_unit": "bool",
+                    "data_type": "boolean",
+                    "sampling_interval_ms": 1000,
+                    "triggers_workflow": "N8N-WF-002"
+                  }
+                ]
+              },
+              {
+                "id": "WC-CONV-01",
+                "name": "Conveyor & Verpakkingslijn",
+                "description": "Drie aandrijvingen: infeed conveyor (Motor1), outfeed conveyor (Motor2), labelaar (Motor3, 40s aan / 20s uit). Vermogensmeting van de volledige lijn. Foutbits per subsysteem.",
+                "plc": "PLC_02",
+                "mqtt_namespace": "idp/plc02",
+                "opc_ua_namespace": "ns=1;s=PLC_02",
+                "parent_id": "AREA-PROD",
+                "related_to": ["WC-PAST-01", "WC-BATCH-01"],
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  {
+                    "id": "SIC-001",
+                    "name": "Motor1_RPM",
+                    "display_name": "Infeed Conveyor",
+                    "description": "Toerental van de infeed conveyor. Transporteert lege flessen van magazijn naar vullijn.",
+                    "mqtt_topic": "idp/plc02/motor1_rpm",
+                    "opc_ua_node": "ns=1;s=PLC_02/Motor1_RPM",
+                    "engineering_unit": "RPM",
+                    "data_type": "float",
+                    "normal_range": { "min": 1420, "max": 1480 },
+                    "nominal": 1450,
+                    "alarm_low": 1300,
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "SIC-002",
+                    "name": "Motor2_RPM",
+                    "display_name": "Outfeed Conveyor",
+                    "description": "Toerental van de outfeed conveyor. Transporteert gevulde en gelabelde flessen naar het eindproductmagazijn.",
+                    "mqtt_topic": "idp/plc02/motor2_rpm",
+                    "opc_ua_node": "ns=1;s=PLC_02/Motor2_RPM",
+                    "engineering_unit": "RPM",
+                    "data_type": "float",
+                    "normal_range": { "min": 1420, "max": 1480 },
+                    "nominal": 1450,
+                    "alarm_low": 1300,
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "SIC-003",
+                    "name": "Motor3_RPM",
+                    "display_name": "Labelaar Aandrijving",
+                    "description": "Toerental van de labelaar. Cyclusgedrag: 40 seconden aan op 960 RPM, 20 seconden uit (0 RPM). Pauze = roltransport.",
+                    "mqtt_topic": "idp/plc02/motor3_rpm",
+                    "opc_ua_node": "ns=1;s=PLC_02/Motor3_RPM",
+                    "engineering_unit": "RPM",
+                    "data_type": "float",
+                    "states": {
+                      "running": 960,
+                      "stopped": 0
+                    },
+                    "cycle": "40s aan, 20s uit",
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "PIW-001",
+                    "name": "Power_kW",
+                    "display_name": "Lijnvermogen Totaal",
+                    "description": "Totaal elektrisch vermogen van de volledige verpakkingslijn (Motor1 + Motor2 + Motor3 + hulpsystemen). Basis voor OEE energiecijfer.",
+                    "mqtt_topic": "idp/plc02/power_kw",
+                    "opc_ua_node": "ns=1;s=PLC_02/Power_kW",
+                    "engineering_unit": "kW",
+                    "data_type": "float",
+                    "normal_range": { "min": 17, "max": 20 },
+                    "alarm_high": 22,
+                    "sampling_interval_ms": 1000
+                  },
+                  {
+                    "id": "FLT-001",
+                    "name": "FaultBits",
+                    "display_name": "Storingsbits",
+                    "description": "Integer met bit-gecodeerde storingen per subsysteem. Bit 0=infeed conveyor, Bit 1=labelaar, Bit 2=sealer, Bit 3=vision systeem. Waarde 0 = geen storing.",
+                    "mqtt_topic": "idp/plc02/fault_bits",
+                    "opc_ua_node": "ns=1;s=PLC_02/FaultBits",
+                    "engineering_unit": "int",
+                    "data_type": "integer",
+                    "bit_map": {
+                      "0": "infeed_conveyor",
+                      "1": "labeler",
+                      "2": "sealer",
+                      "3": "vision_system"
+                    },
+                    "normal_value": 0,
+                    "sampling_interval_ms": 1000,
+                    "triggers_workflow": "N8N-WF-006"
+                  }
+                ]
+              },
+              {
+                "id": "WC-BATCH-01",
+                "name": "Batch Controle Unit",
+                "description": "Beheert productieorders, recepten en fasevolgorde. Telt geproduceerde eenheden per batch. Publiceert elke 5 seconden.",
+                "plc": "PLC_03",
+                "mqtt_namespace": "idp/plc03",
+                "opc_ua_namespace": "ns=1;s=PLC_03",
+                "parent_id": "AREA-PROD",
+                "related_to": ["WC-CONV-01"],
+                "process_type": "batch",
+                "sampling_interval_ms": 5000,
+                "tags": [
+                  {
+                    "id": "CNT-001",
+                    "name": "BatchCounter",
+                    "display_name": "Batch Teller",
+                    "description": "Cumulatieve telling van geproduceerde eenheden in de huidige batch. Reset bij start nieuwe productieorder.",
+                    "mqtt_topic": "idp/plc03/batch_counter",
+                    "opc_ua_node": "ns=1;s=PLC_03/BatchCounter",
+                    "engineering_unit": "stuks",
+                    "data_type": "integer",
+                    "reset_on": "new_production_order",
+                    "sampling_interval_ms": 5000
+                  },
+                  {
+                    "id": "RCP-001",
+                    "name": "RecipeID",
+                    "display_name": "Recept ID",
+                    "description": "Actief recept voor de huidige productieorder. Bepaalt procesparameters (temperatuur, vulvolume, etiket).",
+                    "mqtt_topic": "idp/plc03/recipe_id",
+                    "opc_ua_node": "ns=1;s=PLC_03/RecipeID",
+                    "engineering_unit": "int",
+                    "data_type": "integer",
+                    "recipe_map": {
+                      "101": { "name": "Water", "fill_volume_ml": 500, "pasteurise_temp_c": 62 },
+                      "102": { "name": "Juice", "fill_volume_ml": 330, "pasteurise_temp_c": 72 },
+                      "103": { "name": "Sauce", "fill_volume_ml": 250, "pasteurise_temp_c": 68 },
+                      "201": { "name": "Special", "fill_volume_ml": 750, "pasteurise_temp_c": 75 }
+                    },
+                    "sampling_interval_ms": 5000
+                  },
+                  {
+                    "id": "PHS-001",
+                    "name": "Phase",
+                    "display_name": "Productiefase",
+                    "description": "Huidige fase van de productiestap. Cyclus: Vullen → Doppen → Labelen → QC → terug naar Vullen.",
+                    "mqtt_topic": "idp/plc03/phase",
+                    "opc_ua_node": "ns=1;s=PLC_03/Phase",
+                    "engineering_unit": "int",
+                    "data_type": "integer",
+                    "phase_map": {
+                      "1": "Vullen",
+                      "2": "Doppen",
+                      "3": "Labelen",
+                      "4": "QC"
+                    },
+                    "sampling_interval_ms": 5000
+                  },
+                  {
+                    "id": "PRR-001",
+                    "name": "ProductionRate",
+                    "display_name": "Productiesnelheid",
+                    "description": "Actuele productiesnelheid in eenheden per uur. Doelwaarde 120 stuks/uur. Input voor OEE performance berekening.",
+                    "mqtt_topic": "idp/plc03/production_rate",
+                    "opc_ua_node": "ns=1;s=PLC_03/ProductionRate",
+                    "engineering_unit": "stuks/uur",
+                    "data_type": "float",
+                    "nominal": 120,
+                    "normal_range": { "min": 100, "max": 140 },
+                    "alarm_low": 80,
+                    "sampling_interval_ms": 5000
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-WH",
+            "name": "Magazijn",
+            "description": "Grondstoffenmagazijn (intake) en gereedproductmagazijn (uitgifte). Barcode-scan triggers N8N workflows.",
+            "work_centers": [
+              {
+                "id": "WC-RM-01",
+                "name": "Grondstoffenmagazijn",
+                "description": "Opslag van grondstoffen (water base, sappen, sauzen). Barcode-scan bij intake → N8N workflow 3 (materiaal intake). Koppelt aan pasteurisatie-unit als toevoer.",
+                "plc": null,
+                "mqtt_namespace": null,
+                "parent_id": "AREA-WH",
+                "related_to": ["WC-PAST-01"],
+                "process_type": "discrete",
+                "tags": [],
+                "workflows": ["N8N-WF-003"]
+              },
+              {
+                "id": "WC-FG-01",
+                "name": "Gereedproductmagazijn",
+                "description": "Opslag van eindproduct (gevulde, gedopte, gelabelde flessen). Barcode-scan bij eindcontrole → N8N workflow 4 (product scan). Koppelt aan batch controle voor telling.",
+                "plc": null,
+                "mqtt_namespace": null,
+                "parent_id": "AREA-WH",
+                "related_to": ["WC-BATCH-01"],
+                "process_type": "discrete",
+                "tags": [],
+                "workflows": ["N8N-WF-004"]
+              }
+            ]
+          },
+          {
+            "id": "AREA-UTIL",
+            "name": "Utilities",
+            "description": "Ondersteunende systemen: perslucht en elektriciteit. Geen PLC-koppeling in v1 — placeholder voor toekomstige uitbreiding.",
+            "work_centers": [
+              {
+                "id": "WC-AIR-01",
+                "name": "Perslucht",
+                "description": "Persluchtcompressor voor pneumatische actuatoren (doppen, kleppen). Toekomstige koppeling via PLC_04.",
+                "plc": null,
+                "parent_id": "AREA-UTIL",
+                "related_to": ["WC-CONV-01"],
+                "tags": []
+              },
+              {
+                "id": "WC-ELEC-01",
+                "name": "Elektriciteit",
+                "description": "Hoofdverdeling. Totaalvermogen wordt indirect gemeten via PLC_02 (PIW-001). Toekomstige smart meter koppeling.",
+                "plc": null,
+                "parent_id": "AREA-UTIL",
+                "related_to": ["WC-CONV-01"],
+                "tags": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "production_orders_schema": {
+    "description": "MongoDB schema voor productieorders (aangemaakt door N8N-WF-001)",
+    "collection": "production_orders",
+    "fields": {
+      "order_id": "string (ORD-YYYYMMDD-NNN)",
+      "recipe_id": "integer (101/102/103/201)",
+      "recipe_name": "string",
+      "target_quantity": "integer (stuks)",
+      "actual_quantity": "integer (stuks, bijgewerkt door N8N-WF-004)",
+      "operator": "string",
+      "status": "string (started/running/completed/aborted)",
+      "started_at": "datetime",
+      "completed_at": "datetime"
+    }
+  },
+  "n8n_workflows": [
+    { "id": "N8N-WF-001", "name": "Start Productieorder", "trigger": "webhook POST /production/start", "file": "n8n-workflows/wf-001-start-order.json" },
+    { "id": "N8N-WF-002", "name": "Alarm Handler", "trigger": "MQTT idp/plc01/alarm = true", "file": "n8n-workflows/wf-002-alarm-handler.json" },
+    { "id": "N8N-WF-003", "name": "Materiaal Scan (Intake)", "trigger": "webhook POST /scan/material", "file": "n8n-workflows/wf-003-material-scan.json" },
+    { "id": "N8N-WF-004", "name": "Product Scan (End-of-Line)", "trigger": "webhook POST /scan/product", "file": "n8n-workflows/wf-004-product-scan.json" },
+    { "id": "N8N-WF-005", "name": "Shift Rapport", "trigger": "cron 06:00 / 14:00 / 22:00", "file": "n8n-workflows/wf-005-shift-report.json" },
+    { "id": "N8N-WF-006", "name": "Storing Detectie", "trigger": "MQTT idp/plc02/fault_bits != 0", "file": "n8n-workflows/wf-006-fault-detection.json" }
+  ]
+}

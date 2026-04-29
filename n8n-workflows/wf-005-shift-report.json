@@ -1,0 +1,109 @@
+{
+  "name": "WF-005 Shift Rapport (Ploegwisseling)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 6,14,22 * * *" }
+          ]
+        }
+      },
+      "id": "wf005-cron",
+      "name": "Cron — 06:00 / 14:00 / 22:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000);\nconst shiftNames = { 6: 'Dagdienst (06:00-14:00)', 14: 'Middagdienst (14:00-22:00)', 22: 'Nachtdienst (22:00-06:00)' };\nconst hour = now.getHours();\nreturn [{\n  json: {\n    shift_name: shiftNames[hour] || `Ploeg ${hour}:00`,\n    period_start: eightHoursAgo.toISOString(),\n    period_end: now.toISOString(),\n    report_id: `SHIFT-${now.toISOString().slice(0,16).replace(/[-:T]/g,'')}`\n  }\n}];"
+      },
+      "id": "wf005-setperiod",
+      "name": "Bepaal Ploegperiode",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "plc_data",
+        "query": "={{ { timestamp: { $gte: $json.period_start, $lte: $json.period_end }, topic: { $in: ['idp/plc01/temperature', 'idp/plc01/flow', 'idp/plc02/power_kw', 'idp/plc03/production_rate', 'idp/plc03/batch_counter'] } } }}",
+        "options": {}
+      },
+      "id": "wf005-getdata",
+      "name": "MongoDB — Haal Ploegdata Op",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.all();\nconst period = $('Bepaal Ploegperiode').item.json;\n\nconst byTopic = {};\nfor (const item of data) {\n  const t = item.json.topic;\n  if (!byTopic[t]) byTopic[t] = [];\n  byTopic[t].push(Number(item.json.value));\n}\n\nconst avg = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2) : 'N/A';\nconst sum = arr => arr.length ? arr.reduce((a,b)=>a+b,0).toFixed(1) : 'N/A';\nconst last = arr => arr.length ? arr[arr.length-1].toFixed(0) : 'N/A';\n\nconst temps = byTopic['idp/plc01/temperature'] || [];\nconst powers = byTopic['idp/plc02/power_kw'] || [];\nconst rates = byTopic['idp/plc03/production_rate'] || [];\nconst counters = byTopic['idp/plc03/batch_counter'] || [];\n\nconst avgRate = Number(avg(rates));\nconst targetRate = 120;\nconst performance = targetRate > 0 ? Math.min(100, (avgRate / targetRate * 100)).toFixed(1) : 'N/A';\nconst produced = counters.length >= 2 ? (counters[counters.length-1] - counters[0]).toFixed(0) : last(counters);\n\nreturn [{\n  json: {\n    report_id: period.report_id,\n    shift: period.shift_name,\n    period_start: period.period_start,\n    period_end: period.period_end,\n    kpis: {\n      avg_temperature_c: avg(temps),\n      avg_production_rate: avg(rates),\n      performance_pct: performance,\n      total_energy_kwh: (Number(avg(powers)) * 8).toFixed(1),\n      units_produced: produced\n    },\n    generated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "wf005-calculate",
+      "name": "Bereken KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "shift_reports",
+        "fields": "={{ $json }}",
+        "options": {}
+      },
+      "id": "wf005-savereport",
+      "name": "MongoDB — Sla Rapport Op",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "idp@techflow24.com",
+        "toEmail": "={{ $env.SHIFT_REPORT_EMAIL }}",
+        "subject": "=TechFlow Plant A — {{ $('Bereken KPIs').item.json.shift }} Rapport",
+        "emailFormat": "html",
+        "message": "=<h2>TechFlow Plant A — Ploegrapport</h2><p><strong>Ploeg:</strong> {{ $json.shift }}</p><p><strong>Periode:</strong> {{ new Date($json.period_start).toLocaleString('nl-NL') }} – {{ new Date($json.period_end).toLocaleString('nl-NL') }}</p><hr><h3>KPIs</h3><table border='1' cellpadding='6'><tr><th>Meting</th><th>Waarde</th></tr><tr><td>Gem. temperatuur</td><td>{{ $json.kpis.avg_temperature_c }}°C</td></tr><tr><td>Productiesnelheid</td><td>{{ $json.kpis.avg_production_rate }} stuks/uur</td></tr><tr><td>Performance</td><td>{{ $json.kpis.performance_pct }}%</td></tr><tr><td>Energieverbruik</td><td>{{ $json.kpis.total_energy_kwh }} kWh</td></tr><tr><td>Geproduceerde eenheden</td><td>{{ $json.kpis.units_produced }} stuks</td></tr></table><p><small>Rapport ID: {{ $json.report_id }}</small></p>",
+        "options": {}
+      },
+      "id": "wf005-email",
+      "name": "Email Shift Rapport",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "credentials": {
+        "smtp": { "name": "SMTP TechFlow" }
+      }
+    }
+  ],
+  "connections": {
+    "Cron — 06:00 / 14:00 / 22:00": {
+      "main": [[{ "node": "Bepaal Ploegperiode", "type": "main", "index": 0 }]]
+    },
+    "Bepaal Ploegperiode": {
+      "main": [[{ "node": "MongoDB — Haal Ploegdata Op", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Haal Ploegdata Op": {
+      "main": [[{ "node": "Bereken KPIs", "type": "main", "index": 0 }]]
+    },
+    "Bereken KPIs": {
+      "main": [[{ "node": "MongoDB — Sla Rapport Op", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Sla Rapport Op": {
+      "main": [[{ "node": "Email Shift Rapport", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "factory" }, { "name": "reporting" }],
+  "_comment": "Vereist: SHIFT_REPORT_EMAIL env var in N8N. SMTP credentials configureren. MongoDB collectie plc_data moet timestamp veld bevatten als ISO string."
+}

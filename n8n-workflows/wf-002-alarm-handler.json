@@ -1,0 +1,115 @@
+{
+  "name": "WF-002 Alarm Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "alarm/plc01",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf002-webhook",
+      "name": "Webhook — MonsterMQ Alarm",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "wf002-alarm",
+      "_comment": "Configure in MonsterMQ: Flow → on topic idp/plc01/alarm = true → HTTP POST to http://n8n:5678/webhook/alarm/plc01"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body?.value ?? $json.value }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "wf002-check",
+      "name": "Alarm = true?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "plc_data",
+        "query": "={ \"topic\": \"idp/plc01/temperature\" }",
+        "limit": 1,
+        "sort": "={ \"timestamp\": -1 }",
+        "options": {}
+      },
+      "id": "wf002-gettemp",
+      "name": "MongoDB — Laatste Temperatuur",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [680, 200],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "alarms",
+        "fields": "={{ { timestamp: new Date().toISOString(), type: 'process_alarm', plc: 'PLC_01', topic: 'idp/plc01/alarm', last_temperature: $('MongoDB — Laatste Temperatuur').item.json?.value, acknowledged: false } }}",
+        "options": {}
+      },
+      "id": "wf002-logalarm",
+      "name": "MongoDB — Log Alarm",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [900, 200],
+      "credentials": {
+        "mongoDb": { "name": "MongoDB IDP" }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TEAMS_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=⚠️ ALARM — TechFlow Plant A\\nPLC_01 Procesalarm actief\\nTemperatuur: {{ $('MongoDB — Laatste Temperatuur').item.json?.value ?? 'onbekend' }}°C\\nTijdstip: {{ new Date().toLocaleString('nl-NL') }}\\nActie vereist: controleer pasteurisatie-unit WC-PAST-01"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf002-teams",
+      "name": "Teams Notificatie",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    }
+  ],
+  "connections": {
+    "Webhook — MonsterMQ Alarm": {
+      "main": [[{ "node": "Alarm = true?", "type": "main", "index": 0 }]]
+    },
+    "Alarm = true?": {
+      "main": [
+        [{ "node": "MongoDB — Laatste Temperatuur", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "MongoDB — Laatste Temperatuur": {
+      "main": [[{ "node": "MongoDB — Log Alarm", "type": "main", "index": 0 }]]
+    },
+    "MongoDB — Log Alarm": {
+      "main": [[{ "node": "Teams Notificatie", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "factory" }, { "name": "alarms" }],
+  "_comment": "Vereist: TEAMS_WEBHOOK_URL environment variable in N8N. MonsterMQ flow configuratie: on message idp/plc01/alarm where value=true → HTTP POST http://n8n:5678/webhook/alarm/plc01"
+}
