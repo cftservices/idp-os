@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder Spotlight — Johannes Sanderse</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #1a1a2e;
+    background: #ffffff;
+  }
+
+  /* ── PAGE LAYOUT ── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 16mm 18mm;
+    page-break-after: always;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  @media print {
+    body { margin: 0; }
+    .page { margin: 0; padding: 14mm 16mm; }
+    @page { size: A4 portrait; margin: 0; }
+  }
+
+  /* ── HEADER ── */
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid #2f9e44;
+    padding-bottom: 10px;
+    margin-bottom: 24px;
+  }
+  .doc-header .brand { font-size: 12px; font-weight: 700; color: #2f9e44; letter-spacing: 1px; text-transform: uppercase; }
+  .doc-header .doc-title { font-size: 11px; color: #868e96; }
+
+  /* ── SPOTLIGHT HERO ── */
+  .spotlight-hero {
+    background: linear-gradient(135deg, #1e1e2e 0%, #2d3561 100%);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    color: white;
+  }
+  .spotlight-badge {
+    display: inline-block;
+    background: #2f9e44;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+  .spotlight-hero h1 {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 6px;
+  }
+  .spotlight-hero h1 span { color: #69db7c; }
+  .spotlight-hero .tagline {
+    font-size: 13px;
+    color: #ced4da;
+    margin-bottom: 18px;
+  }
+  .author-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+  }
+  .author-avatar {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: #2f9e44;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .author-name { font-weight: 700; font-size: 14px; }
+  .author-bio { font-size: 11px; color: #adb5bd; margin-top: 1px; }
+
+  /* ── SECTION TITLES ── */
+  h2.section {
+    font-size: 15px;
+    font-weight: 800;
+    color: #1a1a2e;
+    margin: 22px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #e9ecef;
+  }
+  h2.section span { color: #2f9e44; }
+
+  /* ── Q&A BLOCKS ── */
+  .qa-block {
+    margin-bottom: 20px;
+  }
+  .qa-question {
+    font-size: 11px;
+    font-weight: 700;
+    color: #868e96;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 5px;
+  }
+  .qa-answer {
+    font-size: 13px;
+    color: #343a40;
+    line-height: 1.7;
+  }
+  .qa-answer strong { color: #1a1a2e; }
+
+  /* ── HIGHLIGHT BOXES ── */
+  .highlight {
+    background: #f0fff4;
+    border-left: 4px solid #2f9e44;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 13px;
+    color: #2b8a3e;
+    font-weight: 500;
+  }
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .stat-box {
+    flex: 1;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  .stat-box .num { font-size: 22px; font-weight: 800; color: #2f9e44; }
+  .stat-box .lbl { font-size: 10px; color: #868e96; margin-top: 2px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── FUNNEL DIAGRAM ── */
+  .funnel {
+    margin: 16px 0;
+  }
+  .funnel-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .funnel-step .icon { font-size: 18px; flex-shrink: 0; width: 28px; text-align: center; }
+  .funnel-step .label { font-weight: 700; font-size: 12px; min-width: 130px; }
+  .funnel-step .desc { color: #495057; font-size: 11px; }
+  .funnel-arrow { text-align: center; color: #adb5bd; font-size: 16px; line-height: 1; margin: 2px 0; padding-left: 14px; }
+  .fs-1 { background: #e7f5ff; } .fs-1 .label { color: #1971c2; }
+  .fs-2 { background: #fff3bf; } .fs-2 .label { color: #e67700; }
+  .fs-3 { background: #e3fafc; } .fs-3 .label { color: #0c8599; }
+  .fs-4 { background: #f3d9fa; } .fs-4 .label { color: #7048e8; }
+  .fs-5 { background: #d3f9d8; } .fs-5 .label { color: #2f9e44; }
+
+  /* ── DIVIDER ── */
+  hr { border: none; border-top: 1px solid #e9ecef; margin: 20px 0; }
+
+  /* ── 7 STEPS ── */
+  .step-card {
+    display: flex;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border: 1.5px solid transparent;
+  }
+  .step-num {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-content { flex: 1; }
+  .step-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 3px; }
+  .step-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+  .step-body { font-size: 11px; color: #495057; line-height: 1.6; }
+  .step-pills { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .pill {
+    background: rgba(0,0,0,0.06);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  /* Step colors */
+  .s1 { background: #edf2ff; border-color: #4c6ef5; }
+  .s1 .step-num { background: #4c6ef5; color: white; }
+  .s1 .step-label { color: #4c6ef5; }
+  .s1 .step-title { color: #3b5bdb; }
+
+  .s2 { background: #e3fafc; border-color: #0c8599; }
+  .s2 .step-num { background: #0c8599; color: white; }
+  .s2 .step-label { color: #0c8599; }
+  .s2 .step-title { color: #0c8599; }
+
+  .s3 { background: #d3f9d8; border-color: #2f9e44; border-width: 2.5px; }
+  .s3 .step-num { background: #2f9e44; color: white; }
+  .s3 .step-label { color: #2f9e44; }
+  .s3 .step-title { color: #2b8a3e; }
+  .s3 .step-body { color: #2b8a3e; }
+
+  .s4 { background: #f3d9fa; border-color: #7048e8; }
+  .s4 .step-num { background: #7048e8; color: white; }
+  .s4 .step-label { color: #7048e8; }
+  .s4 .step-title { color: #5f3dc4; }
+
+  .s5 { background: #fff3bf; border-color: #e67700; }
+  .s5 .step-num { background: #e67700; color: white; }
+  .s5 .step-label { color: #e67700; }
+  .s5 .step-title { color: #d9480f; }
+
+  .s6 { background: #e3fafc; border-color: #0c8599; }
+  .s6 .step-num { background: #0c8599; color: white; }
+  .s6 .step-label { color: #0c8599; }
+  .s6 .step-title { color: #0c8599; }
+
+  .s7 { background: #dbe4ff; border-color: #364fc7; }
+  .s7 .step-num { background: #364fc7; color: white; }
+  .s7 .step-label { color: #364fc7; }
+  .s7 .step-title { color: #364fc7; }
+
+  /* ── FOOTER ── */
+  .doc-footer {
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: #adb5bd;
+  }
+  .page-num {
+    font-size: 10px; color: #adb5bd; text-align: right;
+    margin-top: 10px;
+  }
+
+  /* ── SKOOL POST BOX ── */
+  .skool-box {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    white-space: pre-wrap;
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: #343a40;
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
+  /* ── COST COMPARE ── */
+  .cost-row {
+    display: flex;
+    gap: 12px;
+    margin: 14px 0;
+  }
+  .cost-box {
+    flex: 1;
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .cost-box.bad { background: #fff5f5; border: 1.5px solid #ffa8a8; }
+  .cost-box.good { background: #ebfbee; border: 1.5px solid #8ce99a; }
+  .cost-box .cb-label { font-size: 11px; font-weight: 700; color: #868e96; margin-bottom: 4px; }
+  .cost-box .cb-amount { font-size: 24px; font-weight: 800; }
+  .cost-box.bad .cb-amount { color: #e03131; }
+  .cost-box.good .cb-amount { color: #2f9e44; }
+  .cost-box .cb-desc { font-size: 10px; color: #868e96; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- PAGE 1: BUILDER SPOTLIGHT                 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="brand">TechFlow Industrial</div>
+    <div class="doc-title">Builder Spotlight · techflow24.com</div>
+  </div>
+
+  <!-- Hero -->
+  <div class="spotlight-hero">
+    <div class="spotlight-badge">⭐ Builder Spotlight</div>
+    <h1>Helping factory engineers<br><span>own their own data</span></h1>
+    <p class="tagline">From 15 years on the factory floor to building an online education business — without the €40K/year price tag.</p>
+    <div class="author-row">
+      <div class="author-avatar">🏭</div>
+      <div>
+        <div class="author-name">Johannes Sanderse</div>
+        <div class="author-bio">OT Engineer · 15 years in factories · Founder, TechFlow Industrial</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stat-row">
+    <div class="stat-box"><div class="num">19</div><div class="lbl">FB Community Members</div></div>
+    <div class="stat-box"><div class="num">€8</div><div class="lbl">Per Month (vs €40K/yr)</div></div>
+    <div class="stat-box"><div class="num">7</div><div class="lbl">Step Framework</div></div>
+    <div class="stat-box"><div class="num">15</div><div class="lbl">Years in Factories</div></div>
+  </div>
+
+  <!-- Q&A -->
+  <h2 class="section">The <span>Spotlight</span> Q&amp;A</h2>
+
+  <div class="qa-block">
+    <div class="qa-question">What are you building, and who's it for?</div>
+    <div class="qa-answer">
+      I'm building an online education program for engineers who work with industrial machines — think production lines, packaging plants, food &amp; beverage factories. These engineers deal with massive amounts of data from those machines every day, but most of that data is <strong>useless without context</strong>.
+      <br><br>
+      Right now, companies solve this by buying expensive software platforms — we're talking €30,000–€40,000 per year. My program teaches engineers how to get the exact same result using free, open-source tools, all running on a server that costs <strong>€8 per month</strong>.
+    </div>
+  </div>
+
+  <div class="cost-row">
+    <div class="cost-box bad">
+      <div class="cb-label">Commercial Platform</div>
+      <div class="cb-amount">€40,000</div>
+      <div class="cb-desc">per year · vendor lock-in</div>
+    </div>
+    <div class="cost-box good">
+      <div class="cb-label">Open Source Stack</div>
+      <div class="cb-amount">€8</div>
+      <div class="cb-desc">per month · you own everything</div>
+    </div>
+  </div>
+
+  <div class="qa-block">
+    <div class="qa-question">How'd you land on that niche?</div>
+    <div class="qa-answer">
+      I didn't research it — I <strong>lived it</strong>. 15 years programming factory machines. I watched the same pattern repeat in every plant: brilliant engineers who understood the equipment inside-out, completely trapped by expensive vendor software just to make sense of their own data.
+      <br><br>
+      Then I built my own system using open-source tools for €8/month and it worked exactly as well as the €40K platforms. That was the moment. This isn't a market I found — it's a problem I had.
+    </div>
+  </div>
+
+  <div class="highlight">
+    💡 "The expensive platforms don't sell you better data. They sell you context. I figured out how to build that context yourself."
+  </div>
+
+  <div class="page-num">1</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- PAGE 2: STRATEGY + DAILY MACHINE          -->
+<!-- ══════════════════════════════════════════ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="brand">TechFlow Industrial</div>
+    <div class="doc-title">Builder Spotlight · techflow24.com</div>
+  </div>
+
+  <div class="qa-block">
+    <div class="qa-question">What's working right now, and what's been the hardest part?</div>
+    <div class="qa-answer">
+      <strong>What's working: a daily system that moves every part of the funnel at once.</strong>
+      <br><br>
+      Every morning I run a tool that finds engineers on LinkedIn who deal with exactly this problem — I look at their profile, see their background, and send them a <strong>personal message</strong>. Not a pitch. A genuine, technical conversation opener. The ones who respond, I invite to a free Facebook community I'm building around this topic.
+      <br><br>
+      In that community I post three times a week — practical content about how to build with open-source tools. Meanwhile I'm making YouTube videos that teach the same framework, which also drive people into the community.
+      <br><br>
+      The goal is a full self-reinforcing loop: <strong>LinkedIn → Community → YouTube → Workshop → Course</strong>. Every day I push all five channels forward simultaneously.
+      <br><br>
+      <strong>Hardest part:</strong> the engineers I'm targeting are not impulse buyers. They're methodical by nature. They need to see you 7–11 times before they trust you enough to pay for anything. Building that trust system without burning out is the real challenge.
+    </div>
+  </div>
+
+  <h2 class="section">The Daily <span>Machine</span></h2>
+
+  <div class="funnel">
+    <div class="funnel-step fs-1">
+      <div class="icon">🔍</div>
+      <div class="label">LinkedIn Outreach</div>
+      <div class="desc">Find engineers matching the ideal profile → send personal, non-pitchy DMs → start real conversations</div>
+    </div>
+    <div class="funnel-arrow">↓</div>
+    <div class="funnel-step fs-2">
+      <div class="icon">👥</div>
+      <div class="label">Facebook Community</div>
+      <div class="desc">Invite warm contacts → nurture with 3x/week posts → build trust over time (19 members and growing)</div>
+    </div>
+    <div class="funnel-arrow">↓</div>
+    <div class="funnel-step fs-3">
+      <div class="icon">🎬</div>
+      <div class="label">YouTube Channel</div>
+      <div class="desc">Teach the 7-step framework in video → drive viewers back to the community</div>
+    </div>
+    <div class="funnel-arrow">↓</div>
+    <div class="funnel-step fs-4">
+      <div class="icon">🎓</div>
+      <div class="label">Live Workshop / Webinar</div>
+      <div class="desc">Run the full 7-step framework live → collect feedback → refine until it's tight</div>
+    </div>
+    <div class="funnel-arrow">↓</div>
+    <div class="funnel-step fs-5">
+      <div class="icon">🚀</div>
+      <div class="label">Evergreen Online Program</div>
+      <div class="desc">Package the refined workshop → sell it → €10K/month target without trading time for money</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="qa-block">
+    <div class="qa-question">One thing you learned that you wish you knew on day one</div>
+    <div class="qa-answer">
+      <strong>Don't build the course first.</strong> I spent months building the platform — the website, the checkout, the whole online school infrastructure — before I had a single paying student.
+      <br><br>
+      What I wish I'd done: start with the conversations. Send the DMs. Build the community. Run one live workshop on a video call. <em>Then</em> package it into a course once you know exactly what people need to hear. The product isn't the hard part. Finding out what the product should <em>be</em> is.
+    </div>
+  </div>
+
+  <div class="qa-block">
+    <div class="qa-question">Where are you headed next?</div>
+    <div class="qa-answer">
+      Getting the Facebook community to <strong>50 members</strong> — that's the threshold to run the first live workshop. From there: run it live 2–3 times, refine the content, then lock it into an evergreen program that runs without me needing to be present.
+      <br><br>
+      The end goal is a fully automated education business: engineers find me through YouTube, join the free community, attend a workshop, and enrol in the course. I stay focused on making the content better. The system handles the rest.
+    </div>
+  </div>
+
+  <div class="highlight">
+    🎯 Next milestone: 50 community members → first live workshop → evergreen program
+  </div>
+
+  <div class="page-num">2</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- PAGE 3: SKOOL POST (COPY-PASTE READY)     -->
+<!-- ══════════════════════════════════════════ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="brand">TechFlow Industrial</div>
+    <div class="doc-title">Skool Community Post — Copy-paste ready</div>
+  </div>
+
+  <h2 class="section">⭐ <span>Skool Post</span> — Builder Spotlight</h2>
+  <p style="font-size:11px;color:#868e96;margin-bottom:14px;">Copy the text below directly into the Skool community post editor.</p>
+
+  <div class="skool-box">⭐ BUILDER SPOTLIGHT — Johannes Sanderse
+
+Johannes spent 15 years programming machines on factory floors across Europe. He knows what it feels like to sit inside a plant and watch your company pay €40,000 a year for software that just adds context to sensor data.
+
+So he built his own version. For €8 a month.
+
+Now he's turning that into an education business for industrial engineers who want to stop depending on expensive vendor platforms and start owning their own data infrastructure.
+
+---
+
+🏭 WHAT HE'S BUILDING
+
+An online program that teaches factory automation engineers how to build their own Industrial Data Platform using free, open-source tools — at a fraction of the cost of commercial alternatives.
+
+The framework: 7 steps from raw machine data to actionable information, running on a €8/month server.
+
+---
+
+📣 HOW HE FINDS HIS AUDIENCE
+
+Every day, Johannes runs a system that:
+→ Identifies engineers on LinkedIn who match his ideal profile
+→ Sends them a personal, non-pitchy message about the topic
+→ Invites warm contacts into a free Facebook community
+→ Nurtures that community with practical posts 3x/week
+→ Publishes YouTube videos teaching the 7-step method
+
+LinkedIn → Facebook community (19 members) → YouTube → Live workshop → Evergreen course
+
+---
+
+💡 HIS BEST LESSON SO FAR
+
+"Don't build the course first. I built the whole platform — website, checkout, online school — before I had a single paying student. What I should have done: send the DMs, build the community, run one live workshop on a video call. Then package it. The product isn't the hard part. Finding out what the product should be — that's the work."
+
+---
+
+📍 WHERE HE'S HEADED
+
+Hitting 50 community members → running the first live workshop with his 7-step framework → refining it into an evergreen online program.
+
+Goal: a fully automated funnel where YouTube drives community, community fills workshops, and workshops convert to course sales. €10K/month, without trading time for money.
+
+---
+
+Follow his journey: techflow24.com
+Free community: facebook.com/groups/1282445730514883
+  </div>
+
+  <div class="page-num">3</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- PAGE 4: THE 7-STEP FRAMEWORK              -->
+<!-- ══════════════════════════════════════════ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="brand">TechFlow Industrial</div>
+    <div class="doc-title">The 7-Step Framework — Industrial Data Platform</div>
+  </div>
+
+  <h2 class="section">The <span>7-Step Framework</span></h2>
+  <p style="font-size:12px;color:#495057;margin-bottom:18px;">How to go from raw machine sensor data to actionable information — using only open-source tools that cost €8/month to run.</p>
+
+  <div class="step-card s1">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-label">Step 1</div>
+      <div class="step-title">CONNECT — Get the data in</div>
+      <div class="step-body">Connect to the machine's data source. Think of this as plugging a translator between the factory machine and your data system — the machine speaks one language, your platform speaks another. One piece of software handles both sides, no separate bridge needed.</div>
+      <div class="step-pills"><span class="pill">OPC-UA</span><span class="pill">MonsterMQ</span><span class="pill">MQTT</span></div>
+    </div>
+  </div>
+
+  <div class="step-card s2">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-label">Step 2</div>
+      <div class="step-title">CONDITION — Make the data reliable</div>
+      <div class="step-body">Machines report data every second — but most of it is identical to the second before. Remove duplicates, filter out noise, only store what actually changed. Result: 60–80% less storage, and data you can actually trust.</div>
+      <div class="step-pills"><span class="pill">N8N validation</span><span class="pill">Flow engine</span></div>
+    </div>
+  </div>
+
+  <div class="step-card s3">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <div class="step-label">Step 3 — Critical Point</div>
+      <div class="step-title">MODEL — Turn data into information</div>
+      <div class="step-body"><strong>This is the step that changes everything.</strong> Raw data says "67.3". Information says "Temperature sensor on Pasteuriser Line 1 — reading 67.3°C — normal range is 55–75°C — currently OK." You add the context that makes the number mean something. This is what the expensive platforms charge €30K/year to do. You do it yourself with a JSON file.</div>
+      <div class="step-pills"><span class="pill">ISA-95 model</span><span class="pill">Unified Namespace</span><span class="pill">Context layer</span></div>
+    </div>
+  </div>
+
+  <div class="step-card s4">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <div class="step-label">Step 4</div>
+      <div class="step-title">STORE — Save the information</div>
+      <div class="step-body">Store everything with a timestamp. One database handles all data types — sensor readings, batch records, alarms, shift logs — no need for separate specialist databases. Retention: 30 days by default.</div>
+      <div class="step-pills"><span class="pill">MongoDB</span><span class="pill">30-day retention</span></div>
+    </div>
+  </div>
+
+  <div class="step-card s5">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <div class="step-label">Step 5</div>
+      <div class="step-title">ORCHESTRATE — Make information flow</div>
+      <div class="step-body">Automate factory operations: start a production order, send an alarm to Teams, process a barcode scan, email a shift report. All without writing custom code — visual workflow builder. Six pre-built workflows cover a complete production line.</div>
+      <div class="step-pills"><span class="pill">N8N workflows</span><span class="pill">Teams / email</span></div>
+    </div>
+  </div>
+
+  <div class="step-card s6">
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <div class="step-label">Step 6</div>
+      <div class="step-title">VISUALIZE — Make insights visible</div>
+      <div class="step-body">Build dashboards that refresh every 5 seconds, trend charts for analysis, operator screens for the shop floor. One dashboard template covers 50 machines. Engineers actually like using these — because they built them.</div>
+      <div class="step-pills"><span class="pill">Grafana</span><span class="pill">Next.js</span><span class="pill">FastAPI</span></div>
+    </div>
+  </div>
+
+  <div class="step-card s7">
+    <div class="step-num">7</div>
+    <div class="step-content">
+      <div class="step-label">Step 7</div>
+      <div class="step-title">DISTRIBUTE — Enable action</div>
+      <div class="step-body">Make your data available to every system that needs it — ERP, MES, cloud platforms, edge devices. Push data from a €35 Raspberry Pi on the factory floor to a cloud server. REST API for any external integration. You own every connection.</div>
+      <div class="step-pills"><span class="pill">REST API</span><span class="pill">MQTT</span><span class="pill">Raspberry Pi edge</span></div>
+    </div>
+  </div>
+
+  <div class="highlight">
+    ✅ Total cost: €8/month &nbsp;·&nbsp; Zero license fees &nbsp;·&nbsp; No vendor lock-in &nbsp;·&nbsp; You own every layer
+  </div>
+
+  <div class="doc-footer">
+    <div>© Johannes Sanderse · TechFlow Industrial · techflow24.com</div>
+    <div>Free community: facebook.com/groups/1282445730514883</div>
+  </div>
+
+  <div class="page-num">4</div>
+</div>
+
+</body>
+</html>

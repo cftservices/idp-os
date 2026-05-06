@@ -3,13 +3,13 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Industrial Data Platform',
-  description: 'Live PLC data via OPC-UA → MonsterMQ → MongoDB',
+  description: 'Live OPC-UA data — OPC-UA Simulator → MonsterMQ → MongoDB',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-950 antialiased">{children}</body>
+      <body className="antialiased overflow-hidden">{children}</body>
     </html>
   );
 }

@@ -1,6 +1,10 @@
-# Industrial Data Platform
+# Industrial Data Platform — The Missing AI Data Layer
 
-Open-source industrial data platform — deploy on any VPS in one command.
+> **You're missing one layer — and AI can't fix what it can't understand.**
+
+Open-source reference implementation of the missing AI data layer for industrial factories. Connects PLC, SCADA, MES, and ERP into one semantic layer (ISA-95 ontology + event-driven architecture) so raw machine data becomes AI-ready information. Deploy on any €8/mo VPS in one command — no vendor lock-in, no €40K license.
+
+This is the technical proof behind **Build Your AI Data Layer** — the online program that teaches PLC/SCADA engineers how to build this layer themselves, in 7 steps (Connect → Condition → Model → Store → Orchestrate → Visualize → Distribute).
 
 ## Stack
 

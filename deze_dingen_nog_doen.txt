@@ -1,0 +1,29 @@
+Task 8 — Deploy to Hostinger is next. SSH into your VPS and run:
+
+
+# 1. Install Docker (if not yet installed)
+apt update && apt install -y docker.io docker-compose-plugin git
+systemctl enable docker && systemctl start docker
+
+# 2. Clone the repo
+git clone https://github.com/cftservices/Industrial_Data_Platform.git
+cd Industrial_Data_Platform
+
+# 3. Configure secrets
+cp .env.example .env
+nano .env
+
+# 4. Set acme.json permissions (required by Traefik)
+chmod 600 traefik/acme.json
+
+# 5. Deploy
+docker compose up -d
+Before you deploy, make sure the DNS A records are pointing to your VPS IP:
+
+
+grafana.techflow24.com      → <VPS IP>
+api.techflow24.com          → <VPS IP>
+n8n.techflow24.com          → <VPS IP>
+rabbitmq.techflow24.com     → <VPS IP>
+portainer.techflow24.com    → <VPS IP>
+DNS needs to resolve before Traefik can get the Let's Encrypt certificates. Do you have the VPS IP already, or do you need help with the Hostinger DNS panel?

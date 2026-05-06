@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Industrial Data Platform in 7 Stappen</title>
+<title>Build the Missing AI Data Layer in 7 Steps — Free Guide</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -17,7 +17,7 @@
     line-height: 1.6;
   }
 
-  /* ── PAGE BREAKS (voor Chrome PDF) ── */
+  /* ── PAGE BREAKS (for Chrome PDF) ── */
   .page {
     width: 210mm;
     min-height: 297mm;
@@ -112,9 +112,31 @@
     justify-content: space-between;
     align-items: center;
   }
-  .cover-footer .author { font-size: 13px; color: #868e96; }
+  .cover-footer .author { font-size: 13px; color: #868e96; display: flex; align-items: center; gap: 14px; }
   .cover-footer .author strong { color: #e9ecef; display: block; font-size: 15px; }
   .cover-footer .tag { font-size: 11px; color: #2f9e44; background: rgba(47,158,68,0.15); padding: 4px 10px; border-radius: 4px; }
+
+  .author-photo {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(116,192,252,0.5);
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+  }
+  .author-photo-placeholder {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid rgba(116,192,252,0.5);
+    flex-shrink: 0;
+    background: rgba(116,192,252,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+  }
 
   /* ── CONTENT PAGES ── */
   h2.section-title {
@@ -175,30 +197,103 @@
   .ladder-arrow { text-align: center; color: #868e96; font-size: 20px; line-height: 1; padding: 2px 0 2px 16px; }
 
   /* ── DIAGRAM PAGE ── */
-  .diagram-container {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 10px;
-    padding: 20px;
-    text-align: center;
-    margin: 20px 0;
-  }
-  .diagram-container img {
-    max-width: 100%;
-    height: auto;
-  }
-  .diagram-placeholder {
-    border: 2px dashed #dee2e6;
-    border-radius: 8px;
-    padding: 40px 20px;
-    color: #868e96;
-    font-size: 13px;
-  }
   .diagram-caption {
     font-size: 12px;
     color: #868e96;
     margin-top: 10px;
     text-align: center;
+  }
+
+  /* ── IDP PIPELINE HTML DIAGRAM ── */
+  .idp-pipeline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 16px 0;
+    font-family: 'Courier New', monospace;
+  }
+  .idp-box {
+    width: 240px;
+    border-radius: 10px;
+    border-width: 2px;
+    border-style: solid;
+    padding: 8px 12px;
+    text-align: center;
+  }
+  .idp-box .box-title {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .idp-box .box-body {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #495057;
+  }
+  .idp-arrow {
+    font-size: 18px;
+    color: #868e96;
+    line-height: 1;
+    margin: 3px 0;
+  }
+  /* RAW DATA */
+  .idp-raw {
+    background: #1e1e2e;
+    border-color: #343a40;
+  }
+  .idp-raw .box-title { color: #adb5bd; }
+  .idp-raw .box-vals  { color: #74c0fc; font-size: 11px; line-height: 1.6; }
+  .idp-raw .box-q     { color: #fa5252; font-size: 11px; margin-top: 4px; }
+  /* CONNECT */
+  .idp-connect { background: #dbe4ff; border-color: #364fc7; }
+  .idp-connect .box-title { color: #364fc7; }
+  /* CONDITION */
+  .idp-condition { background: #e3fafc; border-color: #0c8599; }
+  .idp-condition .box-title { color: #0c8599; }
+  /* MODEL */
+  .idp-model { background: #d3f9d8; border-color: #2f9e44; border-width: 3px; }
+  .idp-model .box-title { color: #2f9e44; font-size: 14px; }
+  .idp-model .box-key   { color: #2f9e44; font-size: 11px; margin-top: 4px; }
+  /* STORE */
+  .idp-store { background: #f3d9fa; border-color: #7048e8; }
+  .idp-store .box-title { color: #7048e8; }
+  /* ORCHESTRATE */
+  .idp-orchestrate { background: #fff3bf; border-color: #e67700; }
+  .idp-orchestrate .box-title { color: #e67700; }
+  /* VISUALIZE */
+  .idp-visualize { background: #e3fafc; border-color: #0c8599; }
+  .idp-visualize .box-title { color: #0c8599; }
+  /* DISTRIBUTE */
+  .idp-distribute { background: #dbe4ff; border-color: #364fc7; }
+  .idp-distribute .box-title { color: #364fc7; }
+  /* INFORMATION */
+  .idp-info {
+    width: 240px;
+    background: #2f9e44;
+    border: 2px solid #2b8a3e;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-family: 'Courier New', monospace;
+  }
+  .idp-info .info-title { color: #fff; font-weight: 700; font-size: 13px; text-align: center; margin-bottom: 6px; }
+  .idp-info .info-line  { font-size: 10px; line-height: 1.7; }
+  .idp-info .info-line.green { color: #d3f9d8; }
+  .idp-info .info-line.white { color: #ffffff; }
+  .idp-quote {
+    margin-top: 12px;
+    font-size: 10px;
+    color: #868e96;
+    text-align: center;
+    font-style: italic;
+    max-width: 260px;
+  }
+  .idp-cost {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #2f9e44;
+    text-align: center;
+    font-weight: 600;
+    max-width: 260px;
   }
 
   /* ── 7 STEPS ── */
@@ -360,95 +455,100 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="page cover">
   <div>
-    <div class="cover-badge">Gratis Gids · TechFlow Industrial</div>
-    <h1>Industrial Data Platform<br>in <span>7 Stappen</span></h1>
-    <p class="subtitle">Van raw sensordata naar actionable information — zonder Ignition, zonder HighByte, zonder €40.000/jaar licentiekosten.</p>
+    <div class="cover-badge">Free Guide · TechFlow Industrial</div>
+    <h1>You're missing<br>one <span>layer</span></h1>
+    <p style="font-size:18px;color:#dee2e6;max-width:520px;margin-bottom:24px;line-height:1.45;">— and AI can't fix what it can't understand. Build the missing AI data layer for your factory in <strong style="color:#74c0fc;">7 steps</strong>.</p>
+    <p class="subtitle">Factories run dozens of disconnected systems — PLC, SCADA, MES, ERP, historian — that don't talk. That's why every AI initiative stalls. This guide shows you the 7 steps to build the layer in between.</p>
 
     <div class="cover-quote">
       <p>"Byte 0, Value 50 — what does that mean to a data lake? Nothing, without context."</p>
-      <cite>— Walker Reynolds, IIoT University (originator van het Unified Namespace concept)</cite>
     </div>
 
     <div class="cost-compare">
       <div class="cost-box bad">
-        <div class="label">AVEVA Connect</div>
+        <div class="label">Vendor lock-in (AVEVA Connect)</div>
         <div class="amount">€40.000</div>
-        <div class="desc">per jaar · vendor lock-in</div>
+        <div class="desc">per year · still doesn't give you the layer</div>
       </div>
       <div class="cost-box good">
-        <div class="label">IDP Open Source Stack</div>
+        <div class="label">Open source reference stack</div>
         <div class="amount">€8</div>
-        <div class="desc">per maand · alles open source</div>
+        <div class="desc">per month · proof the architecture matters more than the price</div>
       </div>
     </div>
 
     <div class="highlight-box" style="background:rgba(47,158,68,0.15);border-color:rgba(47,158,68,0.4);color:#d3f9d8;">
-      In deze gids leer je HOW — de 7 stappen om zelf een Industrial Data Platform te bouwen. Walker Reynolds leert het WHY. Wij leveren de implementatie.
+      This is the free guide. The full curriculum lives in <strong>Build Your AI Data Layer</strong> — an online program where PLC/SCADA engineers learn to build the layer themselves, end-to-end.
     </div>
   </div>
 
   <div class="cover-footer">
     <div class="author">
-      <strong>Johannes Sanderse</strong>
-      OT Engineer · 15 jaar fabrieken (Siemens PLC/SCADA, historians, DCS)
+      <img src="images/johannes.jpg" alt="Johannes Sanderse" class="author-photo"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="author-photo-placeholder" style="display:none">👤</div>
+      <div>
+        <strong>Johannes Sanderse</strong>
+        OT Engineer · 15 years in factories (Siemens PLC/SCADA, historians, DCS)
+      </div>
     </div>
     <div class="tag">techflow24.com</div>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- PAGE 2: HET CONTEXT PROBLEEM                            -->
+<!-- PAGE 2: THE CONTEXT PROBLEM                             -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="page">
   <div class="header-bar">
     <div class="logo">TechFlow Industrial</div>
-    <div class="page-title">Industrial Data Platform — 7 Stappen</div>
+    <div class="page-title">Build the Missing AI Data Layer — 7 Steps</div>
   </div>
 
-  <h2 class="section-title">Je fabriek heeft geen dataprobleem.</h2>
-  <h2 class="section-title" style="color:#2f9e44;margin-bottom:16px;">Het heeft een contextprobleem.</h2>
+  <h2 class="section-title">Your factory doesn't have a data problem.</h2>
+  <h2 class="section-title" style="color:#2f9e44;margin-bottom:16px;">It has a context problem.</h2>
 
-  <p class="section-intro">Elke PLC publiceert data. Maar data zonder context is ruis. Wat jouw historian iedere seconde ontvangt, is dit:</p>
+  <p class="section-intro">Every PLC publishes data. But data without context is noise. What your historian receives every second looks like this:</p>
 
   <div class="problem-box">
-    <h3>Raw sensordata — wat jouw systeem ontvangt:</h3>
+    <h3>Raw sensor data — what your system receives:</h3>
     <div class="problem-code">
       TIC-001 = 67.3<br>
       PIC-001 = 4.47<br>
       FIC-001 = 248.1<br>
       BatchCounter = 142
-      <span class="comment">← Wat betekent dit? Niemand weet het. Dit is het probleem.</span>
+      <span class="comment">← What does this mean? Nobody knows. This is the problem.</span>
     </div>
   </div>
 
-  <p style="margin-bottom:20px;font-size:14px;color:#495057;">De waarde <strong>67.3</strong> is nutteloos zonder te weten: van welke machine? In welke engineering unit? Wat is normaal? Wat is een alarm? <strong>Context is het stuk dat AVEVA je probeert te verkopen voor €40.000 per jaar.</strong></p>
+  <p style="margin-bottom:20px;font-size:14px;color:#495057;">The value <strong>67.3</strong> is useless without knowing: from which machine? In which engineering unit? What is normal? What is an alarm? <strong>Context is what AVEVA is trying to sell you for €40,000 per year.</strong></p>
 
-  <h3 style="font-size:17px;font-weight:700;margin-bottom:14px;">De Data → Information ladder</h3>
+  <h3 style="font-size:17px;font-weight:700;margin-bottom:14px;">Data → Information ladder</h3>
 
   <div class="ladder">
     <div class="ladder-step">
       <div class="ladder-label" style="color:#364fc7;">DATA</div>
       <div class="ladder-example">TIC-001 = 67.3</div>
     </div>
-    <div class="ladder-arrow">↓ Stap 3: MODEL (ISA-95 context toevoegen)</div>
+    <div class="ladder-arrow">↓ Step 3: MODEL (add ISA-95 context)</div>
     <div class="ladder-step">
       <div class="ladder-label" style="color:#0c8599;">INFORMATION</div>
-      <div class="ladder-example">WC-PAST-01 · Temperatuur · 67.3°C · Normaal: 55–75°C</div>
+      <div class="ladder-example">WC-PAST-01 · Temperature · 67.3°C · Normal: 55–75°C</div>
     </div>
-    <div class="ladder-arrow">↓ Stap 4–5: STORE + ORCHESTRATE</div>
+    <div class="ladder-arrow">↓ Steps 4–5: STORE + ORCHESTRATE</div>
     <div class="ladder-step">
       <div class="ladder-label" style="color:#e67700;">INSIGHT</div>
-      <div class="ladder-example">Temperatuur stijgt richting alarm · trend +2°C/uur</div>
+      <div class="ladder-example">Temperature rising towards alarm · trend +2°C/hr</div>
     </div>
-    <div class="ladder-arrow">↓ Stap 6–7: VISUALIZE + DISTRIBUTE</div>
+    <div class="ladder-arrow">↓ Steps 6–7: VISUALIZE + DISTRIBUTE</div>
     <div class="ladder-step">
       <div class="ladder-label" style="color:#2f9e44;">ACTION</div>
-      <div class="ladder-example">Operator past koeling aan · N8N stuurt Teams notificatie</div>
+      <div class="ladder-example">Operator adjusts cooling · N8N sends Teams notification</div>
     </div>
   </div>
 
   <div class="highlight-box">
-    De 7 stappen in deze gids leiden je langs elke trede van de ladder — van raw tag tot actionable information.
+    The 7 steps in this guide walk you through every rung of the ladder — from raw tag to actionable information.
   </div>
 
   <div class="page-num">2</div>
@@ -460,108 +560,155 @@
 <div class="page">
   <div class="header-bar">
     <div class="logo">TechFlow Industrial</div>
-    <div class="page-title">Industrial Data Platform — 7 Stappen</div>
+    <div class="page-title">Build the Missing AI Data Layer — 7 Steps</div>
   </div>
 
-  <h2 class="section-title" style="margin-bottom:8px;">De 7-stappen pipeline</h2>
-  <p class="section-intro">Van OPC-UA sensordata tot actionable information — alles op één €8/maand VPS.</p>
+  <h2 class="section-title" style="margin-bottom:8px;">The 7-step pipeline</h2>
+  <p class="section-intro">From OPC-UA sensor data to actionable information — all on a €8/month VPS.</p>
 
-  <div class="diagram-container">
-    <!-- Exporteer diagram-7-stappen.excalidraw als PNG via excalidraw.com en sla op als diagram-7-stappen.png -->
-    <img src="diagram-7-stappen.png" alt="IDP 7-stappen pipeline diagram" onerror="this.style.display='none';document.getElementById('diagram-placeholder').style.display='block'">
-    <div id="diagram-placeholder" class="diagram-placeholder">
-      <strong>Diagram: Industrial Data Platform — 7 Stappen</strong><br><br>
-      RAW DATA → ① CONNECT → ② CONDITION → <strong>③ MODEL</strong> → ④ STORE → ⑤ ORCHESTRATE → ⑥ VISUALIZE → ⑦ DISTRIBUTE → INFORMATION<br><br>
-      <em>Open diagram-7-stappen.excalidraw in excalidraw.com en exporteer als PNG</em>
-    </div>
-    <div class="diagram-caption">Figuur 1: De 7-stappen IDP pipeline. Stap ③ MODEL is het kritieke punt waar data context krijgt en information wordt.</div>
-  </div>
+  <div class="idp-pipeline">
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px;">
-    <div style="background:#f8f9fa;border-radius:8px;padding:14px 16px;">
-      <div style="font-weight:700;font-size:13px;color:#1e1e2e;margin-bottom:6px;">TechFlow Plant A — stack</div>
-      <div style="font-size:12px;color:#495057;line-height:1.8;">
-        OPC-UA Simulator (3 PLCs)<br>
-        MonsterMQ (MQTT broker + OPC-UA client)<br>
-        MongoDB (plc_data, 30-dag retentie)<br>
-        N8N (workflows: alarm, orders, rapporten)<br>
-        FastAPI + Grafana + Next.js dashboard<br>
-        Traefik (reverse proxy + SSL)
-      </div>
+    <!-- RAW DATA -->
+    <div class="idp-box idp-raw">
+      <div class="box-title">RAW DATA</div>
+      <div class="box-vals">TIC-001 = 67.3<br>BatchCnt = 142</div>
+      <div class="box-q">What does this mean?</div>
     </div>
-    <div style="background:#ebfbee;border:1px solid #d3f9d8;border-radius:8px;padding:14px 16px;">
-      <div style="font-weight:700;font-size:13px;color:#2f9e44;margin-bottom:6px;">Gesimuleerde fabriek</div>
-      <div style="font-size:12px;color:#495057;line-height:1.8;">
-        PLC_01: Pasteurisatie (temp, druk, flow)<br>
-        PLC_02: Conveyor & labelaar (3 motoren)<br>
-        PLC_03: Batch controle (recept, fase, teller)<br>
-        N8N: 6 fabrieksworkflows<br>
-        ISA-95 JSON model (volledig)<br>
-        <strong style="color:#2f9e44;">Alles open source · €8/maand</strong>
-      </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 1 CONNECT -->
+    <div class="idp-box idp-connect">
+      <div class="box-title">① CONNECT</div>
+      <div class="box-body">OPC-UA → MQTT<br>MonsterMQ</div>
     </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 2 CONDITION -->
+    <div class="idp-box idp-condition">
+      <div class="box-title">② CONDITION</div>
+      <div class="box-body">Filter &amp; validate<br>quality check</div>
+    </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 3 MODEL -->
+    <div class="idp-box idp-model">
+      <div class="box-title">③ MODEL</div>
+      <div class="box-body">ISA-95 ontology<br>Semantic layer<br>WC-PAST-01</div>
+      <div class="box-key">DATA → INFORMATION</div>
+    </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 4 STORE -->
+    <div class="idp-box idp-store">
+      <div class="box-title">④ STORE</div>
+      <div class="box-body">MongoDB<br>30-day retention</div>
+    </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 5 ORCHESTRATE -->
+    <div class="idp-box idp-orchestrate">
+      <div class="box-title">⑤ ORCHESTRATE</div>
+      <div class="box-body">N8N workflows<br>alarms, reports</div>
+    </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 6 VISUALIZE -->
+    <div class="idp-box idp-visualize">
+      <div class="box-title">⑥ VISUALIZE</div>
+      <div class="box-body">Grafana dashboards<br>Next.js live view</div>
+    </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- 7 DISTRIBUTE -->
+    <div class="idp-box idp-distribute">
+      <div class="box-title">⑦ DISTRIBUTE</div>
+      <div class="box-body">UNS / REST API<br>Raspberry Pi edge</div>
+    </div>
+    <div class="idp-arrow">↓</div>
+
+    <!-- INFORMATION -->
+    <div class="idp-info">
+      <div class="info-title">INFORMATION</div>
+      <div class="info-line green">WC-PAST-01 · Temp: 67.3°C · OK: 55–75°C</div>
+      <div class="info-line white">Recipe 101 · Batch: 142 · ✓ STATUS: OK</div>
+      <div class="info-line green">Pressure: 4.47 bar · Phase: Filling</div>
+    </div>
+
+    <div class="idp-quote">"Byte 0, Value 50 — what does that mean to a data lake?<br>Nothing, without context."</div>
+    <div class="idp-cost">Open source · €8/month VPS · Zero license costs</div>
+
   </div>
+  <div class="diagram-caption">Figure 1: The 7-step IDP pipeline — from raw sensor data to actionable information. Step ③ MODEL is the critical point.</div>
 
   <div class="page-num">3</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- PAGE 4–5: DE 7 STAPPEN                                  -->
+<!-- PAGE 4–5: THE 7 STEPS                                   -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="page">
   <div class="header-bar">
     <div class="logo">TechFlow Industrial</div>
-    <div class="page-title">Industrial Data Platform — 7 Stappen</div>
+    <div class="page-title">Build the Missing AI Data Layer — 7 Steps</div>
   </div>
 
-  <h2 class="section-title" style="margin-bottom:20px;">De 7 stappen</h2>
+  <h2 class="section-title" style="margin-bottom:20px;">The 7 Steps</h2>
 
   <div class="step-card step-1">
     <div class="step-num">1</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 1</div>
-      <h3>CONNECT — Data binnenhalen</h3>
-      <p>Koppel aan de databron van de PLC of SCADA. OPC-UA is de industriestandaard: elk modern systeem spreekt het. MonsterMQ fungeert als OPC-UA client én MQTT broker in één container — geen aparte bridge nodig.</p>
+      <div class="step-subtitle">Step 1</div>
+      <h3>CONNECT — Ingesting data</h3>
+      <p>Connect to the data source of the PLC or SCADA. OPC-UA is the industry standard: every modern system speaks it. MonsterMQ acts as OPC-UA client and MQTT broker in a single container — no separate bridge needed.</p>
       <span class="tool-pill">OPC-UA (asyncua)</span>
       <span class="tool-pill">MonsterMQ</span>
       <span class="tool-pill">MQTT</span>
-      <span class="tool-pill">Modbus (toekomstig)</span>
+      <span class="tool-pill">Modbus (future)</span>
     </div>
   </div>
 
   <div class="step-card step-2">
     <div class="step-num">2</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 2</div>
-      <h3>CONDITION — Data betrouwbaar maken</h3>
-      <p>Verwijder dubbele waarden, filter ruis, converteer engineering units. Een PLC publiceert 1x per seconde — maar niet elke waarde is anders. Alleen gewijzigde waarden opslaan bespaart 60–80% opslagruimte.</p>
+      <div class="step-subtitle">Step 2</div>
+      <h3>CONDITION — Making data reliable</h3>
+      <p>Remove duplicate values, filter noise, convert engineering units. A PLC publishes once per second — but not every value changes. Storing only changed values saves 60–80% of storage space.</p>
       <span class="tool-pill">MonsterMQ flow engine</span>
-      <span class="tool-pill">N8N validatie</span>
+      <span class="tool-pill">N8N validation</span>
     </div>
   </div>
 
   <div class="step-card step-3">
     <div class="step-num">3</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 3 — KRITIEK PUNT</div>
-      <h3>MODEL — Context toevoegen (DATA → INFORMATION)</h3>
-      <p><strong>Dit is waar data information wordt.</strong> Gebruik ISA-95 hiërarchie (Enterprise → Site → Area → WorkCenter → Tag) om elke sensorwaarde te contextualiseren. Een JSON model beschrijft elke machine: wat het doet, wat normaal is, welke alarms er zijn, en hoe het zich verhoudt tot andere machines.</p>
-      <p style="margin-top:8px;">Walker's vier namespace typen: <em>Definitional</em> (wat is het?), <em>Functional</em> (wat doet het?), <em>Informative</em> (wat meet het?), <em>Ad-hoc</em> (tijdelijk/batch).</p>
-      <span class="tool-pill">ISA-95 JSON model</span>
+      <div class="step-subtitle">Step 3 — CRITICAL POINT</div>
+      <h3>MODEL — The Semantic Layer (DATA → INFORMATION)</h3>
+      <p><strong>This is where data becomes information.</strong> Step 3 creates the <em>semantic layer</em> — the ISA-95 ontology that gives every sensor value its context and meaning. Without this layer, all your data collection is just expensive noise storage.</p>
+      <p style="margin-top:8px;">ISA-95 is not just a hierarchy — it is the complete formal ontology for manufacturing. It defines every entity (Equipment, Material, Personnel, Orders), every relationship (assembled from, defined by, references), and every property (engineering range, alarm limits, asset ID).</p>
+      <div style="background:#f1f3f5;border-radius:8px;padding:12px 16px;margin:10px 0;font-family:'Courier New',monospace;font-size:12px;color:#1e1e2e;">
+        <span style="color:#fa5252;">Without semantic layer:</span>  TIC-001 = 67.3<br>
+        <span style="color:#2f9e44;">With semantic layer:</span>     techflow/site1/packaging/line1/plc01/temperature<br>
+        <span style="color:#2f9e44;">                         </span>     = 67.3°C · Normal: 55–75°C · Asset: WC-PAST-01
+      </div>
+      <p style="margin-top:8px;">The ISA-95 equipment hierarchy maps directly to your MQTT topic structure — every topic level carries context. A JSON asset model is your instance of the ISA-95 ontology: it describes every machine's class, ID, ranges, and relationships.</p>
+      <p style="margin-top:8px;font-size:13px;color:#495057;"><strong>ISA-95 resource types:</strong> Equipment (machines) · Material (inputs/outputs) · Personnel (operators) · Physical Assets (spare parts). All linked through the ontology.</p>
+      <span class="tool-pill">ISA-95 ontology</span>
+      <span class="tool-pill">Semantic layer</span>
       <span class="tool-pill">UNS (Unified Namespace)</span>
-      <span class="tool-pill">MQTT topic structuur</span>
+      <span class="tool-pill">Equipment hierarchy</span>
+      <span class="tool-pill">JSON asset model</span>
     </div>
   </div>
 
   <div class="step-card step-4">
     <div class="step-num">4</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 4</div>
-      <h3>STORE — Information opslaan</h3>
-      <p>MongoDB slaat alle MQTT berichten op in de <code>plc_data</code> collectie met automatische timestamp. Retentie 30 dagen. Geen InfluxDB nodig — MongoDB handelt gemengde data (sensorwaarden, batch records, alarms, shift logs) in één collectie.</p>
+      <div class="step-subtitle">Step 4</div>
+      <h3>STORE — Storing information</h3>
+      <p>MongoDB stores all MQTT messages in the <code>plc_data</code> collection with automatic timestamps. Retention 30 days. No InfluxDB needed — MongoDB handles mixed data (sensor values, batch records, alarms, shift logs) in a single collection.</p>
       <span class="tool-pill">MongoDB</span>
-      <span class="tool-pill">MonsterMQ archivering</span>
-      <span class="tool-pill">30-dag retentie</span>
+      <span class="tool-pill">MonsterMQ archiving</span>
+      <span class="tool-pill">30-day retention</span>
     </div>
   </div>
 
@@ -571,16 +718,23 @@
 <div class="page">
   <div class="header-bar">
     <div class="logo">TechFlow Industrial</div>
-    <div class="page-title">Industrial Data Platform — 7 Stappen</div>
+    <div class="page-title">Build the Missing AI Data Layer — 7 Steps</div>
   </div>
 
   <div class="step-card step-5" style="margin-top:0;">
     <div class="step-num">5</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 5</div>
-      <h3>ORCHESTRATE — Information laten stromen</h3>
-      <p>N8N automatiseert fabrieksoperaties: productieorders starten, alarm-notificaties naar Teams sturen, barcode-scans verwerken, shift rapporten mailen. In de IDP stack zijn 6 workflows gedefinieerd voor een complete packaging lijn.</p>
+      <div class="step-subtitle">Step 5</div>
+      <h3>ORCHESTRATE — Making information flow</h3>
+      <p>Every manufacturing process follows the same ISA-95 pattern: <strong>Definition → Demand → Result</strong>. A recipe defines how a product is made. A production order creates demand. The actual records what really happened.</p>
+      <div style="background:#f1f3f5;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:12px;color:#1e1e2e;">
+        <strong style="color:#364fc7;">Definition</strong> → Recipe + Bill of Materials (what to make)<br>
+        <strong style="color:#e67700;">Demand</strong> → Production Order / Schedule (when to make it)<br>
+        <strong style="color:#2f9e44;">Result</strong> → Actual data (what was really produced)
+      </div>
+      <p>N8N automates the ISA-95 MOM activities: dispatching production orders (wf-001), collecting material scans (wf-003/004), generating shift reports (wf-005), and detecting faults (wf-006). Six workflows cover a complete packaging line — no MES license required.</p>
       <span class="tool-pill">N8N workflows</span>
+      <span class="tool-pill">ISA-95 Definition→Demand→Result</span>
       <span class="tool-pill">MonsterMQ webhooks</span>
       <span class="tool-pill">Teams / email</span>
     </div>
@@ -589,9 +743,9 @@
   <div class="step-card step-6">
     <div class="step-num">6</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 6</div>
-      <h3>VISUALIZE — Insights zichtbaar maken</h3>
-      <p>Grafana voor time-series analyse en ad-hoc queries (via FastAPI JSON datasource). Next.js voor live dashboards die elke 5 seconden refreshen — ideaal voor operators op de werkvloer. Grafana template variables: één dashboard voor 50 machines.</p>
+      <div class="step-subtitle">Step 6</div>
+      <h3>VISUALIZE — Making insights visible</h3>
+      <p>Grafana for time-series analysis and ad-hoc queries (via FastAPI JSON datasource). Next.js for live dashboards that refresh every 5 seconds — ideal for operators on the shop floor. Grafana template variables: one dashboard for 50 machines.</p>
       <span class="tool-pill">Grafana</span>
       <span class="tool-pill">Next.js</span>
       <span class="tool-pill">FastAPI</span>
@@ -601,43 +755,65 @@
   <div class="step-card step-7">
     <div class="step-num">7</div>
     <div class="step-content">
-      <div class="step-subtitle">Stap 7</div>
-      <h3>DISTRIBUTE — Action mogelijk maken</h3>
-      <p>Het Unified Namespace (UNS) maakt data beschikbaar voor elk systeem dat het nodig heeft — ERP, MES, cloud, edge. MonsterMQ op een Raspberry Pi stuurt lokale data door naar de VPS. REST API voor externe integraties. MQTT retain flag voor startup states.</p>
+      <div class="step-subtitle">Step 7</div>
+      <h3>DISTRIBUTE — Enabling action</h3>
+      <p>The Unified Namespace (UNS) makes data available to every system that needs it — ERP, MES, cloud, edge. MonsterMQ on a Raspberry Pi forwards local data to the VPS. REST API for external integrations. MQTT retain flag for startup states.</p>
       <span class="tool-pill">UNS / MQTT</span>
       <span class="tool-pill">REST API</span>
       <span class="tool-pill">Raspberry Pi edge</span>
     </div>
   </div>
 
-  <hr class="divider">
-  <div class="highlight-box">
-    <strong>Totale kosten open source stack:</strong> €8/maand VPS · Geen Ignition · Geen HighByte · Nul extra licentiekosten.<br>
-    Vergelijk: AVEVA Connect €40.000/jaar · Ignition Gateway €5.000/jaar + HiveMQ €15.000/jaar.
-  </div>
-
   <div class="page-num">5</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- PAGE 6: VERGELIJKING + CTA                              -->
+<!-- PAGE 6: THE STACK + COMPARISON + N8N                    -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="page">
   <div class="header-bar">
     <div class="logo">TechFlow Industrial</div>
-    <div class="page-title">Industrial Data Platform — 7 Stappen</div>
+    <div class="page-title">Build the Missing AI Data Layer — 7 Steps</div>
   </div>
 
-  <h2 class="section-title" style="margin-bottom:16px;">Stack vergelijking</h2>
+  <h2 class="section-title" style="margin-bottom:16px;">The technical stack</h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+    <div style="background:#f8f9fa;border-radius:8px;padding:14px 16px;">
+      <div style="font-weight:700;font-size:13px;color:#1e1e2e;margin-bottom:6px;">TechFlow Plant A — components</div>
+      <div style="font-size:12px;color:#495057;line-height:1.8;">
+        OPC-UA Simulator (3 PLCs)<br>
+        MonsterMQ (MQTT broker + OPC-UA client)<br>
+        MongoDB (plc_data, 30-day retention)<br>
+        N8N (workflows: alarms, orders, reports)<br>
+        FastAPI + Grafana + Next.js dashboard<br>
+        Traefik (reverse proxy + SSL)
+      </div>
+    </div>
+    <div style="background:#ebfbee;border:1px solid #d3f9d8;border-radius:8px;padding:14px 16px;">
+      <div style="font-weight:700;font-size:13px;color:#2f9e44;margin-bottom:6px;">Simulated factory</div>
+      <div style="font-size:12px;color:#495057;line-height:1.8;">
+        PLC_01: Pasteurisation (temp, pressure, flow)<br>
+        PLC_02: Conveyor &amp; labeller (3 motors)<br>
+        PLC_03: Batch control (recipe, phase, counter)<br>
+        N8N: 6 factory workflows<br>
+        ISA-95 JSON model (complete)<br>
+        <strong style="color:#2f9e44;">Fully open source · €8/month</strong>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <h2 class="section-title" style="margin-bottom:16px;">Stack comparison</h2>
 
   <table class="compare">
     <thead>
       <tr>
-        <th>Oplossing</th>
-        <th>Kosten/jaar</th>
+        <th>Solution</th>
+        <th>Cost/year</th>
         <th>OPC-UA</th>
         <th>Open Source</th>
-        <th>Leerbaar</th>
+        <th>Learnable</th>
       </tr>
     </thead>
     <tbody>
@@ -645,26 +821,19 @@
         <td>AVEVA Connect</td>
         <td class="bad">€40.000</td>
         <td>✓</td>
-        <td class="bad">Nee</td>
-        <td class="bad">Vendor cursus</td>
+        <td class="bad">No</td>
+        <td class="bad">Vendor training</td>
       </tr>
       <tr>
-        <td>Ignition + HiveMQ</td>
+        <td>Commercial MQTT stack</td>
         <td class="bad">€6.500–€20.000</td>
         <td>✓</td>
-        <td class="bad">Nee</td>
-        <td class="bad">Vendor cursus</td>
-      </tr>
-      <tr>
-        <td>Walker Reynolds (IIoT Univ.)</td>
-        <td>Cursus €X</td>
-        <td>✓ (theorie)</td>
-        <td class="bad">Vendor tools</td>
-        <td>WHY &amp; principes</td>
+        <td class="bad">No</td>
+        <td class="bad">Vendor training</td>
       </tr>
       <tr>
         <td><strong>IDP Open Source Stack</strong></td>
-        <td class="good"><strong>€96/jaar (VPS)</strong></td>
+        <td class="good"><strong>€96/year (VPS)</strong></td>
         <td class="good">✓</td>
         <td class="good">100%</td>
         <td class="good">HOW — live demo</td>
@@ -674,11 +843,11 @@
 
   <hr class="divider">
 
-  <h2 class="section-title" style="margin-bottom:16px;">N8N workflows in de stack</h2>
+  <h2 class="section-title" style="margin-bottom:16px;">N8N Workflows in the stack</h2>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:24px;">
     <div style="background:#fff3bf;border-radius:8px;padding:12px;font-size:12px;">
       <strong style="color:#e67700;display:block;margin-bottom:4px;">WF-001</strong>
-      Start Productieorder<br><span style="color:#868e96;">Webhook → MongoDB → response</span>
+      Start Production Order<br><span style="color:#868e96;">Webhook → MongoDB → response</span>
     </div>
     <div style="background:#fff3bf;border-radius:8px;padding:12px;font-size:12px;">
       <strong style="color:#e67700;display:block;margin-bottom:4px;">WF-002</strong>
@@ -686,48 +855,65 @@
     </div>
     <div style="background:#fff3bf;border-radius:8px;padding:12px;font-size:12px;">
       <strong style="color:#e67700;display:block;margin-bottom:4px;">WF-003</strong>
-      Materiaal Scan<br><span style="color:#868e96;">Barcode → lookup → inventory log</span>
+      Material Scan<br><span style="color:#868e96;">Barcode → lookup → inventory log</span>
     </div>
     <div style="background:#fff3bf;border-radius:8px;padding:12px;font-size:12px;">
       <strong style="color:#e67700;display:block;margin-bottom:4px;">WF-004</strong>
-      Product Scan<br><span style="color:#868e96;">End-of-line → batch teller</span>
+      Product Scan<br><span style="color:#868e96;">End-of-line → batch counter</span>
     </div>
     <div style="background:#fff3bf;border-radius:8px;padding:12px;font-size:12px;">
       <strong style="color:#e67700;display:block;margin-bottom:4px;">WF-005</strong>
-      Shift Rapport<br><span style="color:#868e96;">Cron 3x/dag → KPIs → email</span>
+      Shift Report<br><span style="color:#868e96;">Cron 3x/day → KPIs → email</span>
     </div>
     <div style="background:#fff3bf;border-radius:8px;padding:12px;font-size:12px;">
       <strong style="color:#e67700;display:block;margin-bottom:4px;">WF-006</strong>
-      Storing Detectie<br><span style="color:#868e96;">FaultBits → decode → Teams</span>
+      Fault Detection<br><span style="color:#868e96;">FaultBits → decode → Teams</span>
     </div>
   </div>
 
+  <div class="page-num">6</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PAGE 7: CALL TO ACTION                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="header-bar">
+    <div class="logo">TechFlow Industrial</div>
+    <div class="page-title">Build the Missing AI Data Layer — 7 Steps</div>
+  </div>
+
+  <div class="highlight-box" style="margin-bottom:24px;">
+    <strong>Total cost open source stack:</strong> €8/month VPS · Zero extra license costs.<br>
+    Compare: AVEVA Connect €40,000/year · Commercial MQTT stack €6,500–€20,000/year.
+  </div>
+
   <div class="cta-box">
-    <h2>Klaar om het zelf te bouwen?</h2>
-    <p>Sluit aan bij de community van PLC/SCADA engineers die hun eigen Industrial Data Platform bouwen — stap voor stap, open source, zonder vendor lock-in.</p>
+    <h2>Ready to build the layer yourself?</h2>
+    <p>Join PLC/SCADA engineers building the missing AI data layer for their own factories — step by step, open source, no vendor lock-in. The full curriculum lives in <strong>Build Your AI Data Layer</strong>.</p>
     <div class="cta-steps">
       <div class="cta-step">
         <span class="num">1</span>
-        Join de<br>community
+        Join the<br>community
       </div>
       <div class="cta-step">
         <span class="num">2</span>
-        Live workshop<br>aanmelden
+        Get on the<br>BYDL waitlist
       </div>
       <div class="cta-step">
         <span class="num">3</span>
-        GitHub repo<br>forken &amp; starten
+        Fork the GitHub<br>repo &amp; start
       </div>
     </div>
     <div class="cta-url">techflow24.com</div>
   </div>
 
-  <div style="text-align:center;font-size:11px;color:#adb5bd;margin-top:16px;">
+  <div style="text-align:center;font-size:11px;color:#adb5bd;margin-top:24px;">
     © Johannes Sanderse · TechFlow Industrial · techflow24.com<br>
     GitHub: github.com/cftservices/Industrial_Data_Platform
   </div>
 
-  <div class="page-num">6</div>
+  <div class="page-num">7</div>
 </div>
 
 </body>

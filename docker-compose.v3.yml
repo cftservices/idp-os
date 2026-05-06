@@ -1,0 +1,513 @@
+name: idp-v3
+
+# ════════════════════════════════════════════════════════════════════════════
+# IDP Stack v3 — Manufacturing Data Hub (MDH) Architecture
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Inspired by Rhize MDH architecture. Both brokers run simultaneously:
+#
+#   RabbitMQ  → message broker (AMQP + MQTT plugin, port 1883)
+#   Apache NiFi → dataflow + rule engine (OPC-UA client, routing, transform)
+#   MonsterMQ → all-in-one: MQTT (port 1884) + OPC-UA client + GraphQL + web UI
+#
+# Data flow:
+#   OPC-UA Sim → NiFi (GetOPCData) → RabbitMQ (raw-data exchange)
+#   → NiFi rule engine (thresholds/ISA-95 routing) → MongoDB + events exchange
+#   → N8N workflows (wf-001..006) → Neo4j + MongoDB
+#   → FastAPI REST → Grafana + Next.js
+#
+#   OPC-UA Sim → MonsterMQ (native OPC-UA client) → MongoDB (parallel path)
+#
+# Port allocation:
+#   1883 — RabbitMQ MQTT
+#   1884 — MonsterMQ MQTT
+#   4000 — MonsterMQ web UI / GraphQL
+#
+# Usage:
+#   cp .env.example .env && nano .env
+#   docker compose -f docker-compose.v3.yml up -d
+#
+# ════════════════════════════════════════════════════════════════════════════
+
+networks:
+  idp-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  portainer-data:
+  rabbitmq-data:
+  nifi-data:
+  nifi-logs:
+  nifi-conf:
+  grafana-data:
+  neo4j-data:
+  n8n-data:
+  monstermq-data:
+
+services:
+
+  # ── TRAEFIK ──────────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - idp-network
+
+  # ── PORTAINER ────────────────────────────────────────────────────────────
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  # ── MONGODB ───────────────────────────────────────────────────────────────
+  # Time-series + document store. Collections:
+  #   plc_data    — raw OPC-UA values (NiFi → RabbitMQ → N8N → MongoDB)
+  #   events      — ISA-95 work responses (alarms, faults, completions)
+  #   wf_history  — N8N workflow execution logs
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - idp-network
+
+  # ── OPC-UA SIMULATOR ──────────────────────────────────────────────────────
+  # Simulates 3 PLCs (PLC_01, PLC_02, PLC_03) on port 4840.
+  # NiFi connects as OPC-UA client (replaces MonsterMQ OPC-UA client).
+  opcua-sim:
+    build: ./opcua-simulator
+    container_name: opcua-sim
+    restart: unless-stopped
+    networks:
+      - idp-network
+
+  # ── RABBITMQ ──────────────────────────────────────────────────────────────
+  # Message broker with MQTT plugin. Replaces MonsterMQ.
+  #
+  # Ports:
+  #   5672  — AMQP (N8N, NiFi, FastAPI consumers)
+  #   1883  — MQTT (edge devices, PLCs, Node-RED if needed)
+  #   15672 — Management UI (http://localhost:15672)
+  #
+  # Exchanges (create via init-rabbitmq or management UI):
+  #   raw-data   — topic exchange, NiFi publishes OPC-UA values
+  #   events     — direct exchange, NiFi routes alarms/faults
+  #   commands   — direct exchange, N8N publishes work orders (ISA-95 Demand)
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    hostname: rabbitmq
+    ports:
+      - "1883:1883"    # MQTT (external PLC/edge devices)
+      - "5672:5672"    # AMQP (internal services)
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./config/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    networks:
+      - idp-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`mqtt.${DOMAIN}`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+
+  # ── APACHE NIFI ───────────────────────────────────────────────────────────
+  # Dataflow engine + rule engine. Replaces MonsterMQ flow engine.
+  #
+  # Roles in IDP v3:
+  #   1. OPC-UA client — polls opcua-sim every 1s via GetOPCData processor
+  #   2. Data transform  — ISA-95 field mapping (tagname → equipment hierarchy)
+  #   3. Rule engine     — threshold checks, alarm detection, quality gating
+  #   4. Router          — publishes to RabbitMQ raw-data / events exchanges
+  #
+  # UI: https://localhost:8443/nifi  (HTTPS, self-signed cert on first start)
+  # Default credentials: set NIFI_USERNAME + NIFI_PASSWORD in .env
+  #
+  # ⚠️  RAM: min 1GB, recommended 2GB. On €8 VPS: use -Xmx512m (limited flows)
+  nifi:
+    image: apache/nifi:2.0.0
+    container_name: nifi
+    restart: unless-stopped
+    ports:
+      - "8443:8443"   # HTTPS UI (expose only during development)
+    environment:
+      NIFI_WEB_HTTPS_PORT: 8443
+      SINGLE_USER_CREDENTIALS_USERNAME: ${NIFI_USERNAME:-admin}
+      SINGLE_USER_CREDENTIALS_PASSWORD: ${NIFI_PASSWORD}
+      # JVM heap — increase to 2g on Hetzner CX22/CX32
+      NIFI_JVM_HEAP_INIT: 256m
+      NIFI_JVM_HEAP_MAX: ${NIFI_JVM_HEAP_MAX:-512m}
+    volumes:
+      - nifi-data:/opt/nifi/nifi-current/flowfile_repository
+      - nifi-logs:/opt/nifi/nifi-current/logs
+      - nifi-conf:/opt/nifi/nifi-current/conf
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      opcua-sim:
+        condition: service_started
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nifi.rule=Host(`nifi.${DOMAIN}`)"
+      - "traefik.http.routers.nifi.entrypoints=websecure"
+      - "traefik.http.routers.nifi.tls.certresolver=letsencrypt"
+      - "traefik.http.services.nifi.loadbalancer.server.port=8443"
+
+  # ── FASTAPI ───────────────────────────────────────────────────────────────
+  # REST API: reads MongoDB + Neo4j. Used by Grafana (JSON datasource)
+  # and Next.js webapp. Also exposes ISA-95 model endpoints.
+  fastapi:
+    build: ./fastapi
+    container_name: fastapi
+    restart: unless-stopped
+    environment:
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DB: ${MONGO_DB}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/changeme}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
+    depends_on:
+      - mongo
+      - neo4j
+      - rabbitmq
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.fastapi.entrypoints=websecure"
+      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+
+  # ── GRAFANA ───────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: marcusolsson-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - fastapi
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  # ── WEBAPP (Next.js Dashboard) ────────────────────────────────────────────
+  # Live PLC data dashboard. Queries MongoDB (plc_data) every 5s.
+  webapp:
+    build: ./webapp
+    container_name: webapp
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: ${MONGODB_URI}
+      MONGODB_DATABASE: ${MONGODB_DATABASE}
+    depends_on:
+      - mongo
+      - rabbitmq
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.webapp.entrypoints=websecure"
+      - "traefik.http.routers.webapp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webapp.loadbalancer.server.port=3000"
+
+  # ── NEO4J ─────────────────────────────────────────────────────────────────
+  # Knowledge graph: ISA-95 equipment hierarchy, asset relationships,
+  # P&ID topology, root cause path tracing.
+  # UI: http://localhost:7474  |  Bolt: bolt://neo4j:7687
+  neo4j:
+    image: neo4j:5-community
+    container_name: neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/changeme}
+    volumes:
+      - neo4j-data:/data
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt
+    networks:
+      - idp-network
+
+  # ── N8N ───────────────────────────────────────────────────────────────────
+  # Workflow orchestration — ISA-95 Definition→Demand→Result flows:
+  #   wf-001-start-order      — Demand: triggers work order on RabbitMQ
+  #   wf-002-receive-order    — Demand: ACKs incoming command
+  #   wf-003-scan-material    — Result: logs material scan to MongoDB
+  #   wf-004-scan-equipment   — Result: logs equipment check to MongoDB
+  #   wf-005-shift-report     — Result: aggregates shift data, stores Neo4j
+  #   wf-006-fault-detection  — Execution: alarm from events exchange → Teams/email
+  #
+  # Trigger sources: RabbitMQ AMQP trigger (events + commands exchanges)
+  # UI: http://localhost:5678
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      DB_TYPE: sqlite
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-changeme}
+      # RabbitMQ credentials for AMQP trigger nodes
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
+    volumes:
+      - n8n-data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+    networks:
+      - idp-network
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MONSTERMQ — runs alongside RabbitMQ+NiFi
+  # ══════════════════════════════════════════════════════════════════════════
+  #
+  # MonsterMQ is the all-in-one industrial broker with:
+  #   - MQTT broker (port 1884 — RabbitMQ owns 1883)
+  #   - Native OPC-UA client (parallel OPC-UA path from opcua-sim)
+  #   - Built-in flow engine
+  #   - GraphQL API
+  #   - Web dashboard (port 4000)
+  #
+  # Both MonsterMQ and RabbitMQ run simultaneously — great for course demos:
+  #   "Here's the all-in-one approach vs the MDH microservices approach"
+
+  # ── MONSTERMQ ─────────────────────────────────────────────────────────────
+  monstermq:
+    image: rocworks/monstermq:latest
+    container_name: monstermq
+    restart: unless-stopped
+    ports:
+      - "1884:1883"   # MQTT on 1884 (RabbitMQ owns 1883)
+    volumes:
+      - ./monstermq/config.yaml:/app/config.yaml:ro
+      - monstermq-data:/app/data
+    depends_on:
+      - mongo
+      - opcua-sim
+    networks:
+      - idp-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monstermq.rule=Host(`mqtt.${DOMAIN}`)"
+      - "traefik.http.routers.monstermq.entrypoints=websecure"
+      - "traefik.http.routers.monstermq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.monstermq.loadbalancer.server.port=4000"
+
+  # ── INIT OPC-UA (one-shot) ────────────────────────────────────────────────
+  # Registers the 3 OPC-UA PLCs in MonsterMQ via GraphQL mutations.
+  # Configs persist in MongoDB — only needs to run once on first deploy.
+  init-opcua:
+    image: curlimages/curl:latest
+    container_name: init-opcua
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init-opcua.sh"]
+    volumes:
+      - ./monstermq/init-opcua.sh:/init-opcua.sh:ro
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # PACKML + SIM3TANKS — Combined Process Simulator (4 instances)
+  # ══════════════════════════════════════════════════════════════════════════
+  #
+  # Each container = 1 production line with a REAL process behind it.
+  # Combines:
+  #   - PackML ISA-88 state machine (port of libremfg/PackML-MQTT-Simulator)
+  #   - Sim3Tanks 3-tank physics (port of e-controls/Sim3Tanks, IEEE Access 2018)
+  #
+  # PackML state drives Sim3Tanks physics:
+  #   execute              -> pumps at setpoint -> tanks fill/stabilize
+  #   starting/unholding   -> pump ramp-up (5s to full speed)
+  #   holding/stopping     -> pump ramp-down (5s to 0)
+  #   stopped/held/idle    -> pumps off, tanks drain passively
+  #   abort command        -> auto-injects fault f8 (output valve T1 clogged 70%)
+  #   reset/idle           -> faults cleared
+  #
+  # MQTT topics per instance (prefix: {SITE}/{AREA}/{LINE}/):
+  #
+  #   PackML standard (compatible with libremfg/PackML-MQTT-Simulator):
+  #     Status/StateCurrent                     integer 0-17
+  #     Status/StateCurrentStr                  Stopped/Idle/Execute/Held/Aborted
+  #     Status/UnitModeStr                      Production/Manual/Maintenance
+  #     Status/CurMachSpeed                     current Qp1 pump flow (cm3/s)
+  #     Status/MachSpeed                        pump setpoint (cm3/s)
+  #     Admin/MachDesignSpeed                   120.0
+  #     Admin/ProdProcessedCount/0/Count        accumulated Q3 outflow (cm3)
+  #     Admin/ProdConsumedCount/0/Count         accumulated Qp1 inflow (cm3)
+  #
+  #   Sim3Tanks sensors (13 sensors, ISA-95 Level 1-2):
+  #     Status/h1  h2  h3                       tank levels (cm)
+  #     Status/Q1in  Q2in  Q3in                 pump inflows (cm3/s)
+  #     Status/Qa  Qb  Q13  Q23                 connection flows (cm3/s)
+  #     Status/Q1  Q2  Q3                       tank outflows (cm3/s)
+  #     Status/All                              JSON: all above + state + faults + timestamp
+  #
+  #   Commands (subscribe):
+  #     Command/Reset|Start|Hold|Unhold|Stop|Abort|Clear    PackML (send value 1)
+  #     Command/MachSpeed                                   pump setpoint 0-120
+  #     Command/Fault/Inject   JSON: {"fault":"f8","magnitude":0.5}
+  #     Command/Fault/Clear    any payload
+  #
+  # Sources:
+  #   PackML: https://github.com/libremfg/PackML-MQTT-Simulator
+  #   Sim3Tanks: https://github.com/e-controls/Sim3Tanks
+  #   Paper: https://doi.org/10.1109/ACCESS.2018.2874752
+  # ══════════════════════════════════════════════════════════════════════════
+
+  # ── Assembly Line 1 ───────────────────────────────────────────────────────
+  packml-assembly-line1:
+    build: ./packml-sim3tanks
+    container_name: packml-assembly-line1
+    restart: unless-stopped
+    environment:
+      MQTT_URL: mqtt://rabbitmq:1883
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_USER}
+      MQTT_PASSWORD: ${RABBITMQ_PASS}
+      SITE: TechFlow
+      AREA: Assembly
+      LINE: Line1
+      PUBLISH_INTERVAL: "1.0"
+      SIM_STEP: "0.1"
+    mem_limit: 64m
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── Assembly Line 2 ───────────────────────────────────────────────────────
+  packml-assembly-line2:
+    build: ./packml-sim3tanks
+    container_name: packml-assembly-line2
+    restart: unless-stopped
+    environment:
+      MQTT_URL: mqtt://rabbitmq:1883
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_USER}
+      MQTT_PASSWORD: ${RABBITMQ_PASS}
+      SITE: TechFlow
+      AREA: Assembly
+      LINE: Line2
+      PUBLISH_INTERVAL: "1.0"
+      SIM_STEP: "0.1"
+    mem_limit: 64m
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── Packaging Line ────────────────────────────────────────────────────────
+  packml-packaging-line1:
+    build: ./packml-sim3tanks
+    container_name: packml-packaging-line1
+    restart: unless-stopped
+    environment:
+      MQTT_URL: mqtt://rabbitmq:1883
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_USER}
+      MQTT_PASSWORD: ${RABBITMQ_PASS}
+      SITE: TechFlow
+      AREA: Packaging
+      LINE: Line1
+      PUBLISH_INTERVAL: "1.0"
+      SIM_STEP: "0.1"
+    mem_limit: 64m
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── CNC Machining ─────────────────────────────────────────────────────────
+  packml-cnc-line1:
+    build: ./packml-sim3tanks
+    container_name: packml-cnc-line1
+    restart: unless-stopped
+    environment:
+      MQTT_URL: mqtt://rabbitmq:1883
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_USER}
+      MQTT_PASSWORD: ${RABBITMQ_PASS}
+      SITE: TechFlow
+      AREA: CNC
+      LINE: Line1
+      PUBLISH_INTERVAL: "1.0"
+      SIM_STEP: "0.1"
+    mem_limit: 64m
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - idp-network

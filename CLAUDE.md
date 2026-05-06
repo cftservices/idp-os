@@ -1,9 +1,27 @@
 # Industrial Data Platform — v2
 
-> Open source stack die AVEVA Connect (€40K/jaar) vervangt voor system integrators. Draait op een VPS van €8/maand.
+> **The missing AI data layer — open source reference implementation.** Connects PLC, SCADA, MES, and ERP into one semantic layer (ISA-95 ontology + event-driven architecture) so raw machine data becomes AI-ready information. Runs on an €8/mo VPS as proof that the architecture matters more than the price tag — no vendor lock-in.
+
+> **Hero:** *"You're missing one layer — and AI can't fix what it can't understand."*  Voor de volledige pitch (EN/NL, lange versie) en programma-naam **Build Your AI Data Layer**, zie root [`CLAUDE.md`](../../CLAUDE.md) → **Positionering — The Missing Data Layer**.
+
+> **Rol binnen TechFlow-OS:** IDP-OS = de **referentie-implementatie** van de missing data layer. Wat hier draait is het bewijs achter alle posts, video's en het **Build Your AI Data Layer** programma. De 7-stappen build (Connect → Condition → Model → Store → Orchestrate → Visualize → Distribute) is op deze stack gebaseerd; elke stap heeft een module in het programma.
 
 **Live op:** techflow24.com  
 **Stack:** Traefik + MonsterMQ + MongoDB + Next.js webapp + OPC-UA Simulator + Portainer
+
+---
+
+## De 7-stappen build (curriculum-anker voor Build Your AI Data Layer)
+
+| Stap | Wat | IDP-OS component |
+|------|-----|-------------------|
+| 1. Connect | OPC-UA / MQTT bron aansluiten | OPC-UA simulator → MonsterMQ |
+| 2. Condition | Cleansing, throttling, deadbands | MonsterMQ flow engine |
+| 3. Model | ISA-95 ontologie / semantische topics — **het hart van de boodschap** | Hierarchical MQTT topics + UNS pattern |
+| 4. Store | Time-series + structured archive | MongoDB (collection `plc_data`) |
+| 5. Orchestrate | Event-driven workflows (productie orders, alarmen, shift reports) | N8N (workflow only — niet voor data routing) |
+| 6. Visualize | Dashboards, ad-hoc queries | Grafana + Next.js webapp |
+| 7. Distribute | API's voor downstream AI / BI / apps | FastAPI REST + GraphQL |
 
 ---
 
@@ -102,16 +120,19 @@ Eenmaal geregistreerd via `init-opcua` publiceert MonsterMQ:
 
 ---
 
-## Cursus integratie
+## Programma integratie — Build Your AI Data Layer
 
-Stack is de technische basis voor de Industrial Data Platform cursus:
-- Module 1: OPC-UA connectiviteit (asyncua simulator → MonsterMQ)
-- Module 2: MQTT architectuur (topics, retained, QoS)
-- Module 3: MongoDB data opslag (archive, aggregation queries)
-- Module 4: Next.js dashboard bouwen (MongoDB driver, polling)
-- Module 5: Edge computing (MonsterMQ op Raspberry Pi, bridge naar VPS)
+Deze stack is de technische basis voor het online programma **Build Your AI Data Layer** (TP11 — eindproduct van de Priestley funnel). Curriculum volgt de 7-stappen build hierboven; modules per stap:
 
-**Demo data:** Automatisch via OPC-UA simulator container
+- **Modules 1–2 — Connect & Condition:** OPC-UA connectiviteit (asyncua simulator → MonsterMQ), MQTT topics/QoS, cleansing
+- **Module 3 — Model (ISA-95 / UNS):** semantische topic-hiërarchie, ontologie, namespace ontwerp — het hart van de data layer
+- **Module 4 — Store:** MongoDB archive, aggregation queries, retention strategy
+- **Module 5 — Orchestrate:** event-driven workflows met N8N (niet voor data routing — dat doet MonsterMQ)
+- **Module 6 — Visualize:** Grafana time-series + Next.js dashboard bouwen
+- **Module 7 — Distribute:** FastAPI REST + GraphQL voor downstream AI / BI consumers
+- **Capstone:** edge-deployment (MonsterMQ op Raspberry Pi, bridge naar VPS) + één AI use case die werkt omdat de layer in place is
+
+**Demo data:** Automatisch via OPC-UA simulator container — engineers reproduceren elke module op hun eigen €8/mo VPS.
 
 ---
 
