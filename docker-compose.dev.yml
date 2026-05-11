@@ -1,0 +1,22 @@
+# ============================================================
+# docker-compose.dev.yml — local dev override
+#
+# Vervangt de productie image `rocworks/monstermq:latest` door
+# een lokale build vanuit de fork bij ./monster-mq-src/.
+#
+# Gebruik:
+#   docker compose -f docker-compose.v3.yml -f docker-compose.dev.yml up --build
+#
+# Eerste keer: build duurt ~3-5 min (Maven download + compile).
+# Daarna: alleen layers die wijzigden worden opnieuw gebouwd.
+#
+# Productie (techflow24.com) gebruikt deze file NIET — alleen v3.yml.
+# ============================================================
+
+services:
+  monstermq:
+    image: cftservices/monstermq:dev
+    build:
+      context: ./monster-mq-src
+      dockerfile: Dockerfile.dev
+    pull_policy: never
