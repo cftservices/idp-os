@@ -1,0 +1,82 @@
+# BakeryWorks Utrecht — scenario overlay
+#
+# Usage:
+#   # Run alongside main IDP stack (beverage plant blijft op poort 80/443, bakery op 8090):
+#   docker compose -f ../../docker-compose.yml -f docker-compose.bakery.yml up -d
+#
+#   # OR run ONLY bakery scenario (requires main stack services running):
+#   docker compose -f docker-compose.bakery.yml up -d bakery-opcua-sim bakery-grafana-import
+#
+# Wat dit toevoegt:
+#  - bakery-opcua-sim: Python asyncua simulator die de BakeryWorks tags genereert (oven zones, proofer, mixer, CIP, etc).
+#  - bakery-init-monstermq: registreert OPC-UA topics in MonsterMQ + provisioning N8N workflows.
+#  - bakery-grafana-import: importeert het bakery-overview-dashboard.json bij startup.
+
+services:
+  bakery-opcua-sim:
+    image: techflow/idp-opcua-sim:bakery
+    build:
+      context: ./opcua-simulator
+      dockerfile: Dockerfile
+    container_name: bakery-opcua-sim
+    environment:
+      - SCENARIO=bakery-works-utrecht
+      - FACTORY_MODEL=/app/factory-model/isa95-bakery.json
+      - OPCUA_PORT=4841
+    volumes:
+      - ./factory-model:/app/factory-model:ro
+    ports:
+      - "4841:4841"
+    networks:
+      - idp-net
+    restart: unless-stopped
+
+  bakery-init-monstermq:
+    image: curlimages/curl:latest
+    container_name: bakery-init-monstermq
+    depends_on:
+      - bakery-opcua-sim
+    volumes:
+      - ./monstermq-init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    networks:
+      - idp-net
+    restart: "no"
+
+  bakery-n8n-import:
+    image: n8nio/n8n:latest
+    container_name: bakery-n8n-import
+    depends_on:
+      - bakery-init-monstermq
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+    volumes:
+      - ./n8n-workflows:/import:ro
+    entrypoint: ["sh", "-c", "n8n import:workflow --input=/import --separate && exit 0"]
+    networks:
+      - idp-net
+    restart: "no"
+
+  bakery-grafana-import:
+    image: curlimages/curl:latest
+    container_name: bakery-grafana-import
+    volumes:
+      - ./grafana:/dashboards:ro
+    entrypoint: |
+      /bin/sh -c "
+      sleep 5;
+      for f in /dashboards/*.json; do
+        curl -X POST -H 'Content-Type: application/json' \
+          -d @$$f \
+          http://${GRAFANA_USER:-admin}:${GRAFANA_PASS:-admin}@grafana:3000/api/dashboards/db || true;
+      done;
+      exit 0
+      "
+    networks:
+      - idp-net
+    restart: "no"
+
+networks:
+  idp-net:
+    external: true
+    name: idp_default

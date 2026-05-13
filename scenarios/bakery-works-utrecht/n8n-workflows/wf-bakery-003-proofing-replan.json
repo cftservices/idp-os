@@ -1,0 +1,105 @@
+{
+  "name": "WF-BAKERY-003 Proofing-overschrijding → planner herplanning",
+  "_meta": {
+    "solve_event": "SOLVE-C",
+    "archetype": "planning-decision",
+    "scenario": "bakery-works-utrecht",
+    "documentation": "../factory-model/isa95-bakery.json#solve_events",
+    "purpose": "End-of-shift cron: detecteer of >3 batches deze week dezelfde lijn met proofing dwell > 70 min. Lever planner een gestructureerde aanbeveling voor productie-volgorde week ahead."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 22 * * 1-6" }] },
+        "_comment": "End of shift 3 = 22:00 UTC, ma-za"
+      },
+      "id": "node-cron",
+      "name": "Cron — End of shift 3",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "aggregate",
+        "collection": "plc_data",
+        "aggregationPipeline": "=[{ \"$match\": { \"topic\": { \"$regex\": \"bakery-works-utrecht/line-./proofing/proofer-01/dwell-time-actual$\" }, \"value\": { \"$gt\": 70 }, \"timestamp\": { \"$gte\": { \"$dateSubtract\": { \"startDate\": \"$$NOW\", \"unit\": \"day\", \"amount\": 7 } } } } }, { \"$group\": { \"_id\": { \"line\": \"$topic_line\", \"day\": { \"$dateToString\": { \"format\": \"%Y-%m-%d\", \"date\": \"$timestamp\" } } }, \"count\": { \"$sum\": 1 }, \"avg_dwell\": { \"$avg\": \"$value\" }, \"max_dwell\": { \"$max\": \"$value\" } } }, { \"$group\": { \"_id\": \"$_id.line\", \"days_with_overshoot\": { \"$sum\": 1 }, \"total_overshoots\": { \"$sum\": \"$count\" }, \"avg_dwell_overshoots\": { \"$avg\": \"$avg_dwell\" }, \"max_dwell_overshoots\": { \"$max\": \"$max_dwell\" } } }]"
+      },
+      "id": "node-agg",
+      "name": "MongoDB — Aggregate proofing overshoots (7d)",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Filter on lines with >3 overshoots\nconst items = $input.all().map(i => i.json);\nconst flagged = items.filter(x => x.total_overshoots > 3);\n\nif (flagged.length === 0) {\n  return [{ json: { trigger: false, reason: 'No line exceeded 3 overshoots in last 7 days' } }];\n}\n\nreturn flagged.map(line => ({\n  json: {\n    trigger: true,\n    solve_id: 'SOLVE-C',\n    line: line._id,\n    days_with_overshoot: line.days_with_overshoot,\n    total_overshoots: line.total_overshoots,\n    avg_dwell_overshoots: Math.round(line.avg_dwell_overshoots * 10) / 10,\n    max_dwell_overshoots: Math.round(line.max_dwell_overshoots * 10) / 10,\n    recommendation: line.total_overshoots > 10\n      ? 'Heroverweeg recipe-volgorde en bandsnelheid setpoints. Inspectie van proofer-01.'\n      : 'Plan kleinere proofing-batches komende week. Monitor temperatuur/vocht stabiliteit.'\n  }\n}));"
+      },
+      "id": "node-filter",
+      "name": "Filter — >3 overshoots per lijn",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": { "conditions": { "boolean": [{ "value1": "={{ $json.trigger }}", "value2": true }] } },
+      "id": "node-check",
+      "name": "Trigger planner?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://erp:8080/api/planning/recommendations",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={ \"source\": \"WF-BAKERY-003\", \"solve_id\": \"SOLVE-C\", \"line\": \"{{ $json.line }}\", \"summary\": \"{{ $json.line }}: {{ $json.total_overshoots }} proofing-overshoots in 7 dagen (avg {{ $json.avg_dwell_overshoots }} min, max {{ $json.max_dwell_overshoots }} min)\", \"recommendation\": \"{{ $json.recommendation }}\", \"deeplink_dashboard\": \"https://grafana.bakery-works-utrecht.local/d/proofing/proofer-trends?var-line={{ $json.line }}\" }"
+      },
+      "id": "node-erp",
+      "name": "ERP — Planner aanbeveling toevoegen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "bakery-bot@bakery-works-utrecht.local",
+        "toEmail": "planner@bakery-works-utrecht.local",
+        "subject": "Proofing herplan-suggestie voor {{ $json.line }} ({{ $now.format('YYYY-MM-DD') }})",
+        "text": "=Hi planner,\n\nDeze week zijn er {{ $json.total_overshoots }} proofing-overschrijdingen geregistreerd op {{ $json.line }} (>70 min dwell).\n\nDetails:\n- Dagen met overschrijding: {{ $json.days_with_overshoot }}\n- Gemiddelde dwell tijdens overschrijdingen: {{ $json.avg_dwell_overshoots }} min\n- Max dwell: {{ $json.max_dwell_overshoots }} min\n\nAanbeveling: {{ $json.recommendation }}\n\nDashboard: https://grafana.bakery-works-utrecht.local/d/proofing/proofer-trends?var-line={{ $json.line }}\nDeze aanbeveling staat ook in het ERP planning-systeem (Recommendations tab).\n\nReview-window: 30 min voor je morgen-ochtend planning.\n\n— BakeryWorks Data Layer"
+      },
+      "id": "node-email",
+      "name": "Email — Planner",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "bakery_events",
+        "fields": "=solve_id,line,days_with_overshoot,total_overshoots,avg_dwell_overshoots,max_dwell_overshoots,recommendation,recommendation_status,timestamp",
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "MongoDB — Log planner recommendation",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Cron — End of shift 3": { "main": [[{ "node": "MongoDB — Aggregate proofing overshoots (7d)", "type": "main", "index": 0 }]] },
+    "MongoDB — Aggregate proofing overshoots (7d)": { "main": [[{ "node": "Filter — >3 overshoots per lijn", "type": "main", "index": 0 }]] },
+    "Filter — >3 overshoots per lijn": { "main": [[{ "node": "Trigger planner?", "type": "main", "index": 0 }]] },
+    "Trigger planner?": {
+      "main": [[
+        { "node": "ERP — Planner aanbeveling toevoegen", "type": "main", "index": 0 },
+        { "node": "Email — Planner", "type": "main", "index": 0 }
+      ], []]
+    },
+    "ERP — Planner aanbeveling toevoegen": { "main": [[{ "node": "MongoDB — Log planner recommendation", "type": "main", "index": 0 }]] },
+    "Email — Planner": { "main": [[{ "node": "MongoDB — Log planner recommendation", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "standard": "ISA-95 / IEC 62264",
+  "scenario": "BakeryWorks Mini — simplified demo for pilot webinar (45 min)",
+  "description": "Vereenvoudigde versie van BakeryWorks Utrecht. 1 lijn, 3 stations, 1 Solve-event. Doel: in 3 min uitleggen aan iemand die NIETS van bakkerijen weet, dan 7-stappen build doorlopen in 20 min. De volledige isa95-bakery.json blijft als Foundation cohort week 4-7 materiaal.",
+  "namespace_convention": "bakery-mini/{station}/{tag}",
+  "design_principle": "Maximaal 3 stations, maximaal 8 tags, exact 1 Solve-event. Geen allergenen, geen line-B, geen CIP, geen planner-decision.",
+  "enterprise": {
+    "id": "ENT-BWM",
+    "name": "BakeryWorks Mini",
+    "description": "Stelt voor: één productielijn van witbrood. Drie machines op een rij: mixer → tunnel-oven → verpakkingslijn. Eén Solve-event als demo.",
+    "sites": [
+      {
+        "id": "SITE-MINI",
+        "name": "Demo Plant",
+        "location": { "city": "Utrecht", "country": "NL", "timezone": "Europe/Amsterdam" },
+        "areas": [
+          {
+            "id": "AREA-LINE",
+            "name": "Productielijn — witbrood",
+            "description": "Enkele lijn, drie stations achter elkaar.",
+            "work_centers": [
+              {
+                "id": "WC-MIX",
+                "name": "Spiraal-mixer",
+                "description": "Mengt 200kg deeg per batch. Genereert een batch-ID die door de rest van de lijn gevolgd wordt.",
+                "plc": "PLC-MIX",
+                "mqtt_namespace": "bakery-mini/mixer",
+                "process_type": "batch",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "BI-MIX", "display_name": "Batch ID", "mqtt_topic": "bakery-mini/mixer/batch-id", "engineering_unit": "string", "_format": "B-YYYY-NNNN", "_note": "Voorbeeld: B-2026-1142" },
+                  { "id": "RI-MIX", "display_name": "Recipe", "mqtt_topic": "bakery-mini/mixer/recipe", "engineering_unit": "string", "_values": ["white-loaf-std", "white-loaf-large"] }
+                ]
+              },
+              {
+                "id": "WC-OVEN",
+                "name": "Tunnel-oven",
+                "description": "Bakt het brood. 25 min verblijfstijd. 4 temperatuur-zones (240/220/200/180°C). Zone 3 is de critical zone — als die te laag wordt, is het brood niet doorbakken en moet de batch worden afgekeurd.",
+                "plc": "PLC-OVEN",
+                "mqtt_namespace": "bakery-mini/oven",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "TI-OVEN-Z3", "display_name": "Zone 3 temperatuur", "mqtt_topic": "bakery-mini/oven/zone-3/temperature", "engineering_unit": "°C", "normal_range": {"min": 195, "max": 205}, "setpoint": 200, "alarm_low": 195, "_critical": true, "_used_for_solve": "MAIN-SOLVE" },
+                  { "id": "PI-OVEN-Z3", "display_name": "Product aanwezig in zone 3", "mqtt_topic": "bakery-mini/oven/zone-3/product-present", "engineering_unit": "bool", "_used_for_solve": "MAIN-SOLVE" },
+                  { "id": "VI-OVEN", "display_name": "Bandsnelheid", "mqtt_topic": "bakery-mini/oven/belt-speed", "engineering_unit": "m/min", "normal_range": {"min": 0.65, "max": 0.75} }
+                ]
+              },
+              {
+                "id": "WC-PACK",
+                "name": "Verpakkingslijn",
+                "description": "Snijdt het brood en verpakt het. Output count = brood per minuut.",
+                "plc": "PLC-PACK",
+                "mqtt_namespace": "bakery-mini/packaging",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "CI-PACK", "display_name": "Output per min", "mqtt_topic": "bakery-mini/packaging/output-rate", "engineering_unit": "loaves/min", "normal_range": {"min": 80, "max": 120} }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "solve_event": {
+    "id": "MAIN-SOLVE",
+    "name": "Oven-zone-3 temperatuur drift",
+    "archetype": "operator-action",
+    "user_story": "Ik wil de shift-leider in staat stellen om de oven-temperatuur correctie te valideren binnen 4 minuten na: tunnel-oven zone 3 daalt onder 195°C voor >30 sec terwijl er product in zone 3 is.",
+    "trigger": "oven/zone-3/temperature < 195°C AND oven/zone-3/product-present = true FOR 30s",
+    "owner": "dienstdoende shift-leider",
+    "channel": "Microsoft Teams push",
+    "time_window": "4 min — daarna escalatie plant-manager",
+    "auto_correction_available": true,
+    "outcome_metric": "Batches gered per kwartaal × €gemiddelde batch-waarde",
+    "five_criteria_check": {
+      "closed_loop": "Shift-leider klikt approve/escalate/reject in Teams → response landt in MongoDB",
+      "owner_identified": "Dienstdoende shift-leider uit ERP shift-rotatie (niet algemeen alarm)",
+      "time_bound": "4 min response, daarna automatisch escalatie",
+      "measurable_outcome": "Batches gered per kwartaal in €",
+      "traceable_to_source": "Action-log → MES batch-record → MQTT-event → zone-3 PLC tag"
+    }
+  },
+  "demo_walkthrough_3min": [
+    "Dit is BakeryWorks. Drie machines: mixer maakt deeg, oven bakt het, verpakkingslijn doet 't in plastic.",
+    "5000 broden per dag. Eén lijn. Witbrood.",
+    "Eén probleem die we vandaag oplossen: oven zone 3 dropt soms onder 195°C terwijl er brood inzit. Brood niet doorbakken → batch afgekeurd → verlies €X.",
+    "We willen de shift-leider binnen 4 min een Teams-push krijgen met: huidige temp, welke batch, en drie knoppen (approve auto-correctie, escaleer, reject).",
+    "Dat gaan we bouwen — in 7 stappen, in 20 min, op €8/mnd open-source stack."
+  ],
+  "demo_walkthrough_per_step": {
+    "1_connect": "Eén tag: bakery-mini/oven/zone-3/temperature uit de Siemens PLC via OPC-UA naar MonsterMQ.",
+    "2_condition": "Smoothing 10-sec rolling average + dedup op delta > 0.5°C.",
+    "3_model": "Topic-naam in UNS: bakery-mini/oven/zone-3/temperature. Een mens snapt het. Een AI-agent ook.",
+    "4_store": "MongoDB collection plc_data — elke sample met topic + value + timestamp + batch-id.",
+    "5_orchestrate": "N8N: trigger op temp < 195 AND product-present = true FOR 30s → compose event + Teams push.",
+    "6_visualize": "Grafana paneel: zone-3 temp met threshold-line op 195°C. Solve-events feed onderaan.",
+    "7_distribute": "FastAPI endpoint /api/bakery-events?since=24h → consumeerbaar door mobile app, BI-tool, AI-agent.",
+    "solve_test": "Vijf criteria — alle vinkjes. Werkend Solve-event. De rest van de fabriek volgt hetzelfde patroon."
+  },
+  "scale_up_pointer": "Voor de Foundation cohort (week 4-7): zie isa95-bakery.json voor de volledige multi-line versie met allergeen-CIP, planner-decisions, en 3 Solve-archetypen."
+}

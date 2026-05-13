@@ -1,0 +1,202 @@
+{
+  "schema_version": "1.0",
+  "standard": "ISA-95 / IEC 62264",
+  "scenario": "BakeryWorks Utrecht — industrial bakery (5000 loaves/day, 2 lines)",
+  "description": "Second canonical demo plant for the Build Your AI Data Layer program. Industrial bakery with mixed batch + continuous processes — proves the architecture is reusable across industries. Companion to the beverage/sauce plant on techflow24.com.",
+  "namespace_convention": "Walker Reynolds UNS — topic = bakery-works-utrecht/line/area/equipment/[zone]/tag",
+  "enterprise": {
+    "id": "ENT-BWU",
+    "name": "BakeryWorks Utrecht BV",
+    "description": "Mid-size industrial bakery producing 5000 loaves/day across 2 lines (60% white bread on line-a, 40% wholegrain/specialty on line-b). 24/6 operation, Saturday CIP day. B2B retail customer base.",
+    "sites": [
+      {
+        "id": "SITE-UTR",
+        "name": "Plant Utrecht",
+        "location": { "city": "Utrecht", "country": "NL", "timezone": "Europe/Amsterdam" },
+        "areas": [
+          {
+            "id": "AREA-INGRED",
+            "name": "Grondstof-ontvangst",
+            "description": "Meel-silo's, gist-koelcel, water, zout, suiker, vetten. Receiving + buffering grondstoffen voor batch-dosering.",
+            "work_centers": [
+              {
+                "id": "WC-SILO-01",
+                "name": "Meel-silo's",
+                "description": "4 silo's voor verschillende meelsoorten (tarwe, volkoren, rogge, glutenvrij). Niveau + temperatuur per silo. Glutenvrij is fysiek gescheiden ivm allergenenbeleid.",
+                "plc": "PLC-SILO",
+                "mqtt_namespace": "bakery-works-utrecht/shared/silos",
+                "process_type": "continuous",
+                "sampling_interval_ms": 5000,
+                "tags": [
+                  { "id": "LI-FLOUR-01", "display_name": "Tarwemeel niveau", "mqtt_topic": "bakery-works-utrecht/shared/silos/flour-wheat/level", "engineering_unit": "%", "normal_range": {"min": 10, "max": 95}, "alarm_low": 10 },
+                  { "id": "TI-FLOUR-01", "display_name": "Tarwemeel temperatuur", "mqtt_topic": "bakery-works-utrecht/shared/silos/flour-wheat/temperature", "engineering_unit": "°C", "normal_range": {"min": 12, "max": 22}, "alarm_high": 25 },
+                  { "id": "LI-FLOUR-GF", "display_name": "Glutenvrij meel niveau", "mqtt_topic": "bakery-works-utrecht/shared/silos/flour-glutenfree/level", "engineering_unit": "%", "normal_range": {"min": 10, "max": 95}, "_allergen": "glutenfree" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-LINE-A",
+            "name": "Productielijn A — Witbrood",
+            "description": "Hoofdlijn witbrood. Volledig geautomatiseerd batch-mixing + continue baking/cooling/packaging.",
+            "work_centers": [
+              {
+                "id": "WC-MIX-A",
+                "name": "Spiraal-mixer line-A",
+                "description": "Batch-mixer 200kg per batch. Receptuur uit ERP (SAP B1). Knedet 8-12 min afhankelijk van recipe.",
+                "plc": "PLC-MIX-A",
+                "mqtt_namespace": "bakery-works-utrecht/line-a/mixing/mixer-01",
+                "process_type": "batch",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "FI-DOUGH-A", "display_name": "Mixer load", "mqtt_topic": "bakery-works-utrecht/line-a/mixing/mixer-01/load", "engineering_unit": "kg", "normal_range": {"min": 0, "max": 220} },
+                  { "id": "EI-DOUGH-A", "display_name": "Mixer energie", "mqtt_topic": "bakery-works-utrecht/line-a/mixing/mixer-01/power", "engineering_unit": "kW", "normal_range": {"min": 0, "max": 18}, "alarm_high": 20 },
+                  { "id": "TI-DOUGH-A", "display_name": "Deeg temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/mixing/mixer-01/dough-temp", "engineering_unit": "°C", "normal_range": {"min": 22, "max": 28}, "alarm_high": 32 },
+                  { "id": "RI-DOUGH-A", "display_name": "Recipe ID actief", "mqtt_topic": "bakery-works-utrecht/line-a/mixing/mixer-01/recipe-id", "engineering_unit": "id", "_links_to": "ERP-recipes" },
+                  { "id": "BI-DOUGH-A", "display_name": "Batch ID actief", "mqtt_topic": "bakery-works-utrecht/line-a/mixing/mixer-01/batch-id", "engineering_unit": "string", "_format": "B-YYYY-NNNN" }
+                ]
+              },
+              {
+                "id": "WC-FERM-A",
+                "name": "Bulk-fermentatie klimaatkamer",
+                "description": "Temperatuur + vochtigheid gecontroleerd. 45-90 min rusttijd voor het deeg.",
+                "plc": "PLC-FERM-A",
+                "mqtt_namespace": "bakery-works-utrecht/line-a/bulk-ferm/chamber-01",
+                "process_type": "batch",
+                "sampling_interval_ms": 2000,
+                "tags": [
+                  { "id": "TI-FERM-A", "display_name": "Kamer temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/bulk-ferm/chamber-01/temperature", "engineering_unit": "°C", "normal_range": {"min": 26, "max": 30}, "setpoint": 28 },
+                  { "id": "HI-FERM-A", "display_name": "Kamer vochtigheid", "mqtt_topic": "bakery-works-utrecht/line-a/bulk-ferm/chamber-01/humidity", "engineering_unit": "%RH", "normal_range": {"min": 70, "max": 80}, "setpoint": 75 }
+                ]
+              },
+              {
+                "id": "WC-PROOF-A",
+                "name": "Eindrijs (proofer) tunnel",
+                "description": "60-min tunnel voor eindrijs. Klimaat-gecontroleerd. Bandsnelheid bepaalt verblijfstijd.",
+                "plc": "PLC-PROOF-A",
+                "mqtt_namespace": "bakery-works-utrecht/line-a/proofing/proofer-01",
+                "process_type": "continuous",
+                "sampling_interval_ms": 2000,
+                "tags": [
+                  { "id": "TI-PROOF-A", "display_name": "Proofer temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/proofing/proofer-01/temperature", "engineering_unit": "°C", "normal_range": {"min": 33, "max": 37}, "setpoint": 35 },
+                  { "id": "HI-PROOF-A", "display_name": "Proofer vochtigheid", "mqtt_topic": "bakery-works-utrecht/line-a/proofing/proofer-01/humidity", "engineering_unit": "%RH", "normal_range": {"min": 82, "max": 88}, "setpoint": 85 },
+                  { "id": "VI-PROOF-A", "display_name": "Bandsnelheid", "mqtt_topic": "bakery-works-utrecht/line-a/proofing/proofer-01/belt-speed", "engineering_unit": "m/min", "normal_range": {"min": 0.15, "max": 0.25} },
+                  { "id": "DI-PROOF-A", "display_name": "Gemeten verblijfstijd huidige batch", "mqtt_topic": "bakery-works-utrecht/line-a/proofing/proofer-01/dwell-time-actual", "engineering_unit": "min", "normal_range": {"min": 55, "max": 65}, "alarm_high": 75 }
+                ]
+              },
+              {
+                "id": "WC-OVEN-A",
+                "name": "Tunnel-oven (4 zones)",
+                "description": "Hoofd-bakproces. 4 temperatuur-zones (240/220/200/180°C). 25 min totale verblijfstijd. DCS in Siemens TIA + WinCC.",
+                "plc": "DCS-OVEN-A",
+                "mqtt_namespace": "bakery-works-utrecht/line-a/baking/tunnel-oven-01",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "TI-OVEN-A-Z1", "display_name": "Oven zone 1 temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-1/temperature", "engineering_unit": "°C", "normal_range": {"min": 235, "max": 245}, "setpoint": 240, "alarm_low": 230 },
+                  { "id": "TI-OVEN-A-Z2", "display_name": "Oven zone 2 temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-2/temperature", "engineering_unit": "°C", "normal_range": {"min": 215, "max": 225}, "setpoint": 220, "alarm_low": 210 },
+                  { "id": "TI-OVEN-A-Z3", "display_name": "Oven zone 3 temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-3/temperature", "engineering_unit": "°C", "normal_range": {"min": 195, "max": 205}, "setpoint": 200, "alarm_low": 190, "_critical_zone": true },
+                  { "id": "TI-OVEN-A-Z4", "display_name": "Oven zone 4 temperatuur", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-4/temperature", "engineering_unit": "°C", "normal_range": {"min": 175, "max": 185}, "setpoint": 180, "alarm_low": 170 },
+                  { "id": "VI-OVEN-A", "display_name": "Oven bandsnelheid", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/belt-speed", "engineering_unit": "m/min", "normal_range": {"min": 0.65, "max": 0.75} },
+                  { "id": "PI-OVEN-A-Z3", "display_name": "Product aanwezig in zone 3", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-3/product-present", "engineering_unit": "bool", "_used_for_solve": "wf-bakery-001" },
+                  { "id": "EI-OVEN-A", "display_name": "Oven energieverbruik", "mqtt_topic": "bakery-works-utrecht/line-a/baking/tunnel-oven-01/power", "engineering_unit": "kW", "normal_range": {"min": 80, "max": 140} }
+                ]
+              },
+              {
+                "id": "WC-PACK-A",
+                "name": "Snijden + verpakken line-A",
+                "description": "Snijmachine + verpakkingslijn. Best-before-date sticker printer. Homebrew QA tablet voor visuele check.",
+                "plc": "PLC-PACK-A",
+                "mqtt_namespace": "bakery-works-utrecht/line-a/packaging",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "CI-PACK-A", "display_name": "Output count per min", "mqtt_topic": "bakery-works-utrecht/line-a/packaging/slicer-01/output-rate", "engineering_unit": "loaves/min", "normal_range": {"min": 80, "max": 120} },
+                  { "id": "RI-PACK-A", "display_name": "Recipe ID nu verpakt", "mqtt_topic": "bakery-works-utrecht/line-a/packaging/wrapper-01/recipe-id", "engineering_unit": "id", "_links_to": "ERP-recipes" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-LINE-B",
+            "name": "Productielijn B — Volkoren/specialty",
+            "description": "Tweede lijn voor volkoren + specialty (incl. glutenvrij). Zelfde structuur als line-A maar met allergeen-protocol. CIP-cyclus tussen reguliere en glutenvrije batches.",
+            "_note": "Identieke topic-structuur als line-a, met `line-b` als segment. Voor leesbaarheid hier ingekort — in volle model alle work_centers identiek aan line-a.",
+            "work_centers": [
+              {
+                "id": "WC-CIP-B",
+                "name": "CIP-station line-B",
+                "description": "Clean-In-Place voor allergeen-switch (regulier → glutenvrij of vice versa). Drie-fase: water, base, water. Status moet 'completed' zijn voor allergeen-switch batch mag starten — guardrail Solve.",
+                "plc": "PLC-CIP-B",
+                "mqtt_namespace": "bakery-works-utrecht/line-b/cip/station-01",
+                "process_type": "batch",
+                "sampling_interval_ms": 2000,
+                "tags": [
+                  { "id": "SI-CIP-B", "display_name": "CIP status", "mqtt_topic": "bakery-works-utrecht/line-b/cip/station-01/status", "engineering_unit": "enum", "_values": ["idle", "phase-1-water", "phase-2-base", "phase-3-water", "completed", "failed"], "_used_for_solve": "wf-bakery-002" },
+                  { "id": "TI-CIP-B", "display_name": "CIP cycle completion timestamp", "mqtt_topic": "bakery-works-utrecht/line-b/cip/station-01/last-completed", "engineering_unit": "ISO8601" },
+                  { "id": "AI-CIP-B", "display_name": "Allergeen-mode actief", "mqtt_topic": "bakery-works-utrecht/line-b/cip/station-01/allergen-mode", "engineering_unit": "enum", "_values": ["regular", "glutenfree", "in-transition"] }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-ENTERPRISE",
+            "name": "Enterprise integraties",
+            "description": "ERP (SAP B1), MES (AVEVA) en planning-systeem koppelingen. Layer 4 ISA-95.",
+            "work_centers": [
+              {
+                "id": "WC-ERP",
+                "name": "SAP B1 — recepten + bestellingen",
+                "description": "Recepten library + customer orders + voorraad. Sync via REST API.",
+                "mqtt_namespace": "bakery-works-utrecht/enterprise/erp",
+                "tags": [
+                  { "id": "OI-ORD", "display_name": "Open orders", "mqtt_topic": "bakery-works-utrecht/enterprise/erp/open-orders/count", "engineering_unit": "count" },
+                  { "id": "OI-DUE", "display_name": "Orders due binnen 24u", "mqtt_topic": "bakery-works-utrecht/enterprise/erp/orders-due-24h/count", "engineering_unit": "count", "_used_for_solve": "wf-bakery-003" }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "solve_events": [
+    {
+      "id": "SOLVE-A",
+      "name": "Oven-zone-3 temperatuur drift",
+      "archetype": "operator-action",
+      "trigger": "tunnel-oven-01/zone-3/temperature < 195°C AND zone-3/product-present = true FOR 30s",
+      "owner": "dienstdoende shift-leider line-A",
+      "owner_lookup": "ERP shift-rotatie",
+      "channel": "Microsoft Teams push (Bakery-Ops kanaal)",
+      "time_window": "4 min response, daarna escalatie plant-manager",
+      "auto_correction_available": true,
+      "outcome_metric": "batches gered per kwartaal × €gemiddelde batch-waarde",
+      "implementing_workflow": "wf-bakery-001-oven-drift.json"
+    },
+    {
+      "id": "SOLVE-B",
+      "name": "Allergeen-switch CIP-verificatie (guardrail)",
+      "archetype": "automated-action",
+      "trigger": "nieuwe batch met allergen-mode != huidige allergen-mode TENZIJ CIP status = completed within laatste 60 min",
+      "owner": "PLC-MIX-B (geautomatiseerd) + QA als fallback",
+      "channel": "PLC inhibit signal + log to MES + alert to QA",
+      "time_window": "0 sec — guardrail blokkeert start",
+      "auto_correction_available": false,
+      "outcome_metric": "0 false-positives op allergenen-traceability per kwartaal",
+      "implementing_workflow": "wf-bakery-002-allergen-cip.json"
+    },
+    {
+      "id": "SOLVE-C",
+      "name": "Productie-volgorde herplanning bij proofing-overschrijdingen",
+      "archetype": "planning-decision",
+      "trigger": "end-of-shift cron AND >3 batches deze week op zelfde lijn met dwell-time-actual > 70 min",
+      "owner": "productie-planner",
+      "channel": "email summary + planning-tool deeplink",
+      "time_window": "30 min review-window",
+      "auto_correction_available": false,
+      "outcome_metric": "Reduction in batch-rework + on-time delivery rate",
+      "implementing_workflow": "wf-bakery-003-proofing-replan.json"
+    }
+  ]
+}

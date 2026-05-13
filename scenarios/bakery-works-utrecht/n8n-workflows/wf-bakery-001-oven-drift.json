@@ -1,0 +1,115 @@
+{
+  "name": "WF-BAKERY-001 Oven Zone-3 Temperature Drift",
+  "_meta": {
+    "solve_event": "SOLVE-A",
+    "archetype": "operator-action",
+    "scenario": "bakery-works-utrecht",
+    "documentation": "../factory-model/isa95-bakery.json#solve_events"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bakery/oven-drift",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook — MonsterMQ Oven Z3 Drift",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "_comment": "MonsterMQ Flow rule: on topic bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-3/temperature < 195 AND zone-3/product-present = true FOR 30s → HTTP POST"
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "plc_data",
+        "query": "={ \"topic\": \"bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-3/temperature\" }",
+        "limit": 300,
+        "sort": "={ \"timestamp\": -1 }"
+      },
+      "id": "node-trend",
+      "name": "MongoDB — Trend laatste 5 min",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "plc_data",
+        "query": "={ \"topic\": \"bakery-works-utrecht/line-a/mixing/mixer-01/batch-id\" }",
+        "limit": 1,
+        "sort": "={ \"timestamp\": -1 }"
+      },
+      "id": "node-batch",
+      "name": "MongoDB — Huidige Batch ID",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://erp:8080/api/shifts/current",
+        "options": {}
+      },
+      "id": "node-shift",
+      "name": "ERP — Dienstdoende shift-leider",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Compose Solve-event context\nconst trend = $input.first().json;\nconst batch = $('MongoDB — Huidige Batch ID').first().json;\nconst shift = $('ERP — Dienstdoende shift-leider').first().json;\n\nconst values = trend.map(t => t.value).slice(0, 30);\nconst minTemp = Math.min(...values);\nconst dropDuration = values.filter(v => v < 195).length;\n\nreturn {\n  json: {\n    solve_id: 'SOLVE-A',\n    batch_id: batch.value,\n    current_temp: values[0],\n    min_temp_5min: minTemp,\n    drift_duration_sec: dropDuration,\n    shift_leader: shift.name,\n    shift_leader_teams_id: shift.teams_id,\n    spec_window: '195-205°C',\n    ack_deadline: new Date(Date.now() + 4*60*1000).toISOString(),\n    auto_correction: {\n      available: true,\n      action: 'increase_zone3_setpoint_by_5C',\n      reversible: true\n    }\n  }\n};"
+      },
+      "id": "node-compose",
+      "name": "Compose Solve-event payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://teams.webhook.example/bakery-ops",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={ \"@type\": \"MessageCard\", \"summary\": \"Oven Z3 drift SOLVE-A\", \"themeColor\": \"FFA500\", \"sections\": [ { \"activityTitle\": \"⚠ Oven Zone 3 drift — batch {{ $json.batch_id }}\", \"facts\": [ {\"name\":\"Huidige temp\",\"value\":\"{{ $json.current_temp }}°C\"}, {\"name\":\"Min 5min\",\"value\":\"{{ $json.min_temp_5min }}°C\"}, {\"name\":\"Spec\",\"value\":\"{{ $json.spec_window }}\"}, {\"name\":\"Ack voor\",\"value\":\"{{ $json.ack_deadline }}\"} ] } ], \"potentialAction\": [ { \"@type\": \"HttpPOST\", \"name\": \"Approve auto-correctie (+5°C)\", \"target\": \"http://n8n:5678/webhook/bakery/oven-drift/ack?batch={{ $json.batch_id }}&action=approve\" }, { \"@type\": \"HttpPOST\", \"name\": \"Escaleer plant-manager\", \"target\": \"http://n8n:5678/webhook/bakery/oven-drift/ack?batch={{ $json.batch_id }}&action=escalate\" }, { \"@type\": \"HttpPOST\", \"name\": \"Reject — batch afkeuren\", \"target\": \"http://n8n:5678/webhook/bakery/oven-drift/ack?batch={{ $json.batch_id }}&action=reject\" } ] }"
+      },
+      "id": "node-teams",
+      "name": "Teams push — Solve-event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "bakery_events",
+        "fields": "=solve_id,batch_id,current_temp,min_temp_5min,drift_duration_sec,shift_leader,ack_deadline,auto_correction,event_status,timestamp",
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "MongoDB — Log event (pending)",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [1120, 400],
+      "_comment": "event_status starts as 'pending', updated by /ack callback to approved/escalated/rejected"
+    }
+  ],
+  "connections": {
+    "Webhook — MonsterMQ Oven Z3 Drift": {
+      "main": [[
+        { "node": "MongoDB — Trend laatste 5 min", "type": "main", "index": 0 },
+        { "node": "MongoDB — Huidige Batch ID", "type": "main", "index": 0 },
+        { "node": "ERP — Dienstdoende shift-leider", "type": "main", "index": 0 }
+      ]]
+    },
+    "MongoDB — Trend laatste 5 min": { "main": [[{ "node": "Compose Solve-event payload", "type": "main", "index": 0 }]] },
+    "MongoDB — Huidige Batch ID": { "main": [[{ "node": "Compose Solve-event payload", "type": "main", "index": 0 }]] },
+    "ERP — Dienstdoende shift-leider": { "main": [[{ "node": "Compose Solve-event payload", "type": "main", "index": 0 }]] },
+    "Compose Solve-event payload": { "main": [[{ "node": "Teams push — Solve-event", "type": "main", "index": 0 }]] },
+    "Teams push — Solve-event": { "main": [[{ "node": "MongoDB — Log event (pending)", "type": "main", "index": 0 }]] }
+  }
+}

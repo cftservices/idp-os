@@ -1,0 +1,115 @@
+{
+  "name": "WF-BAKERY-002 Allergen-switch CIP Guardrail",
+  "_meta": {
+    "solve_event": "SOLVE-B",
+    "archetype": "automated-action",
+    "scenario": "bakery-works-utrecht",
+    "documentation": "../factory-model/isa95-bakery.json#solve_events",
+    "purpose": "BLOCK start of allergen-switch batch (regular→glutenfree or vice versa) UNLESS CIP cycle completed within last 60 min. Critical for HACCP compliance."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bakery/batch-start-check",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook — Batch start request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "_comment": "Called by PLC-MIX-B BEFORE batch start when allergen-mode change detected. Returns 200 = OK to start, 403 = blocked."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract incoming batch context\nconst body = $input.first().json.body;\nreturn {\n  json: {\n    requested_batch_id: body.batch_id,\n    requested_recipe_id: body.recipe_id,\n    requested_allergen_mode: body.allergen_mode,\n    current_allergen_mode: body.current_allergen_mode,\n    is_allergen_switch: body.allergen_mode !== body.current_allergen_mode\n  }\n};"
+      },
+      "id": "node-parse",
+      "name": "Parse batch context",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": { "boolean": [{ "value1": "={{ $json.is_allergen_switch }}", "value2": true }] }
+      },
+      "id": "node-check-switch",
+      "name": "Is allergen-switch?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "plc_data",
+        "query": "={ \"topic\": \"bakery-works-utrecht/line-b/cip/station-01/status\", \"value\": \"completed\" }",
+        "limit": 1,
+        "sort": "={ \"timestamp\": -1 }"
+      },
+      "id": "node-cip-status",
+      "name": "MongoDB — Laatste CIP completed",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "const cip = $input.first().json;\nconst ctx = $('Parse batch context').first().json;\nconst now = Date.now();\nconst cipAge = cip.timestamp ? (now - new Date(cip.timestamp).getTime()) / 60000 : Infinity;\nconst cipValid = cip.timestamp && cipAge <= 60;\n\nreturn {\n  json: {\n    ...ctx,\n    cip_last_completed: cip.timestamp ?? null,\n    cip_age_min: cipAge,\n    cip_valid: cipValid,\n    decision: cipValid ? 'ALLOW' : 'BLOCK',\n    reason: cipValid \n      ? `CIP completed ${cipAge.toFixed(1)} min ago — within 60 min window. Batch may start.`\n      : `CIP last completed ${cipAge === Infinity ? 'NEVER' : cipAge.toFixed(1) + ' min ago'} — exceeds 60 min window. Batch BLOCKED.`\n  }\n};"
+      },
+      "id": "node-decide",
+      "name": "Guardrail decision",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "bakery_events",
+        "fields": "=solve_id,requested_batch_id,requested_recipe_id,requested_allergen_mode,current_allergen_mode,cip_last_completed,cip_age_min,decision,reason,timestamp",
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "MongoDB — Log guardrail decision",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "conditions": { "string": [{ "value1": "={{ $json.decision }}", "value2": "BLOCK" }] }
+      },
+      "id": "node-block-alert",
+      "name": "Decision = BLOCK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://teams.webhook.example/bakery-qa",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={ \"@type\": \"MessageCard\", \"summary\": \"HACCP guardrail — allergen-switch batch BLOCKED\", \"themeColor\": \"D32F2F\", \"sections\": [ { \"activityTitle\": \"🛑 Batch start BLOCKED — SOLVE-B guardrail\", \"facts\": [ {\"name\":\"Batch\",\"value\":\"{{ $json.requested_batch_id }}\"}, {\"name\":\"Allergen switch\",\"value\":\"{{ $json.current_allergen_mode }} → {{ $json.requested_allergen_mode }}\"}, {\"name\":\"CIP age\",\"value\":\"{{ $json.cip_age_min }} min\"}, {\"name\":\"Vereiste actie\",\"value\":\"Run CIP cycle voor batch herstart\"} ] } ] }"
+      },
+      "id": "node-qa-alert",
+      "name": "QA Teams alert — block",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 100]
+    }
+  ],
+  "connections": {
+    "Webhook — Batch start request": { "main": [[{ "node": "Parse batch context", "type": "main", "index": 0 }]] },
+    "Parse batch context": { "main": [[{ "node": "Is allergen-switch?", "type": "main", "index": 0 }]] },
+    "Is allergen-switch?": { "main": [[{ "node": "MongoDB — Laatste CIP completed", "type": "main", "index": 0 }], []] },
+    "MongoDB — Laatste CIP completed": { "main": [[{ "node": "Guardrail decision", "type": "main", "index": 0 }]] },
+    "Guardrail decision": { "main": [[{ "node": "MongoDB — Log guardrail decision", "type": "main", "index": 0 }]] },
+    "MongoDB — Log guardrail decision": { "main": [[{ "node": "Decision = BLOCK?", "type": "main", "index": 0 }]] },
+    "Decision = BLOCK?": { "main": [[{ "node": "QA Teams alert — block", "type": "main", "index": 0 }], []] }
+  }
+}

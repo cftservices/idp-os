@@ -1,0 +1,106 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "name": "Solve events",
+        "datasource": { "type": "marcusolsson-json-datasource", "uid": "bakery-events-api" },
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "enable": true,
+        "url": "/bakery-events?limit=50"
+      }
+    ]
+  },
+  "title": "BakeryWorks Utrecht — Line A Overview",
+  "tags": ["bakery-works-utrecht", "scenario", "line-a"],
+  "timezone": "Europe/Amsterdam",
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Batch ID",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=bakery-works-utrecht/line-a/mixing/mixer-01/batch-id" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue" }] } } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active Recipe",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=bakery-works-utrecht/line-a/mixing/mixer-01/recipe-id" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Loaves / min (packaging output)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=bakery-works-utrecht/line-a/packaging/slicer-01/output-rate" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 100 }] } } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Oven power",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=bakery-works-utrecht/line-a/baking/tunnel-oven-01/power" }],
+      "fieldConfig": { "defaults": { "unit": "watt" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Tunnel oven — 4 zones temperatuur",
+      "description": "Zone 3 is de critical zone (Solve-A trigger als <195°C met product aanwezig).",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [
+        { "refId": "Z1", "url": "/api/series?topic=bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-1/temperature" },
+        { "refId": "Z2", "url": "/api/series?topic=bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-2/temperature" },
+        { "refId": "Z3", "url": "/api/series?topic=bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-3/temperature" },
+        { "refId": "Z4", "url": "/api/series?topic=bakery-works-utrecht/line-a/baking/tunnel-oven-01/zone-4/temperature" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Z3" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }, { "id": "custom.lineWidth", "value": 3 }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": 195 }, { "color": "green", "value": 195 }, { "color": "red", "value": 205 }] } }] }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Proofer — dwell time per batch (Solve-C trigger >70 min)",
+      "gridPos": { "x": 0, "y": 11, "w": 12, "h": 6 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/series?topic=bakery-works-utrecht/line-a/proofing/proofer-01/dwell-time-actual" }],
+      "fieldConfig": { "defaults": { "unit": "m", "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "yellow", "value": 65 }, { "color": "red", "value": 70 }] } } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Mixer — load + energie",
+      "gridPos": { "x": 12, "y": 11, "w": 12, "h": 6 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [
+        { "refId": "L", "url": "/api/series?topic=bakery-works-utrecht/line-a/mixing/mixer-01/load" },
+        { "refId": "P", "url": "/api/series?topic=bakery-works-utrecht/line-a/mixing/mixer-01/power" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Solve events — laatste 24 uur",
+      "description": "Live feed van Solve-events (oven drift, allergen guardrail, proofing replan).",
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "bakery-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/bakery-events?since=24h" }],
+      "fieldConfig": { "defaults": {}, "overrides": [{ "matcher": { "id": "byName", "options": "solve_id" }, "properties": [{ "id": "custom.width", "value": 100 }] }, { "matcher": { "id": "byName", "options": "decision" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-text" } }, { "id": "mappings", "value": [{ "type": "value", "options": { "ALLOW": { "color": "green", "text": "ALLOW" }, "BLOCK": { "color": "red", "text": "BLOCK" }, "approved": { "color": "green" }, "escalated": { "color": "yellow" }, "rejected": { "color": "red" } } }] }] }] }
+    }
+  ]
+}
