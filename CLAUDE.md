@@ -15,13 +15,32 @@
 
 | Stap | Wat | IDP-OS component |
 |------|-----|-------------------|
+| **0. Foundation** *(pre-flight)* | `docker-compose.yml` + git + VPS-provisioning | Hele repo + Traefik + Portainer |
 | 1. Connect | OPC-UA / MQTT bron aansluiten | OPC-UA simulator → MonsterMQ |
-| 2. Condition | Cleansing, throttling, deadbands | MonsterMQ flow engine |
-| 3. Model | ISA-95 ontologie / semantische topics — **het hart van de boodschap** | Hierarchical MQTT topics + UNS pattern |
-| 4. Store | Time-series + structured archive | MongoDB (collection `plc_data`) |
+| 2. Condition | Cleansing, throttling, deadbands, **+ tag-alias normalisation** | MonsterMQ flow engine + (toe te voegen) `aliases.json` |
+| 3. Model | ISA-95 ontologie / semantische topics — **het hart van de boodschap** | Hierarchical MQTT topics + UNS pattern, **3-layer collection-discipline** (zie hieronder) |
+| 4. Store | Time-series + structured archive | MongoDB (collections `staging.*` → `warehouse.*` → `marts.*`) |
 | 5. Orchestrate | Event-driven workflows (productie orders, alarmen, shift reports) | N8N (workflow only — niet voor data routing) |
 | 6. Visualize | Dashboards, ad-hoc queries | Grafana + Next.js webapp |
 | 7. Distribute | API's voor downstream AI / BI / apps | FastAPI REST + GraphQL |
+
+**Stap 0 is geen 8e stap** — pre-flight discipline (infra-as-code). **Solve is geen 8e stap** — outcome-toets (zie root CLAUDE.md). **DataOps voor OT** loopt horizontaal onder alle 7 stappen (Version Control · DEV/CI/PROD · Automated DQ · Refresh-schedule · Tag/Topic change-review).
+
+---
+
+## 3-Layer Modeling Pattern (Stap 3 — productie-grade discipline)
+
+> Bron: Kahan Data Solutions' Staging → Warehouse → Marts vertaald naar OT. Implementatie-status: **deels gerealiseerd in v2**, expliciete 3-layer collection-namen toe te voegen in v3.
+
+| Sublaag | MongoDB collection-prefix | Inhoud | Mag muteren? |
+|---------|---------------------------|--------|---------------|
+| **1. Staging** | `staging.*` (1:1 per bron) | Raw payloads + metadata uit MonsterMQ — bv `staging.plc_siemens_line3` | ❌ Never touch raw |
+| **2. Canonical Warehouse (UNS)** | `warehouse.*` | ISA-95 hiërarchie + canonical signal names — bv `warehouse.signals`, `warehouse.assets` | ❌ Append-only |
+| **3. Use-case Marts** | `marts.*` | View-collections per business-outcome — bv `marts.oee_line3`, `marts.energy_per_batch` | ✅ Vrij |
+
+**Tag-alias-tabel** (cross-cutting, ondersteunt Stap 2c naming-normalisation): `warehouse.tag_aliases` — `{legacy_tag, canonical_signal_uuid, vendor, retired_at}`. Iedere legacy-tag-rename in Stap 1 wordt hier vastgelegd zodat Stap 4-7 consumers nooit breken.
+
+**Migratie-notitie (v2 → v3):** huidige `plc_data` collection wordt `staging.plc_data` (no-op rename); `warehouse.*` + `marts.*` zijn toe te voegen. Geen breaking change voor de Next.js dashboard.
 
 ---
 
