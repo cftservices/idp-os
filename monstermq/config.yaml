@@ -16,3 +16,11 @@ Archive:
         - "idp/#"
       Enabled: true
       RetentionDays: 30
+    # Workshop 1 CONNECT — DairyPlant ISA-95 namespace (~18 topics
+    # across Receiving / Process / Packaging / CIP / Sensors / Historian).
+    # Same retention as plc_data.
+    - Name: dairy_data
+      Topics:
+        - "DairyPlant/#"
+      Enabled: true
+      RetentionDays: 30

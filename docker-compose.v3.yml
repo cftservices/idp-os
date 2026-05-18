@@ -106,6 +106,55 @@ services:
     networks:
       - idp-network
 
+  # ── DAIRY SIMULATOR ───────────────────────────────────────────────────────
+  # DairyPlant OPC-UA server on port 4841 — ISA-95 namespace:
+  #   DairyPlant/Receiving/Tank01/...
+  #   DairyPlant/Process/{Separator,Pasteurizer,Homogenizer}/...
+  #   DairyPlant/Packaging/Bottler/...
+  # Workshop 1 CONNECT demo target (replaces generic PLC_01/02/03 narrative).
+  dairy-sim:
+    build: ./dairy-sim
+    container_name: dairy-sim
+    restart: unless-stopped
+    networks:
+      - idp-network
+
+  # ── IP.21 STUB (REST historian) ───────────────────────────────────────────
+  # FastAPI that simulates an Aspen IP.21 historian REST endpoint:
+  #   GET /tags/{name}/current  → {name, value, unit, timestamp}
+  #   GET /tags/{name}/history?hours=N → [{timestamp, value}, ...]
+  # MonsterMQ flow-engine polls /tags/*/current every 60s.
+  ip21-stub:
+    build: ./ip21-stub
+    container_name: ip21-stub
+    restart: unless-stopped
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ip21stub.rule=Host(`ip21.${DOMAIN}`)"
+      - "traefik.http.routers.ip21stub.entrypoints=websecure"
+      - "traefik.http.routers.ip21stub.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ip21stub.loadbalancer.server.port=8001"
+
+  # ── IOT PUBLISHER (direct MQTT) ───────────────────────────────────────────
+  # Direct MQTT publisher — proves you don't always need OPC-UA. Publishes:
+  #   DairyPlant/CIP/Loop1/{phase,temp_C,conductivity_mS}
+  #   DairyPlant/Sensors/{AmbientTemp,AmbientHumidity}/value
+  iot-publisher:
+    build: ./iot-publisher
+    container_name: iot-publisher
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: 1883
+      PUBLISH_INTERVAL_SEC: 1.0
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
   # ── RABBITMQ ──────────────────────────────────────────────────────────────
   # Message broker with MQTT plugin. Replaces MonsterMQ.
   #
@@ -344,6 +393,8 @@ services:
     depends_on:
       - mongo
       - opcua-sim
+      - dairy-sim
+      - ip21-stub
     networks:
       - idp-network
     healthcheck:
