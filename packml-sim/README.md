@@ -155,6 +155,12 @@ Provisioned dashboards live in `grafana/dashboards/` and auto-load:
   — 5-unit overview, HTST temperature with 71.5°C threshold line,
     divert-valve state, separator RPM + fat%, homogenizer pressure,
     tank level/temp, bottler throughput + rejects + fill mL.
+- [`bakery-packml-overview.json`](../grafana/dashboards/bakery-packml-overview.json)
+  — Solve-A/B/C canvases up top, 4-zone oven temperatures with
+    zone-3 highlighted (Solve-A drift), CIP cycle-stale-min with 60
+    min threshold (Solve-B), proofer dwell-overshoot per line
+    (Solve-C), line-A vs line-B throughput comparison, 5 silo gauges,
+    ferm/proof climate.
 
 Open at: `grafana.techflow24.com` (prod) or `http://localhost:3000` (dev),
 folder "Industrial Data Platform" → "DairyPlant — PackML Overview".
