@@ -1,82 +1,217 @@
-# BakeryWorks Utrecht — scenario overlay
+# BakeryWorks Utrecht — Full scenario overlay (PackML+MQTT direct)
 #
-# Usage:
-#   # Run alongside main IDP stack (beverage plant blijft op poort 80/443, bakery op 8090):
-#   docker compose -f ../../docker-compose.yml -f docker-compose.bakery.yml up -d
+# Run alongside main IDP stack:
+#   cd c:/tools/techflow-os/sub-os/idp-os
+#   docker compose -f docker-compose.yml \
+#                  -f scenarios/bakery-works-utrecht/docker-compose.bakery.yml \
+#                  up -d --build
 #
-#   # OR run ONLY bakery scenario (requires main stack services running):
-#   docker compose -f docker-compose.bakery.yml up -d bakery-opcua-sim bakery-grafana-import
+# Topology (21 PackML-driven simulators):
+#   line-a (7 stations)  : mixer, bulk-ferm, former, proofer, oven (Solve-A), cooler, packaging
+#   line-b (8 stations)  : mixer, bulk-ferm, former, proofer, oven, cooler, packaging, CIP (Solve-B)
+#   shared/silos (5)     : flour-wheat, flour-glutenfree, sugar, salt, fat
+#   + grafana-import + n8n-import (one-shot)
 #
-# Wat dit toevoegt:
-#  - bakery-opcua-sim: Python asyncua simulator die de BakeryWorks tags genereert (oven zones, proofer, mixer, CIP, etc).
-#  - bakery-init-monstermq: registreert OPC-UA topics in MonsterMQ + provisioning N8N workflows.
-#  - bakery-grafana-import: importeert het bakery-overview-dashboard.json bij startup.
+# All sims publish bakery-works-utrecht/{line}/{area}/{equipment}/... to
+# monstermq:1883 → archive group bakery_data → mongo collection.
+#
+# To run only the Mini subset (mixer + oven + packaging line-a, 3 services):
+#   docker compose -f docker-compose.yml \
+#                  -f scenarios/bakery-works-utrecht/docker-compose.bakery.yml \
+#                  up -d --build bakery-mixer-line-a bakery-oven-line-a bakery-packaging-line-a
+
+x-packml-base: &packml-base
+  build:
+    context: ../../packml-sim
+    dockerfile: Dockerfile
+  image: techflow/packml-sim:latest
+  restart: unless-stopped
+  env_file: ./packml-shared.env
+  volumes:
+    - ../../packml-sim/scenarios:/scenarios:ro
+  mem_limit: 96m
+  depends_on:
+    monstermq:
+      condition: service_healthy
+  networks:
+    - idp-network
 
 services:
-  bakery-opcua-sim:
-    image: techflow/idp-opcua-sim:bakery
-    build:
-      context: ./opcua-simulator
-      dockerfile: Dockerfile
-    container_name: bakery-opcua-sim
-    environment:
-      - SCENARIO=bakery-works-utrecht
-      - FACTORY_MODEL=/app/factory-model/isa95-bakery.json
-      - OPCUA_PORT=4841
-    volumes:
-      - ./factory-model:/app/factory-model:ro
-    ports:
-      - "4841:4841"
-    networks:
-      - idp-net
-    restart: unless-stopped
 
-  bakery-init-monstermq:
-    image: curlimages/curl:latest
-    container_name: bakery-init-monstermq
-    depends_on:
-      - bakery-opcua-sim
-    volumes:
-      - ./monstermq-init.sh:/init.sh:ro
-    entrypoint: ["/bin/sh", "/init.sh"]
-    networks:
-      - idp-net
-    restart: "no"
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LINE A — witbrood (60% volume)
+  # ═══════════════════════════════════════════════════════════════════════════
 
-  bakery-n8n-import:
-    image: n8nio/n8n:latest
-    container_name: bakery-n8n-import
-    depends_on:
-      - bakery-init-monstermq
+  bakery-mixer-line-a:
+    <<: *packml-base
+    container_name: bakery-mixer-line-a
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=false
-    volumes:
-      - ./n8n-workflows:/import:ro
-    entrypoint: ["sh", "-c", "n8n import:workflow --input=/import --separate && exit 0"]
-    networks:
-      - idp-net
-    restart: "no"
+      UNIT_CONFIG: /scenarios/bakery/mixer-line-a.yaml
+
+  bakery-bulk-ferm-line-a:
+    <<: *packml-base
+    container_name: bakery-bulk-ferm-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/bulk-ferm-line-a.yaml
+
+  bakery-former-line-a:
+    <<: *packml-base
+    container_name: bakery-former-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/former-line-a.yaml
+
+  bakery-proofer-line-a:
+    <<: *packml-base
+    container_name: bakery-proofer-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/proofer-line-a.yaml
+
+  # Solve-A canvas — zone-3 drift triggered at trigger_at_s
+  bakery-oven-line-a:
+    <<: *packml-base
+    container_name: bakery-oven-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/oven-line-a.yaml
+
+  bakery-cooler-line-a:
+    <<: *packml-base
+    container_name: bakery-cooler-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/cooler-line-a.yaml
+
+  bakery-packaging-line-a:
+    <<: *packml-base
+    container_name: bakery-packaging-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/packaging-line-a.yaml
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LINE B — volkoren / specialty (40% volume) + allergen CIP
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  bakery-mixer-line-b:
+    <<: *packml-base
+    container_name: bakery-mixer-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/mixer-line-b.yaml
+
+  bakery-bulk-ferm-line-b:
+    <<: *packml-base
+    container_name: bakery-bulk-ferm-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/bulk-ferm-line-b.yaml
+
+  bakery-former-line-b:
+    <<: *packml-base
+    container_name: bakery-former-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/former-line-b.yaml
+
+  bakery-proofer-line-b:
+    <<: *packml-base
+    container_name: bakery-proofer-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/proofer-line-b.yaml
+
+  bakery-oven-line-b:
+    <<: *packml-base
+    container_name: bakery-oven-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/oven-line-b.yaml
+
+  bakery-cooler-line-b:
+    <<: *packml-base
+    container_name: bakery-cooler-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/cooler-line-b.yaml
+
+  bakery-packaging-line-b:
+    <<: *packml-base
+    container_name: bakery-packaging-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/packaging-line-b.yaml
+
+  # Solve-B canvas — allergen-CIP guardrail
+  bakery-cip-line-b:
+    <<: *packml-base
+    container_name: bakery-cip-line-b
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/cip-line-b.yaml
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SHARED — raw material silos
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  bakery-silo-flour-wheat:
+    <<: *packml-base
+    container_name: bakery-silo-flour-wheat
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/silo-flour-wheat.yaml
+
+  bakery-silo-flour-glutenfree:
+    <<: *packml-base
+    container_name: bakery-silo-flour-glutenfree
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/silo-flour-glutenfree.yaml
+
+  bakery-silo-sugar:
+    <<: *packml-base
+    container_name: bakery-silo-sugar
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/silo-sugar.yaml
+
+  bakery-silo-salt:
+    <<: *packml-base
+    container_name: bakery-silo-salt
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/silo-salt.yaml
+
+  bakery-silo-fat:
+    <<: *packml-base
+    container_name: bakery-silo-fat
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/silo-fat.yaml
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ONE-SHOT IMPORTERS
+  # ═══════════════════════════════════════════════════════════════════════════
 
   bakery-grafana-import:
     image: curlimages/curl:latest
     container_name: bakery-grafana-import
+    restart: "no"
     volumes:
       - ./grafana:/dashboards:ro
-    entrypoint: |
-      /bin/sh -c "
-      sleep 5;
-      for f in /dashboards/*.json; do
-        curl -X POST -H 'Content-Type: application/json' \
-          -d @$$f \
-          http://${GRAFANA_USER:-admin}:${GRAFANA_PASS:-admin}@grafana:3000/api/dashboards/db || true;
-      done;
-      exit 0
-      "
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sleep 8
+        for f in /dashboards/*.json; do
+          [ -e "$$f" ] || continue
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d @$$f \
+            "http://${GRAFANA_ADMIN_USER:-admin}:${GRAFANA_ADMIN_PASSWORD:-admin}@grafana:3000/api/dashboards/db" \
+            || true
+        done
+    depends_on:
+      - grafana
     networks:
-      - idp-net
-    restart: "no"
+      - idp-network
 
-networks:
-  idp-net:
-    external: true
-    name: idp_default
+  bakery-n8n-import:
+    image: n8nio/n8n:latest
+    container_name: bakery-n8n-import
+    restart: "no"
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "false"
+    volumes:
+      - ./n8n-workflows:/import:ro
+    entrypoint:
+      - sh
+      - -c
+      - "n8n import:workflow --input=/import --separate && exit 0"
+    depends_on:
+      - n8n
+    networks:
+      - idp-network

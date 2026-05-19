@@ -1,0 +1,124 @@
+# DairyPlant — scenario overlay (PackML+MQTT direct)
+#
+# Runs ALONGSIDE the existing dairy-sim/ (asyncua OPC-UA on port 4841) —
+# both publish DairyPlant/* topics but via different paths:
+#   dairy-sim (legacy):    asyncua OPC-UA → MonsterMQ subscribes via opcua client
+#   packml-dairy (this):   direct MQTT publish to monstermq:1883
+#
+# Run:
+#   cd c:/tools/techflow-os/sub-os/idp-os
+#   docker compose -f docker-compose.yml -f scenarios/dairy-plant/docker-compose.dairy.yml up -d
+#
+# Topics published (UNS):
+#   DairyPlant/Receiving/Tank/Tank-01/Status/*
+#   DairyPlant/Process/Separator/Sep-01/Status/*
+#   DairyPlant/Process/Pasteurizer/HTST-01/Status/*  ← Solve-event source (divert)
+#   DairyPlant/Process/Homogenizer/Homo-01/Status/*
+#   DairyPlant/Packaging/Bottler/Bot-01/Status/*
+
+services:
+
+  # ── DAIRY — RECEIVING TANK ────────────────────────────────────────────────
+  packml-dairy-tank-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dairy-tank-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/receiving-tank-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── DAIRY — SEPARATOR (centrifuge) ────────────────────────────────────────
+  packml-dairy-separator-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dairy-separator-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/separator-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── DAIRY — HTST PASTEURIZER (safety-critical) ────────────────────────────
+  packml-dairy-pasteurizer-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dairy-pasteurizer-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/pasteurizer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── DAIRY — HOMOGENIZER ──────────────────────────────────────────────────
+  packml-dairy-homogenizer-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dairy-homogenizer-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/homogenizer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── DAIRY — BOTTLER ──────────────────────────────────────────────────────
+  packml-dairy-bottler-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dairy-bottler-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/bottler-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network

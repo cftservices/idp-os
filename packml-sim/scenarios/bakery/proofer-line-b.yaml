@@ -1,0 +1,22 @@
+# Bakery line B — final proofer tunnel (PLC-PROOF-B)
+type: proofer
+site: bakery-works-utrecht
+line: line-b
+area: proofing
+equipment: proofer-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.5
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 95.0
+  transient_duration_s: 6.0
+  auto_start: true
+
+physics:
+  temp_setpoint_c: 34.0          # volkoren slightly cooler
+  humidity_setpoint_pct: 85.0
+  tunnel_length_m: 30.0
+  belt_speed_m_min: 0.45         # → ~67 min dwell at 100%
+  dwell_spec_min: 65.0

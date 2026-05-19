@@ -1,0 +1,20 @@
+# Bakery line A — bulk fermentation chamber (PLC-FERM-A)
+type: bulk-fermenter
+site: bakery-works-utrecht
+line: line-a
+area: bulk-ferm
+equipment: chamber-01
+
+publish_interval_s: 2.0
+sim_step_s: 0.5
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 5.0
+  auto_start: true
+
+physics:
+  temp_setpoint_c: 28.0
+  humidity_setpoint_pct: 75.0
+  batch_duration_s: 4500.0   # 75 min

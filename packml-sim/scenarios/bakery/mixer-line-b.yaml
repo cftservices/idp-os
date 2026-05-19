@@ -1,0 +1,21 @@
+# Bakery line B — dough mixer (PLC-MIX-B, volkoren/specialty)
+type: batch-mixer
+site: bakery-works-utrecht
+line: line-b
+area: mixing
+equipment: mixer-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 95.0
+  transient_duration_s: 5.0
+  auto_start: true
+
+physics:
+  capacity_kg: 200.0
+  ambient_temp_c: 22.0
+  target_dough_temp_c: 27.0   # volkoren mixes slightly warmer
+  recipe_id: 201              # 201=volkoren default

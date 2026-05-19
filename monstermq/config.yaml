@@ -18,9 +18,18 @@ Archive:
       RetentionDays: 30
     # Workshop 1 CONNECT — DairyPlant ISA-95 namespace (~18 topics
     # across Receiving / Process / Packaging / CIP / Sensors / Historian).
-    # Same retention as plc_data.
+    # Receives data from BOTH:
+    #   - dairy-sim (OPC-UA on port 4841, legacy asyncua sim)
+    #   - packml-sim dairy units (direct MQTT publish, PackML-driven)
     - Name: dairy_data
       Topics:
         - "DairyPlant/#"
+      Enabled: true
+      RetentionDays: 30
+    # PackML-driven BakeryWorks Utrecht scenario — direct MQTT publish
+    # from packml-sim containers (no OPC-UA hop).
+    - Name: bakery_data
+      Topics:
+        - "bakery-works-utrecht/#"
       Enabled: true
       RetentionDays: 30

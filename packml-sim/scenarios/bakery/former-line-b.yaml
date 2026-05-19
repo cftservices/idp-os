@@ -1,0 +1,19 @@
+# Bakery line B — dough former / scaler (PLC-FORM-B)
+type: former
+site: bakery-works-utrecht
+line: line-b
+area: forming
+equipment: scaler-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 90.0
+  transient_duration_s: 4.0
+  auto_start: true
+
+physics:
+  target_weight_g: 750.0     # volkoren = 750 g per piece
+  tolerance_g: 12.0

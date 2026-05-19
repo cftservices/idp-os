@@ -1,0 +1,22 @@
+# Bakery shared — flour wheat silo
+type: storage-tank
+site: bakery-works-utrecht
+line: shared
+area: silos
+equipment: flour-wheat
+
+publish_interval_s: 5.0
+sim_step_s: 1.0
+
+packml:
+  mach_design_speed: 1000.0     # kg/hour refill capacity
+  initial_mach_speed: 200.0     # 200 kg/hour avg refill
+  transient_duration_s: 10.0
+  auto_start: true
+
+physics:
+  capacity_l: 25000.0            # interpret as kg for flour silos
+  initial_level_l: 18000.0
+  draw_rate_l_min: 12.0          # kg/min — 200 kg per 200 kg batch every ~17 min
+  target_temp_c: 18.0
+  ambient_temp_c: 22.0

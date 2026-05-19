@@ -1,0 +1,24 @@
+# Bakery shared — flour glutenfree silo (line-B only, physically segregated)
+# Solve-B anchor: this silo's draw events combined with cip-line-b state
+# inform the allergen-switch guardrail.
+type: storage-tank
+site: bakery-works-utrecht
+line: shared
+area: silos
+equipment: flour-glutenfree
+
+publish_interval_s: 5.0
+sim_step_s: 1.0
+
+packml:
+  mach_design_speed: 800.0
+  initial_mach_speed: 80.0
+  transient_duration_s: 10.0
+  auto_start: true
+
+physics:
+  capacity_l: 8000.0
+  initial_level_l: 5200.0
+  draw_rate_l_min: 4.0
+  target_temp_c: 18.0
+  ambient_temp_c: 22.0

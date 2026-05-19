@@ -1,0 +1,23 @@
+# Bakery line A — dough mixer (PLC-MIX-A equivalent)
+# UNS: bakery-works-utrecht/line-a/mixing/mixer-01/Status/...
+
+type: batch-mixer
+site: bakery-works-utrecht
+line: line-a
+area: mixing
+equipment: mixer-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 5.0
+  auto_start: true
+
+physics:
+  capacity_kg: 200.0
+  ambient_temp_c: 22.0
+  target_dough_temp_c: 26.0
+  recipe_id: 101   # 101=witbrood (line-A default)

@@ -1,0 +1,27 @@
+# Dairy plant — HTST pasteurizer (safety-critical)
+# UNS: DairyPlant/Process/Pasteurizer/HTST-01/Status/...
+#
+# Safety-logic: HTST < 71.5°C → divert valve trip + auto-Abort.
+# This is the dairy equivalent of the bakery Solve-A canvas — a
+# regulatory-driven Solve-event ready to drive N8N workflows.
+
+type: pasteurizer
+site: DairyPlant
+line: Process
+area: Pasteurizer
+equipment: HTST-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 10.0
+  auto_start: true
+
+physics:
+  setpoint_c: 72.0
+  hold_min_c: 71.5
+  hold_sec: 15
+  regen_eff: 0.85

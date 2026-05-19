@@ -1,0 +1,20 @@
+# Dairy plant — homogenizer (high-pressure piston pump)
+# UNS: DairyPlant/Process/Homogenizer/Homo-01/Status/...
+
+type: homogenizer
+site: DairyPlant
+line: Process
+area: Homogenizer
+equipment: Homo-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 6.0
+  auto_start: true
+
+physics:
+  target_bar: 180.0

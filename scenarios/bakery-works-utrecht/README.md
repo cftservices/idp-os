@@ -10,7 +10,7 @@
 
 | Versie | Bestand | Stations | Solve-events | Wanneer gebruiken |
 |--------|---------|----------|--------------|-------------------|
-| **Mini** | [`factory-model/isa95-bakery-mini.json`](factory-model/isa95-bakery-mini.json) | 3 (mixer → oven → packaging) | 1 (oven drift) | Pilot-webinar 28 mei, publieke webinar 11 juni, alle korte/cold-traffic content |
+| **Mini** | [`factory-model/isa95-bakery-mini.json`](factory-model/isa95-bakery-mini.json) | 3 (mixer → oven → packaging) | 1 (oven drift) | Pilot-webinar 28 mei (internal dry-run), publieke workshop 1 op **vrijdag 5 juni 2026 16:00 CET**, daarna biweekly public workshops + alle korte/cold-traffic content |
 | **Full** | [`factory-model/isa95-bakery.json`](factory-model/isa95-bakery.json) | 9 (2 lijnen, allergeen-CIP, planner-decisions) | 3 archetypen | Foundation cohort week 4-7, workshop dag 2, alles ná de pilot |
 
 **Waarom twee versies:** Walker's Steelco-demo was technisch indrukwekkend maar voor een engelse PLC-engineer zonder staal-ervaring vol jargon (heat, ladle, tundish, billet). Eenzelfde valkuil voor onze full bakkerij. Mini is in 3 min uit te leggen aan iemand die NIETS van bakkerijen weet — de volledige 7-stappen build laten zien zonder de luisteraar te verdrinken.

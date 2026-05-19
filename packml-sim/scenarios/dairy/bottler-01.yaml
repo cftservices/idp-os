@@ -1,0 +1,21 @@
+# Dairy plant — bottler (filling + capping)
+# UNS: DairyPlant/Packaging/Bottler/Bot-01/Status/...
+
+type: bottler
+site: DairyPlant
+line: Packaging
+area: Bottler
+equipment: Bot-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 150.0    # bottles/min
+  initial_mach_speed: 120.0
+  transient_duration_s: 5.0
+  auto_start: true
+
+physics:
+  fill_volume_mL: 1000.0
+  tolerance_mL: 3.0

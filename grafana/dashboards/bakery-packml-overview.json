@@ -1,0 +1,520 @@
+{
+  "title": "BakeryWorks Utrecht — PackML Overview",
+  "uid": "bakery-packml-overview",
+  "tags": ["bakery", "packml", "isa-88", "isa-95", "solve-events"],
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {"refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]},
+  "editable": true,
+  "panels": [
+    {
+      "id": 100, "type": "text", "title": "",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 2},
+      "options": {"mode": "markdown",
+        "content": "## BakeryWorks Utrecht — PackML Overview\n20 PackML-driven simulators (line-A · line-B · silos) publishing direct MQTT. The 3 Solve canvases below are the workshop's central storyline — drift / guardrail / replan."}
+    },
+
+    {
+      "id": 1, "type": "stat", "title": "SOLVE-A — Oven zone-3 (°C, spec 200)",
+      "gridPos": {"x": 0, "y": 2, "w": 8, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/zone-3/temperature"]],
+        "fields": [{"name": "zone-3", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background", "graphMode": "area"},
+      "fieldConfig": {"defaults": {"unit": "celsius", "decimals": 1,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null},
+          {"color": "orange", "value": 190},
+          {"color": "green", "value": 197},
+          {"color": "orange", "value": 205},
+          {"color": "red", "value": 210}
+        ]}}}
+    },
+
+    {
+      "id": 2, "type": "stat", "title": "SOLVE-B — CIP cycle stale (min, spec ≤60)",
+      "gridPos": {"x": 8, "y": 2, "w": 8, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-b/cip/station-01/Status/cycle-stale-min"]],
+        "fields": [{"name": "stale-min", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background", "graphMode": "area"},
+      "fieldConfig": {"defaults": {"unit": "m", "decimals": 1,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 45},
+          {"color": "red", "value": 60}
+        ]}}}
+    },
+
+    {
+      "id": 3, "type": "stat", "title": "SOLVE-C — Proofer dwell overshoot line-A (min)",
+      "gridPos": {"x": 16, "y": 2, "w": 8, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-a/proofing/proofer-01/Status/dwell-overshoot-min"]],
+        "fields": [{"name": "overshoot", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background", "graphMode": "area"},
+      "fieldConfig": {"defaults": {"unit": "m", "decimals": 1,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 3},
+          {"color": "red", "value": 8}
+        ]}}}
+    },
+
+    {
+      "id": 10, "type": "row", "title": "SOLVE-A — Oven line-A zone temperatures",
+      "collapsed": false, "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 11, "type": "timeseries", "title": "Oven line-A — all 4 zone temperatures",
+      "gridPos": {"x": 0, "y": 6, "w": 18, "h": 9},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/zone-1/temperature"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "zone-1", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/zone-2/temperature"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "zone-2", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/zone-3/temperature"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "zone-3", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "C"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/zone-4/temperature"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "zone-4", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "D"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "celsius",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "transparent", "value": null},
+          {"color": "red", "value": 250}
+        ]},
+        "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 0}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "zone-3"},
+           "properties": [{"id": "custom.lineWidth", "value": 3},
+                          {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]}
+    },
+
+    {
+      "id": 12, "type": "stat", "title": "Oven state (line-A)",
+      "gridPos": {"x": 18, "y": 6, "w": 6, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/StateCurrentStr"]],
+        "fields": [{"name": "state", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background", "textMode": "value"},
+      "fieldConfig": {"defaults": {"mappings": [
+        {"type": "value", "options": {"Execute": {"color": "green", "index": 0}}},
+        {"type": "value", "options": {"Held": {"color": "orange", "index": 1}}},
+        {"type": "value", "options": {"Aborted": {"color": "red", "index": 2}}},
+        {"type": "value", "options": {"Stopped": {"color": "purple", "index": 3}}},
+        {"type": "value", "options": {"Idle": {"color": "blue", "index": 4}}}
+      ]}}
+    },
+
+    {
+      "id": 13, "type": "stat", "title": "Oven faults (line-A)",
+      "gridPos": {"x": 18, "y": 9, "w": 6, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/FaultCount"]],
+        "fields": [{"name": "faults", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "value", "graphMode": "none"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "red", "value": 1}
+        ]}}}
+    },
+
+    {
+      "id": 14, "type": "stat", "title": "Oven total power (kW)",
+      "gridPos": {"x": 18, "y": 12, "w": 6, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/power"]],
+        "fields": [{"name": "power", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "value", "graphMode": "area"},
+      "fieldConfig": {"defaults": {"unit": "kwatt", "decimals": 1}}
+    },
+
+    {
+      "id": 20, "type": "row", "title": "SOLVE-B — CIP allergen guardrail (line-B)",
+      "collapsed": false, "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 21, "type": "timeseries", "title": "CIP cycle-stale (min) — 60 min spec",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/history", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-b/cip/station-01/Status/cycle-stale-min"], ["minutes", "30"]],
+        "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                   {"name": "stale-min", "type": "number", "jsonPath": "$.data[*].value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "m",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 45},
+          {"color": "red", "value": 60}
+        ]},
+        "custom": {"drawStyle": "line", "fillOpacity": 20, "thresholdsStyle": {"mode": "line+area"}}}}
+    },
+
+    {
+      "id": 22, "type": "stat", "title": "Allergen mode",
+      "gridPos": {"x": 12, "y": 16, "w": 6, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-b/cip/station-01/Status/allergen-mode"]],
+        "fields": [{"name": "mode", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [
+        {"type": "value", "options": {"standard": {"color": "blue", "index": 0}}},
+        {"type": "value", "options": {"glutenfree": {"color": "orange", "index": 1}}},
+        {"type": "value", "options": {"allergen": {"color": "red", "index": 2}}}
+      ]}}
+    },
+
+    {
+      "id": 23, "type": "stat", "title": "CIP phase",
+      "gridPos": {"x": 18, "y": 16, "w": 6, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-b/cip/station-01/Status/phase"]],
+        "fields": [{"name": "phase", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [
+        {"type": "value", "options": {"idle": {"color": "blue", "index": 0}}},
+        {"type": "value", "options": {"pre-rinse": {"color": "yellow", "index": 1}}},
+        {"type": "value", "options": {"caustic": {"color": "orange", "index": 2}}},
+        {"type": "value", "options": {"intermediate-rinse": {"color": "yellow", "index": 3}}},
+        {"type": "value", "options": {"acid": {"color": "red", "index": 4}}},
+        {"type": "value", "options": {"final-rinse": {"color": "green", "index": 5}}}
+      ]}}
+    },
+
+    {
+      "id": 24, "type": "timeseries", "title": "CIP caustic temp (spec 75 °C)",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/history", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/line-b/cip/station-01/Status/caustic-temp"], ["minutes", "30"]],
+        "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                   {"name": "caustic-temp", "type": "number", "jsonPath": "$.data[*].value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "celsius",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null},
+          {"color": "green", "value": 70}
+        ]}}}
+    },
+
+    {
+      "id": 30, "type": "row", "title": "SOLVE-C — Proofer dwell overshoot",
+      "collapsed": false, "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 31, "type": "timeseries", "title": "Proofer line-A — dwell actual vs spec (min)",
+      "gridPos": {"x": 0, "y": 25, "w": 12, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/proofing/proofer-01/Status/dwell-time-actual-min"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "dwell-actual", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/proofing/proofer-01/Status/dwell-overshoot-min"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "overshoot", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "m",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 60},
+          {"color": "red", "value": 70}
+        ]}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "overshoot"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]}
+    },
+
+    {
+      "id": 32, "type": "timeseries", "title": "Proofer line-B — dwell actual vs spec (min)",
+      "gridPos": {"x": 12, "y": 25, "w": 12, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/proofing/proofer-01/Status/dwell-time-actual-min"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "dwell-actual", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/proofing/proofer-01/Status/dwell-overshoot-min"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "overshoot", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "m",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 65},
+          {"color": "red", "value": 75}
+        ]}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "overshoot"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]}
+    },
+
+    {
+      "id": 40, "type": "row", "title": "Line A vs Line B — throughput comparison",
+      "collapsed": false, "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 41, "type": "timeseries", "title": "Mixer batch counter (line-A vs line-B)",
+      "gridPos": {"x": 0, "y": 34, "w": 8, "h": 7},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/mixing/mixer-01/Status/batch-counter"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-a batches", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/mixing/mixer-01/Status/batch-counter"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-b batches", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}}
+    },
+
+    {
+      "id": 42, "type": "timeseries", "title": "Packaging output (line-A vs line-B units/min)",
+      "gridPos": {"x": 8, "y": 34, "w": 8, "h": 7},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/packaging/wrapper-01/Status/output-rate"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-a", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/packaging/wrapper-01/Status/output-rate"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-b", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+
+    {
+      "id": 43, "type": "timeseries", "title": "Cooler output temp (line-A vs line-B, spec 28 °C)",
+      "gridPos": {"x": 16, "y": 34, "w": 8, "h": 7},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/cooling/spiral-cooler-01/Status/product-out-temp"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-a", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/cooling/spiral-cooler-01/Status/product-out-temp"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-b", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "celsius",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 32},
+          {"color": "red", "value": 36}
+        ]}}}
+    },
+
+    {
+      "id": 50, "type": "row", "title": "Raw material silos",
+      "collapsed": false, "gridPos": {"x": 0, "y": 41, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 51, "type": "gauge", "title": "Flour — wheat",
+      "gridPos": {"x": 0, "y": 42, "w": 5, "h": 6},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/shared/silos/flour-wheat/Status/level_pct"]],
+        "fields": [{"name": "level_pct", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null}, {"color": "orange", "value": 20}, {"color": "green", "value": 40}]}}}
+    },
+
+    {
+      "id": 52, "type": "gauge", "title": "Flour — glutenfree",
+      "gridPos": {"x": 5, "y": 42, "w": 5, "h": 6},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/shared/silos/flour-glutenfree/Status/level_pct"]],
+        "fields": [{"name": "level_pct", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null}, {"color": "orange", "value": 20}, {"color": "green", "value": 40}]}}}
+    },
+
+    {
+      "id": 53, "type": "gauge", "title": "Sugar",
+      "gridPos": {"x": 10, "y": 42, "w": 5, "h": 6},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/shared/silos/sugar/Status/level_pct"]],
+        "fields": [{"name": "level_pct", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null}, {"color": "orange", "value": 20}, {"color": "green", "value": 40}]}}}
+    },
+
+    {
+      "id": 54, "type": "gauge", "title": "Salt",
+      "gridPos": {"x": 15, "y": 42, "w": 4, "h": 6},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/shared/silos/salt/Status/level_pct"]],
+        "fields": [{"name": "level_pct", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null}, {"color": "orange", "value": 20}, {"color": "green", "value": 40}]}}}
+    },
+
+    {
+      "id": 55, "type": "gauge", "title": "Fat (32 °C)",
+      "gridPos": {"x": 19, "y": 42, "w": 5, "h": 6},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/bakery/latest", "method": "GET",
+        "params": [["topic", "bakery-works-utrecht/shared/silos/fat/Status/level_pct"]],
+        "fields": [{"name": "level_pct", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null}, {"color": "orange", "value": 20}, {"color": "green", "value": 40}]}}}
+    },
+
+    {
+      "id": 60, "type": "row", "title": "Process climate — fermentation & proofing",
+      "collapsed": false, "gridPos": {"x": 0, "y": 48, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 61, "type": "timeseries", "title": "Bulk-ferm temperature (28 °C spec)",
+      "gridPos": {"x": 0, "y": 49, "w": 12, "h": 7},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/bulk-ferm/chamber-01/Status/temperature"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-a", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/bulk-ferm/chamber-01/Status/temperature"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-b", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "celsius",
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null},
+          {"color": "green", "value": 26}, {"color": "red", "value": 31}]}}}
+    },
+
+    {
+      "id": 62, "type": "timeseries", "title": "Proofer humidity (85 % spec)",
+      "gridPos": {"x": 12, "y": 49, "w": 12, "h": 7},
+      "datasource": "IDP-API",
+      "targets": [
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-a/proofing/proofer-01/Status/humidity"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-a", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "A"},
+        {"path": "/archive/bakery/history", "method": "GET",
+         "params": [["topic", "bakery-works-utrecht/line-b/proofing/proofer-01/Status/humidity"], ["minutes", "30"]],
+         "fields": [{"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+                    {"name": "line-b", "type": "number", "jsonPath": "$.data[*].value"}],
+         "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 60, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null}, {"color": "green", "value": 80}, {"color": "red", "value": 95}]}}}
+    }
+  ]
+}

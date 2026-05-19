@@ -1,0 +1,27 @@
+# Dairy plant — milk receiving / cold-storage tank
+# UNS: DairyPlant/Receiving/Tank-01/Status/...
+#
+# Mirrors the OPC-UA dairy-sim/server.py Receiving/Tank01 node, but
+# adds PackML state, fill level, and draw-rate (which dairy-sim lacked).
+
+type: storage-tank
+site: DairyPlant
+line: Receiving
+area: Tank
+equipment: Tank-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.5
+
+packml:
+  mach_design_speed: 1500.0   # L/min inflow capacity
+  initial_mach_speed: 1000.0
+  transient_duration_s: 6.0
+  auto_start: true
+
+physics:
+  capacity_l: 30000.0
+  initial_level_l: 15000.0
+  draw_rate_l_min: 800.0
+  target_temp_c: 4.5
+  ambient_temp_c: 18.0

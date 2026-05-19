@@ -1,0 +1,25 @@
+# Bakery line B — CIP station (allergen-swap guardrail)
+# UNS: bakery-works-utrecht/line-b/cip/station-01/Status/...
+#
+# Solve-B source — cycle-stale-min > 60 + recipe-switch to glutenfree
+# triggers the N8N pre-start guardrail workflow.
+
+type: cip-station
+site: bakery-works-utrecht
+line: line-b
+area: cip
+equipment: station-01
+
+publish_interval_s: 5.0
+sim_step_s: 1.0
+
+packml:
+  mach_design_speed: 100.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 8.0
+  # CIP doesn't auto-start — operator triggers between recipe runs.
+  auto_start: false
+
+physics:
+  caustic_setpoint_c: 75.0
+  allergen_mode: standard

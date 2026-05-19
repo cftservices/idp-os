@@ -1,0 +1,22 @@
+# Bakery shared — fat tank (margarine/oil, heated)
+type: storage-tank
+site: bakery-works-utrecht
+line: shared
+area: silos
+equipment: fat
+
+publish_interval_s: 10.0
+sim_step_s: 2.0
+
+packml:
+  mach_design_speed: 300.0
+  initial_mach_speed: 20.0
+  transient_duration_s: 10.0
+  auto_start: true
+
+physics:
+  capacity_l: 3000.0
+  initial_level_l: 2100.0
+  draw_rate_l_min: 1.0
+  target_temp_c: 32.0           # warmed to keep flow
+  ambient_temp_c: 22.0

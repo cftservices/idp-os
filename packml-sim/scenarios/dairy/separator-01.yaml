@@ -1,0 +1,20 @@
+# Dairy plant — cream separator (centrifuge)
+# UNS: DairyPlant/Process/Separator/Sep-01/Status/...
+
+type: separator
+site: DairyPlant
+line: Process
+area: Separator
+equipment: Sep-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0    # → 6000 RPM target at 100%
+  initial_mach_speed: 100.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  target_fat_pct: 3.5

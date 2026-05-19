@@ -1,0 +1,25 @@
+# Bakery line B — 4-zone tunnel oven (DCS-OVEN-B)
+type: tunnel-oven
+site: bakery-works-utrecht
+line: line-b
+area: baking
+equipment: tunnel-oven-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.5
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 85.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  belt_speed_m_min: 1.4
+  thermal_tau_s: 100.0
+  zones:
+    - { label: "zone-1", setpoint: 235.0 }   # slightly cooler — volkoren burns
+    - { label: "zone-2", setpoint: 215.0 }
+    - { label: "zone-3", setpoint: 195.0 }
+    - { label: "zone-4", setpoint: 175.0 }
+  # No scheduled drift on line-B by default — Solve-A canvas lives on line-A

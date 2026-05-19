@@ -1,0 +1,495 @@
+{
+  "title": "DairyPlant — PackML Overview",
+  "uid": "dairy-packml-overview",
+  "tags": ["dairy", "packml", "isa-88", "workshop-01"],
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {"refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]},
+  "editable": true,
+  "panels": [
+
+    {
+      "id": 100,
+      "type": "text",
+      "title": "",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 2},
+      "options": {
+        "mode": "markdown",
+        "content": "## DairyPlant — PackML Overview\n5 ISA-88 units publishing direct MQTT to MonsterMQ → MongoDB → FastAPI → here. Pasteurizer is safety-critical: HTST < 71.5°C trips divert valve → auto-Abort. Inject faults via `Command/Fault/Inject` (see [packml-sim/README.md](/packml-sim/README.md))."
+      }
+    },
+
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Receiving Tank-01",
+      "gridPos": {"x": 0, "y": 2, "w": 4, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Receiving/Tank/Tank-01/Status/StateCurrentStr"]],
+        "fields": [
+          {"name": "state", "type": "string", "jsonPath": "$.value"}
+        ],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "textMode": "value_and_name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {
+        "mappings": [
+          {"type": "value", "options": {"Execute": {"color": "green", "index": 0}}},
+          {"type": "value", "options": {"Idle": {"color": "blue", "index": 1}}},
+          {"type": "value", "options": {"Held": {"color": "orange", "index": 2}}},
+          {"type": "value", "options": {"Aborted": {"color": "red", "index": 3}}},
+          {"type": "value", "options": {"Stopped": {"color": "purple", "index": 4}}}
+        ]
+      }}
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Separator-01",
+      "gridPos": {"x": 4, "y": 2, "w": 4, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Process/Separator/Sep-01/Status/StateCurrentStr"]],
+        "fields": [{"name": "state", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "textMode": "value_and_name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {
+        "mappings": [
+          {"type": "value", "options": {"Execute": {"color": "green", "index": 0}}},
+          {"type": "value", "options": {"Idle": {"color": "blue", "index": 1}}},
+          {"type": "value", "options": {"Held": {"color": "orange", "index": 2}}},
+          {"type": "value", "options": {"Aborted": {"color": "red", "index": 3}}},
+          {"type": "value", "options": {"Stopped": {"color": "purple", "index": 4}}}
+        ]
+      }}
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Pasteurizer HTST-01",
+      "gridPos": {"x": 8, "y": 2, "w": 4, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Process/Pasteurizer/HTST-01/Status/StateCurrentStr"]],
+        "fields": [{"name": "state", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "textMode": "value_and_name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {
+        "mappings": [
+          {"type": "value", "options": {"Execute": {"color": "green", "index": 0}}},
+          {"type": "value", "options": {"Idle": {"color": "blue", "index": 1}}},
+          {"type": "value", "options": {"Held": {"color": "orange", "index": 2}}},
+          {"type": "value", "options": {"Aborted": {"color": "red", "index": 3}}},
+          {"type": "value", "options": {"Stopped": {"color": "purple", "index": 4}}}
+        ]
+      }}
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Homogenizer Homo-01",
+      "gridPos": {"x": 12, "y": 2, "w": 4, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Process/Homogenizer/Homo-01/Status/StateCurrentStr"]],
+        "fields": [{"name": "state", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "textMode": "value_and_name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {
+        "mappings": [
+          {"type": "value", "options": {"Execute": {"color": "green", "index": 0}}},
+          {"type": "value", "options": {"Idle": {"color": "blue", "index": 1}}},
+          {"type": "value", "options": {"Held": {"color": "orange", "index": 2}}},
+          {"type": "value", "options": {"Aborted": {"color": "red", "index": 3}}},
+          {"type": "value", "options": {"Stopped": {"color": "purple", "index": 4}}}
+        ]
+      }}
+    },
+
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Bottler Bot-01",
+      "gridPos": {"x": 16, "y": 2, "w": 4, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Packaging/Bottler/Bot-01/Status/StateCurrentStr"]],
+        "fields": [{"name": "state", "type": "string", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "textMode": "value_and_name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {
+        "mappings": [
+          {"type": "value", "options": {"Execute": {"color": "green", "index": 0}}},
+          {"type": "value", "options": {"Idle": {"color": "blue", "index": 1}}},
+          {"type": "value", "options": {"Held": {"color": "orange", "index": 2}}},
+          {"type": "value", "options": {"Aborted": {"color": "red", "index": 3}}},
+          {"type": "value", "options": {"Stopped": {"color": "purple", "index": 4}}}
+        ]
+      }}
+    },
+
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Active faults (HTST)",
+      "gridPos": {"x": 20, "y": 2, "w": 4, "h": 3},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Process/Pasteurizer/HTST-01/Status/FaultCount"]],
+        "fields": [{"name": "count", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "value", "graphMode": "none"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "red", "value": 1}
+        ]}
+      }}
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Pasteurizer HTST-01 — safety-critical",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "HTST temperature (°C) — threshold 71.5",
+      "gridPos": {"x": 0, "y": 6, "w": 18, "h": 9},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Process/Pasteurizer/HTST-01/Status/HTST_temp_C"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "HTST_temp_C", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {
+        "unit": "celsius",
+        "min": 60,
+        "max": 80,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null},
+          {"color": "green", "value": 71.5}
+        ]},
+        "custom": {
+          "drawStyle": "line",
+          "lineInterpolation": "linear",
+          "thresholdsStyle": {"mode": "line"},
+          "fillOpacity": 10
+        }
+      }}
+    },
+
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Divert valve",
+      "gridPos": {"x": 18, "y": 6, "w": 6, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Process/Pasteurizer/HTST-01/Status/divert_valve_status"]],
+        "fields": [{"name": "divert", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {"defaults": {
+        "mappings": [
+          {"type": "value", "options": {"0": {"text": "FLOW", "color": "green", "index": 0}}},
+          {"type": "value", "options": {"1": {"text": "DIVERT", "color": "red", "index": 1}}}
+        ]
+      }}
+    },
+
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "HTST flow (L/min)",
+      "gridPos": {"x": 18, "y": 10, "w": 6, "h": 5},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Process/Pasteurizer/HTST-01/Status/flow_L_min"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "flow_L_min", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "L/min"}}
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Separator + Homogenizer",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Separator — RPM",
+      "gridPos": {"x": 0, "y": 16, "w": 8, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Process/Separator/Sep-01/Status/RPM"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "RPM", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "rotrpm"}}
+    },
+
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Separator — fat %",
+      "gridPos": {"x": 8, "y": 16, "w": 8, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Process/Separator/Sep-01/Status/fat_pct"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "fat_pct", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 3,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 4.0},
+          {"color": "red", "value": 4.3}
+        ]}
+      }}
+    },
+
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Homogenizer — pressure (bar)",
+      "gridPos": {"x": 16, "y": 16, "w": 8, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Process/Homogenizer/Homo-01/Status/pressure_bar"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "pressure_bar", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "pressurebar"}}
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Receiving + Bottling",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1}
+    },
+
+    {
+      "id": 31,
+      "type": "gauge",
+      "title": "Receiving Tank — level %",
+      "gridPos": {"x": 0, "y": 25, "w": 6, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Receiving/Tank/Tank-01/Status/level_pct"]],
+        "fields": [{"name": "level_pct", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null},
+          {"color": "orange", "value": 20},
+          {"color": "green", "value": 40},
+          {"color": "orange", "value": 90}
+        ]}
+      }}
+    },
+
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Receiving Tank — temperature (°C)",
+      "gridPos": {"x": 6, "y": 25, "w": 6, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Receiving/Tank/Tank-01/Status/in_temp_C"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "in_temp_C", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "celsius", "min": 0, "max": 15,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 6.5},
+          {"color": "red", "value": 8}
+        ]}
+      }}
+    },
+
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Bottler — bottles/min",
+      "gridPos": {"x": 12, "y": 25, "w": 6, "h": 8},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/history",
+        "method": "GET",
+        "params": [
+          ["topic", "DairyPlant/Packaging/Bottler/Bot-01/Status/bottles_per_min"],
+          ["minutes", "15"]
+        ],
+        "fields": [
+          {"name": "time", "type": "time", "jsonPath": "$.data[*].time"},
+          {"name": "bot_per_min", "type": "number", "jsonPath": "$.data[*].value"}
+        ],
+        "refId": "A"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}}
+    },
+
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "Bottler — reject count",
+      "gridPos": {"x": 18, "y": 25, "w": 3, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Packaging/Bottler/Bot-01/Status/reject_count"]],
+        "fields": [{"name": "rejects", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "value", "graphMode": "none"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "green", "value": null},
+          {"color": "orange", "value": 10},
+          {"color": "red", "value": 50}
+        ]}
+      }}
+    },
+
+    {
+      "id": 35,
+      "type": "stat",
+      "title": "Bottler — fill (mL)",
+      "gridPos": {"x": 21, "y": 25, "w": 3, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Packaging/Bottler/Bot-01/Status/fill_volume_mL"]],
+        "fields": [{"name": "fill_mL", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "value", "graphMode": "none"},
+      "fieldConfig": {"defaults": {"unit": "mL", "decimals": 1,
+        "thresholds": {"mode": "absolute", "steps": [
+          {"color": "red", "value": null},
+          {"color": "green", "value": 997},
+          {"color": "red", "value": 1003}
+        ]}
+      }}
+    },
+
+    {
+      "id": 36,
+      "type": "stat",
+      "title": "Bottler — total bottles",
+      "gridPos": {"x": 18, "y": 29, "w": 6, "h": 4},
+      "datasource": "IDP-API",
+      "targets": [{
+        "path": "/archive/dairy/latest",
+        "method": "GET",
+        "params": [["topic", "DairyPlant/Packaging/Bottler/Bot-01/Status/bottles_total"]],
+        "fields": [{"name": "total", "type": "number", "jsonPath": "$.value"}],
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+                  "colorMode": "value", "graphMode": "area"},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}}
+    }
+  ]
+}

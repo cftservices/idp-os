@@ -1,0 +1,26 @@
+# Bakery line A — final proofer tunnel (PLC-PROOF-A)
+# UNS: bakery-works-utrecht/line-a/proofing/proofer-01/Status/...
+#
+# Solve-C source — dwell-overshoot-min > spec → N8N planner workflow.
+
+type: proofer
+site: bakery-works-utrecht
+line: line-a
+area: proofing
+equipment: proofer-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.5
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 6.0
+  auto_start: true
+
+physics:
+  temp_setpoint_c: 35.0
+  humidity_setpoint_pct: 85.0
+  tunnel_length_m: 30.0
+  belt_speed_m_min: 0.5      # → 60 min dwell at 100%
+  dwell_spec_min: 60.0

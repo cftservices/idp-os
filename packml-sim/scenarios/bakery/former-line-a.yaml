@@ -1,0 +1,19 @@
+# Bakery line A — dough former / scaler (PLC-FORM-A)
+type: former
+site: bakery-works-utrecht
+line: line-a
+area: forming
+equipment: scaler-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0   # pieces/min
+  initial_mach_speed: 100.0
+  transient_duration_s: 4.0
+  auto_start: true
+
+physics:
+  target_weight_g: 800.0     # witbrood = 800 g per piece
+  tolerance_g: 10.0
