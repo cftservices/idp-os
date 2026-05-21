@@ -1,0 +1,82 @@
+# BakeryWorks Utrecht — Workshop 1 (CONNECT) Mini overlay
+#
+# Three PackML-driven simulators, ~290 MB RAM total. Enough to demo the
+# full Connect → Distribute flow with a single Solve-A trigger
+# (oven zone-3 drift, fires 10 min after container start).
+#
+# Run alongside the main IDP stack on the VPS:
+#   cd ~/idp-os   # adjust to your repo path
+#   docker compose -f docker-compose.yml \
+#                  -f scenarios/bakery-works-utrecht/docker-compose.workshop-mini.yml \
+#                  up -d --build
+#
+# Stop / remove just the workshop containers (leaves base stack running):
+#   docker compose -f docker-compose.yml \
+#                  -f scenarios/bakery-works-utrecht/docker-compose.workshop-mini.yml \
+#                  down
+#
+# Topics published (UNS):
+#   bakery-works-utrecht/line-a/mixing/mixer-01/Status/...
+#   bakery-works-utrecht/line-a/baking/tunnel-oven-01/Status/zone-{1..4}/...   ← Solve-A
+#   bakery-works-utrecht/line-a/packaging/wrapper-01/Status/...
+
+x-packml-base: &packml-base
+  build:
+    context: ../../packml-sim
+    dockerfile: Dockerfile
+  image: techflow/packml-sim:latest
+  restart: unless-stopped
+  env_file: ./packml-shared.env
+  volumes:
+    - ../../packml-sim/scenarios:/scenarios:ro
+  mem_limit: 96m
+  depends_on:
+    monstermq:
+      condition: service_healthy
+  networks:
+    - idp-network
+
+services:
+
+  bakery-mixer-line-a:
+    <<: *packml-base
+    container_name: bakery-mixer-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/mixer-line-a.yaml
+
+  # Solve-A canvas — zone-3 heater degrades 40% at t=600s (10 min)
+  bakery-oven-line-a:
+    <<: *packml-base
+    container_name: bakery-oven-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/oven-line-a.yaml
+
+  bakery-packaging-line-a:
+    <<: *packml-base
+    container_name: bakery-packaging-line-a
+    environment:
+      UNIT_CONFIG: /scenarios/bakery/packaging-line-a.yaml
+
+  # One-shot — auto-import the bakery Grafana dashboard so the demo has a panel
+  bakery-grafana-import:
+    image: curlimages/curl:latest
+    container_name: bakery-grafana-import
+    restart: "no"
+    volumes:
+      - ./grafana:/dashboards:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sleep 8
+        for f in /dashboards/*.json; do
+          [ -e "$$f" ] || continue
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d @$$f \
+            "http://${GRAFANA_ADMIN_USER:-admin}:${GRAFANA_ADMIN_PASSWORD:-admin}@grafana:3000/api/dashboards/db" \
+            || true
+        done
+    depends_on:
+      - grafana
+    networks:
+      - idp-network
