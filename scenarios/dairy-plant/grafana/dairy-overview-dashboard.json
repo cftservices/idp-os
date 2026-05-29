@@ -1,0 +1,131 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "name": "HTST divert events",
+        "datasource": { "type": "marcusolsson-json-datasource", "uid": "dairy-events-api" },
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "enable": true,
+        "url": "/dairy/htst/audit?limit=50"
+      }
+    ]
+  },
+  "title": "DairyPlant — Workshop Mini Overview",
+  "tags": ["dairy-plant", "scenario", "workshop-mini"],
+  "timezone": "Europe/Amsterdam",
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Batch ID",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=DairyPlant/Receiving/Tank/Tank-01/Status/batch_id" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue" }] } } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "HTST temperatuur (live)",
+      "description": "Regulatoire minimum: 71.7°C. Alarm < 71.5°C → automated divert.",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=DairyPlant/Process/Pasteurizer/HTST-01/Status/temperature_C" }],
+      "fieldConfig": { "defaults": { "unit": "celsius", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 71.5 }, { "color": "green", "value": 71.7 }] } } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Divert events / 24u",
+      "description": "Aantal automated divert-triggers in de laatste 24u (target = 0).",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/dairy/htst/audit/count?since=24h" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] } } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Regen efficiency (leading indicator)",
+      "description": "Daling onder 80% voorspelt HTST onder-pasteurisatie.",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/latest?topic=DairyPlant/Process/Pasteurizer/HTST-01/Status/regen_efficiency_pct" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 83 }] } } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTST temperatuur — regulatoire threshold",
+      "description": "Live HTST temperature_C met regulatoire grens 71.7°C en alarm 71.5°C (Solve-A trigger).",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [
+        { "refId": "T", "url": "/api/series?topic=DairyPlant/Process/Pasteurizer/HTST-01/Status/temperature_C" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineWidth": 3, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 71.5 },
+              { "color": "green", "value": 71.7 }
+            ]
+          },
+          "min": 70,
+          "max": 74
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "T" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Tank niveau + Separator doorstroom",
+      "description": "Upstream throughput context — tank-niveau zakt als pasteurizer divert (terugloop).",
+      "gridPos": { "x": 0, "y": 11, "w": 12, "h": 6 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [
+        { "refId": "L", "url": "/api/series?topic=DairyPlant/Receiving/Tank/Tank-01/Status/level_L" },
+        { "refId": "F", "url": "/api/series?topic=DairyPlant/Process/Separator/Sep-01/Status/flow_lph" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "HTST regen-efficiency (leading indicator for divert)",
+      "description": "Daalt typisch eerst — geeft 5-10 min voorspraak voor temperatuur-drop.",
+      "gridPos": { "x": 12, "y": 11, "w": 12, "h": 6 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [
+        { "refId": "R", "url": "/api/series?topic=DairyPlant/Process/Pasteurizer/HTST-01/Status/regen_efficiency_pct" },
+        { "refId": "H", "url": "/api/series?topic=DairyPlant/Process/Pasteurizer/HTST-01/Status/hold_time_s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{ "color": "red" }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 83 }] } } }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "HTST audit events — laatste 24 uur (warehouse.htst_audit)",
+      "description": "Regulatoire audit-trail. Elke regel = één divert-event met batch-ID, root cause, en QA-acknowledgement status. 5 jaar retentie (EU 853/2004).",
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dairy-mongo" },
+      "targets": [{ "refId": "A", "url": "/api/dairy/htst/audit?since=24h" }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "solve_id" }, "properties": [{ "id": "custom.width", "value": 110 }] },
+          { "matcher": { "id": "byName", "options": "likely_root_cause" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-text" } }, { "id": "mappings", "value": [{ "type": "value", "options": { "regen_efficiency_degradation": { "color": "orange" }, "hold_time_short": { "color": "yellow" }, "upstream_supply_disturbance": { "color": "blue" } } }] }] }
+        ]
+      }
+    }
+  ]
+}

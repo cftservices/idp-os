@@ -1,0 +1,136 @@
+{
+  "name": "WF-DAIRY-001 HTST Under-Pasteurization Automatic Divert",
+  "_meta": {
+    "solve_event": "MAIN-SOLVE / SOLVE-A",
+    "archetype": "automated-action + regulatory-audit",
+    "scenario": "dairy-plant",
+    "regulatory_basis": "EU Reg. 853/2004 Annex III, Section IX, Chapter II, point 3",
+    "documentation": "../factory-model/isa95-dairy-mini.json#solve_event"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dairy/htst-divert",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook — MonsterMQ HTST Under-Pasteurization",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "_comment": "MonsterMQ Flow rule: on topic DairyPlant/Process/Pasteurizer/HTST-01/Status/temperature_C < 71.5 AND hold_time_s > 0 → HTTP POST. Throttle: max 1 trigger per 5 sec per HTST unit."
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "staging.htst_raw",
+        "query": "={ \"topic\": { \"$regex\": \"^DairyPlant/Process/Pasteurizer/HTST-01/Status/\" } }",
+        "limit": 600,
+        "sort": "={ \"timestamp\": -1 }"
+      },
+      "id": "node-context",
+      "name": "MongoDB — Sensor context laatste 10 min",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [460, 180],
+      "_comment": "Snapshot van alle HTST tags (temperature_C, divert_position, hold_time_s, regen_efficiency_pct) voor de audit-record."
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "staging.htst_raw",
+        "query": "={ \"topic\": \"DairyPlant/Receiving/Tank/Tank-01/Status/batch_id\" }",
+        "limit": 1,
+        "sort": "={ \"timestamp\": -1 }"
+      },
+      "id": "node-batch",
+      "name": "MongoDB — Huidige Batch ID",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "url": "http://erp:8080/api/shifts/current",
+        "options": {}
+      },
+      "id": "node-shift",
+      "name": "ERP — Dienstdoende QA-engineer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 460]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Compose audit-trail + Solve-event context\nconst context = $('MongoDB — Sensor context laatste 10 min').all().map(i => i.json);\nconst batch = $('MongoDB — Huidige Batch ID').first().json;\nconst shift = $('ERP — Dienstdoende QA-engineer').first().json;\n\nconst temp_samples = context.filter(c => c.topic.endsWith('/temperature_C')).map(c => c.value);\nconst regen_samples = context.filter(c => c.topic.endsWith('/regen_efficiency_pct')).map(c => c.value);\nconst hold_samples = context.filter(c => c.topic.endsWith('/hold_time_s')).map(c => c.value);\n\nconst min_temp = Math.min(...temp_samples);\nconst min_regen = Math.min(...regen_samples);\nconst current_hold = hold_samples[0];\nconst divert_duration_sec = temp_samples.filter(t => t < 71.5).length;\n\n// Likely root cause heuristic (regen-eff drop → temperature drop)\nlet root_cause = 'unknown';\nif (min_regen < 80) root_cause = 'regen_efficiency_degradation';\nelse if (current_hold < 14.5) root_cause = 'hold_time_short';\nelse root_cause = 'upstream_supply_disturbance';\n\nreturn {\n  json: {\n    solve_id: 'MAIN-SOLVE',\n    event_type: 'htst_under_pasteurization',\n    timestamp: new Date().toISOString(),\n    batch_id: batch.value,\n    unit_id: 'HTST-01',\n    current_temp_C: temp_samples[0],\n    min_temp_C_10min: min_temp,\n    min_regen_eff_pct: min_regen,\n    current_hold_time_s: current_hold,\n    divert_duration_sec: divert_duration_sec,\n    likely_root_cause: root_cause,\n    qa_engineer: shift.name,\n    qa_engineer_teams_id: shift.teams_id,\n    regulatory_threshold_C: 71.7,\n    alarm_threshold_C: 71.5,\n    regulation: 'EU Reg. 853/2004 Annex III Section IX Ch.II',\n    audit_required: true,\n    ack_deadline: new Date(Date.now() + 15*60*1000).toISOString()\n  }\n};"
+      },
+      "id": "node-compose",
+      "name": "Compose audit-trail + Solve-event payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [700, 320]
+    },
+    {
+      "parameters": {
+        "url": "http://monstermq:4000/api/publish",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={ \"topic\": \"DairyPlant/Process/Pasteurizer/HTST-01/Command/divert_position\", \"payload\": \"1\", \"retain\": false, \"qos\": 2 }"
+      },
+      "id": "node-divert",
+      "name": "MonsterMQ — Open divert valve (automated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 180],
+      "_comment": "PRIMARY automated-action. Sub-second response — happens BEFORE audit-record + Teams push. Closed-loop verified by PLC echoing divert_position back to /Status topic."
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "warehouse.htst_audit",
+        "fields": "=solve_id,event_type,timestamp,batch_id,unit_id,current_temp_C,min_temp_C_10min,min_regen_eff_pct,current_hold_time_s,divert_duration_sec,likely_root_cause,qa_engineer,regulatory_threshold_C,alarm_threshold_C,regulation,audit_required,ack_deadline",
+        "options": {}
+      },
+      "id": "node-audit",
+      "name": "MongoDB — Write audit-record (5y retention)",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [920, 320],
+      "_comment": "warehouse.htst_audit — append-only, retention enforced via collection TTL = 1825 days (5 jaar EU 853/2004 vereist)."
+    },
+    {
+      "parameters": {
+        "url": "https://teams.webhook.example/dairy-qa",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={ \"@type\": \"MessageCard\", \"summary\": \"HTST under-pasteurization divert SOLVE-A\", \"themeColor\": \"D32F2F\", \"sections\": [ { \"activityTitle\": \"🚨 HTST onder-pasteurisatie — batch {{ $json.batch_id }} divert\", \"facts\": [ {\"name\":\"Min temp\",\"value\":\"{{ $json.min_temp_C_10min }}°C\"}, {\"name\":\"Regulatoire grens\",\"value\":\"{{ $json.regulatory_threshold_C }}°C\"}, {\"name\":\"Divert-duur\",\"value\":\"{{ $json.divert_duration_sec }} sec\"}, {\"name\":\"Min regen-eff\",\"value\":\"{{ $json.min_regen_eff_pct }}%\"}, {\"name\":\"Likely root cause\",\"value\":\"{{ $json.likely_root_cause }}\"}, {\"name\":\"Ack voor\",\"value\":\"{{ $json.ack_deadline }}\"} ] } ], \"potentialAction\": [ { \"@type\": \"HttpPOST\", \"name\": \"Acknowledge — heb gezien\", \"target\": \"http://n8n:5678/webhook/dairy/htst-divert/ack?batch={{ $json.batch_id }}&action=acknowledge\" }, { \"@type\": \"HttpPOST\", \"name\": \"Escaleer plant-directeur\", \"target\": \"http://n8n:5678/webhook/dairy/htst-divert/ack?batch={{ $json.batch_id }}&action=escalate\" } ] }"
+      },
+      "id": "node-teams",
+      "name": "Teams push — QA-group",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 460]
+    }
+  ],
+  "connections": {
+    "Webhook — MonsterMQ HTST Under-Pasteurization": {
+      "main": [[
+        { "node": "MongoDB — Sensor context laatste 10 min", "type": "main", "index": 0 },
+        { "node": "MongoDB — Huidige Batch ID", "type": "main", "index": 0 },
+        { "node": "ERP — Dienstdoende QA-engineer", "type": "main", "index": 0 }
+      ]]
+    },
+    "MongoDB — Sensor context laatste 10 min": { "main": [[{ "node": "Compose audit-trail + Solve-event payload", "type": "main", "index": 0 }]] },
+    "MongoDB — Huidige Batch ID": { "main": [[{ "node": "Compose audit-trail + Solve-event payload", "type": "main", "index": 0 }]] },
+    "ERP — Dienstdoende QA-engineer": { "main": [[{ "node": "Compose audit-trail + Solve-event payload", "type": "main", "index": 0 }]] },
+    "Compose audit-trail + Solve-event payload": {
+      "main": [[
+        { "node": "MonsterMQ — Open divert valve (automated)", "type": "main", "index": 0 },
+        { "node": "MongoDB — Write audit-record (5y retention)", "type": "main", "index": 0 },
+        { "node": "Teams push — QA-group", "type": "main", "index": 0 }
+      ]]
+    }
+  }
+}

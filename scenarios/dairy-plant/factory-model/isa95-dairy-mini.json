@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0",
+  "standard": "ISA-95 / IEC 62264",
+  "scenario": "DairyPlant Mini — workshop 1 CONNECT demo (60 min)",
+  "description": "Vereenvoudigde versie van DairyPlant. 3 units (receiving tank → separator → HTST pasteurizer), 1 Solve-event (HTST onder-pasteurisatie). Doel: in 3 min uitleggen aan iedere PLC-engineer zonder zuivel-kennis, dan 7-stappen build doorlopen in 30 min. De volledige isa95-dairy.json is voor Foundation cohort week 2-3.",
+  "namespace_convention": "DairyPlant/{Area}/{Equipment-Type}/{Unit-Id}/Status/{tag}",
+  "design_principle": "Maximaal 3 units, exact 1 Solve-event. Geen homogenizer/bottler, geen CIP-cyclus, geen planner-decision. Topic-tree matcht 1:1 met wat packml-sim daadwerkelijk publiceert — geen parallel \"-mini\" prefix.",
+  "primary_input_protocol": "MQTT-direct (packml-sim → MonsterMQ poort 1883). OPC-UA via dairy-sim/server.py is legacy alternatief, niet workshop-primary.",
+  "enterprise": {
+    "id": "ENT-DPM",
+    "name": "DairyPlant Mini",
+    "description": "Stelt voor: één industriële melkfabriek-lijn. Drie units op een rij: rauwe-melk-tank → separator (centrifuge) → HTST pasteurizer. Één regulatorisch verplichte Solve-event als demo.",
+    "sites": [
+      {
+        "id": "SITE-DPM",
+        "name": "DairyPlant",
+        "location": { "city": "Noord-Nederland (fictional)", "country": "NL", "timezone": "Europe/Amsterdam" },
+        "regulation": "EU Reg. 853/2004 — HTST pasteurisatie verplicht ≥71.7°C × 15s. Onderschrijding = batch divert + audit-trail (5 jaar retentie).",
+        "areas": [
+          {
+            "id": "AREA-RCV",
+            "name": "Receiving",
+            "description": "Rauwe-melk ontvangst en koel-buffer.",
+            "work_centers": [
+              {
+                "id": "WC-TANK-01",
+                "name": "Receiving Tank 01",
+                "description": "Gekoëlde buffer-tank voor rauwe melk (4°C). Eerste schakel — batch-ID ontstaat hier en wordt door de rest van de lijn meegevoerd.",
+                "controller": "PLC-RCV",
+                "mqtt_namespace": "DairyPlant/Receiving/Tank/Tank-01/Status",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "LI-TANK-01", "display_name": "Tank niveau", "mqtt_topic": "DairyPlant/Receiving/Tank/Tank-01/Status/level_L", "engineering_unit": "L", "normal_range": {"min": 5000, "max": 25000} },
+                  { "id": "TI-TANK-01", "display_name": "Tank temperatuur", "mqtt_topic": "DairyPlant/Receiving/Tank/Tank-01/Status/temperature_C", "engineering_unit": "°C", "normal_range": {"min": 3.5, "max": 4.5}, "setpoint": 4.0 },
+                  { "id": "BI-TANK-01", "display_name": "Batch ID", "mqtt_topic": "DairyPlant/Receiving/Tank/Tank-01/Status/batch_id", "engineering_unit": "string", "_format": "D-YYYY-NNNN", "_note": "Voorbeeld: D-2026-0142" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-PROC",
+            "name": "Process",
+            "description": "Proces-units — separator + pasteurizer.",
+            "work_centers": [
+              {
+                "id": "WC-SEP-01",
+                "name": "Separator Sep-01",
+                "description": "Centrifuge die rauwe melk scheidt in afgeroomde melk + room. RPM bepaalt vetgehalte uit.",
+                "controller": "PLC-SEP",
+                "mqtt_namespace": "DairyPlant/Process/Separator/Sep-01/Status",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "SI-SEP-01", "display_name": "Centrifuge RPM", "mqtt_topic": "DairyPlant/Process/Separator/Sep-01/Status/rpm", "engineering_unit": "rpm", "normal_range": {"min": 7100, "max": 7300}, "setpoint": 7200 },
+                  { "id": "QI-SEP-01", "display_name": "Vetgehalte uit", "mqtt_topic": "DairyPlant/Process/Separator/Sep-01/Status/fat_out_pct", "engineering_unit": "%", "normal_range": {"min": 1.5, "max": 1.6} },
+                  { "id": "FI-SEP-01", "display_name": "Doorstroom", "mqtt_topic": "DairyPlant/Process/Separator/Sep-01/Status/flow_lph", "engineering_unit": "L/h", "normal_range": {"min": 5800, "max": 6200} }
+                ]
+              },
+              {
+                "id": "WC-HTST-01",
+                "name": "HTST Pasteurizer HTST-01",
+                "description": "High-Temperature Short-Time pasteurisatie. Verhit melk tot 72°C en houdt 15 sec aan. Als T < 71.5°C tijdens hold → divert-klep gaat open, niet-gepasteuriseerde melk terug naar balanceer-tank, batch krijgt audit-trail entry. Regulatorisch verplicht (EU 853/2004).",
+                "controller": "PLC-PAST",
+                "mqtt_namespace": "DairyPlant/Process/Pasteurizer/HTST-01/Status",
+                "process_type": "continuous",
+                "sampling_interval_ms": 1000,
+                "tags": [
+                  { "id": "TI-HTST-01", "display_name": "HTST temperatuur", "mqtt_topic": "DairyPlant/Process/Pasteurizer/HTST-01/Status/temperature_C", "engineering_unit": "°C", "normal_range": {"min": 71.8, "max": 72.4}, "setpoint": 72.0, "alarm_low": 71.5, "_critical": true, "_used_for_solve": "MAIN-SOLVE" },
+                  { "id": "DV-HTST-01", "display_name": "Divert positie", "mqtt_topic": "DairyPlant/Process/Pasteurizer/HTST-01/Status/divert_position", "engineering_unit": "bool", "_values": ["0 = product (door)", "1 = divert (terug)"], "_used_for_solve": "MAIN-SOLVE" },
+                  { "id": "HI-HTST-01", "display_name": "Hold-tijd", "mqtt_topic": "DairyPlant/Process/Pasteurizer/HTST-01/Status/hold_time_s", "engineering_unit": "s", "normal_range": {"min": 15.0, "max": 15.5}, "setpoint": 15.0 },
+                  { "id": "EI-HTST-01", "display_name": "Regen-efficiency", "mqtt_topic": "DairyPlant/Process/Pasteurizer/HTST-01/Status/regen_efficiency_pct", "engineering_unit": "%", "normal_range": {"min": 83, "max": 88}, "setpoint": 85 }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "solve_event": {
+    "id": "MAIN-SOLVE",
+    "name": "HTST onder-pasteurisatie → automatic divert + audit-trail",
+    "archetype": "automated-action + regulatory-audit",
+    "user_story": "Ik wil dat het systeem zelf de divert-klep aanstuurt en een audit-trail entry wegschrijft binnen 1 sec na: HTST temperatuur < 71.5°C tijdens de hold-fase. Daarna de QA-engineer een Teams push met batch-ID, divert-duur, en root-cause-pointer.",
+    "trigger": "Pasteurizer/HTST-01/Status/temperature_C < 71.5 AND hold_time_s > 0",
+    "auto_action": "Open divert valve (set divert_position = 1) + log audit entry naar warehouse.htst_audit collectie",
+    "owner": "QA-engineer + plant-manager (Teams group)",
+    "channel": "(1) Automated divert binnen 1 sec  (2) Microsoft Teams push naar QA-group binnen 5 sec",
+    "time_window": "Automated = direct. QA-acknowledgement binnen 15 min, anders escalatie plant-directeur.",
+    "auto_correction_available": false,
+    "outcome_metric": "Aantal regulatoire batch-rejects voorkomen per maand × €waarde van een rejected batch + audit-compliance-score (% van HTST < 71.5°C events met complete audit-trail = doel 100%)",
+    "regulatory_basis": "EU Reg. 853/2004 Annex III, Section IX, Chapter II, point 3 — HTST minimum 71.7°C × 15s, audit-trail 5 jaar.",
+    "five_criteria_check": {
+      "closed_loop": "Divert-klep wordt direct aangestuurd (geen mens-tussenstap) + audit-record in MongoDB + Teams ack-knop → ack-event terug in audit-record",
+      "owner_identified": "QA-engineer (uit ERP shift-rotatie) + plant-manager als escalatie-pad",
+      "time_bound": "Automated divert < 1 sec, QA-ack < 15 min, escalatie daarna",
+      "measurable_outcome": "Voorkomen batch-rejects in € + 100% audit-trail compliance score",
+      "traceable_to_source": "Audit-record → batch-ID → MES batch-recipe → MQTT-events (alle HTST-tags op moment van divert) → PLC-PAST source"
+    }
+  },
+  "demo_walkthrough_3min": [
+    "Dit is DairyPlant. Drie machines: tank vangt rauwe melk op, separator scheidt het vet eruit, pasteurizer maakt het veilig om te drinken.",
+    "150.000 liter per dag. Één probleem die we vandaag oplossen: de pasteurizer moet altijd minimaal 71.7°C halen, anders is de melk niet veilig en moet hij divert — terug naar de balanceer-tank.",
+    "Dat is geen \"is wel handig\". Dat is wettelijk verplicht (EU 853/2004). Als de audit-trail niet klopt, wordt de fabriek stilgelegd.",
+    "We willen dat het systeem (a) de divert-klep zelf opent als T < 71.5°C, en (b) een audit-record wegschrijft met batch-ID en alle sensor-waardes op dat moment, én (c) de QA-engineer binnen 5 sec een Teams push krijgt.",
+    "Dat gaan we bouwen — in 7 stappen, in 30 min, op €8/mnd open-source stack."
+  ],
+  "demo_walkthrough_per_step": {
+    "1_connect": "Één tag: DairyPlant/Process/Pasteurizer/HTST-01/Status/temperature_C. Komt van de packml-sim container die rechtstreeks publiceert naar MonsterMQ op poort 1883. Geen Python script, geen OPC-UA tussenstap.",
+    "2_condition": "OPC bad-quality flag filter + 1-sec rolling average + dedup op delta > 0.05°C. Conditioneert van \"raw sensor\" naar \"trustworthy signal\".",
+    "3_model": "Topic-naam staat in UNS — DairyPlant/Process/Pasteurizer/HTST-01/Status/temperature_C. Site/Area/Equipment/Unit/Status/Tag. Een mens snapt het. Een AI-agent ook. Geen vertaal-tabel nodig.",
+    "4_store": "MongoDB — staging.htst_raw (1:1 alle samples) + warehouse.htst_events (alleen divert-events met volledige context). Append-only, geen overschrijven.",
+    "5_orchestrate": "N8N: trigger op temperature_C < 71.5 → (a) MQTT publish naar divert_position = 1, (b) write audit-record naar warehouse.htst_audit, (c) Teams push.",
+    "6_visualize": "Grafana paneel: HTST temp tijdlijn met regulatoire threshold-line op 71.7°C + 71.5°C. Divert-events feed onderaan met batch-IDs.",
+    "7_distribute": "FastAPI endpoint /api/dairy/htst/audit?since=24h → consumeerbaar door QA-rapport, mobile app, audit-export naar regulator.",
+    "solve_test": "Vijf criteria — alle vinkjes. Werkend Solve-event. Hetzelfde patroon voor de rest van de fabriek (homogenizer, bottler) en voor 5 andere fabrieken in je werkomgeving."
+  },
+  "scale_up_pointer": "Voor de Foundation cohort (week 2-3): zie isa95-dairy.json (te bouwen) voor de volledige 5-unit versie met homogenizer, bottler, CIP-protocol, en 3 Solve-archetypen."
+}

@@ -1,0 +1,86 @@
+# DairyPlant — Workshop 1 (CONNECT) Mini overlay
+#
+# Three PackML-driven simulators (~290 MB RAM total) — enough to demo
+# the full Connect → Distribute flow with one regulatory Solve-event
+# (HTST under-pasteurization → automatic divert + audit-trail).
+#
+# Run alongside the main IDP stack on the VPS:
+#   cd ~/idp-os   # adjust to your repo path
+#   docker compose -f docker-compose.v3.yml \
+#                  -f scenarios/dairy-plant/docker-compose.workshop-mini.yml \
+#                  up -d --build
+#
+# Stop / remove just the workshop containers (leaves base stack running):
+#   docker compose -f docker-compose.v3.yml \
+#                  -f scenarios/dairy-plant/docker-compose.workshop-mini.yml \
+#                  down
+#
+# Topics published (UNS — matches isa95-dairy-mini.json):
+#   DairyPlant/Receiving/Tank/Tank-01/Status/{level_L,temperature_C,batch_id}
+#   DairyPlant/Process/Separator/Sep-01/Status/{rpm,fat_out_pct,flow_lph}
+#   DairyPlant/Process/Pasteurizer/HTST-01/Status/{temperature_C,divert_position,hold_time_s,regen_efficiency_pct}   ← Solve-A
+#
+# Solve-A trigger: HTST temperature_C < 71.5 → packml-sim physics drift fires
+# ~10 min after container start to make the demo deterministic.
+
+x-packml-base: &packml-base
+  build:
+    context: ../../packml-sim
+    dockerfile: Dockerfile
+  image: techflow/packml-sim:latest
+  restart: unless-stopped
+  env_file: ./packml-shared.env
+  volumes:
+    - ../../packml-sim/scenarios:/scenarios:ro
+  mem_limit: 96m
+  depends_on:
+    monstermq:
+      condition: service_healthy
+  networks:
+    - idp-network
+
+services:
+
+  dairy-tank-01:
+    <<: *packml-base
+    container_name: dairy-tank-01
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/receiving-tank-01.yaml
+
+  dairy-separator-01:
+    <<: *packml-base
+    container_name: dairy-separator-01
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/separator-01.yaml
+
+  # Solve-A canvas — HTST regen-efficiency degrades at t=600s (10 min),
+  # temperature_C drops below 71.5 → N8N workflow opens divert valve.
+  dairy-pasteurizer-01:
+    <<: *packml-base
+    container_name: dairy-pasteurizer-01
+    environment:
+      UNIT_CONFIG: /scenarios/dairy/pasteurizer-01.yaml
+
+  # One-shot — auto-import the dairy Grafana dashboard so the demo has a panel
+  dairy-grafana-import:
+    image: curlimages/curl:latest
+    container_name: dairy-grafana-import
+    restart: "no"
+    volumes:
+      - ./grafana:/dashboards:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sleep 8
+        for f in /dashboards/*.json; do
+          [ -e "$$f" ] || continue
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d @$$f \
+            "http://${GRAFANA_ADMIN_USER:-admin}:${GRAFANA_ADMIN_PASSWORD:-admin}@grafana:3000/api/dashboards/db" \
+            || true
+        done
+    depends_on:
+      - grafana
+    networks:
+      - idp-network
