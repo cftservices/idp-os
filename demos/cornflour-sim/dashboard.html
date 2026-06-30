@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TechFlow Mill 1 — Corn Flour Data Layer</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121922; --panel2:#0f151d; --line:#1e2a38;
+    --txt:#e6edf3; --dim:#8aa0b4; --accent:#39d4c8; --accent2:#5aa0ff;
+    --ok:#2ecc71; --stop:#5a6b7b; --err:#ff5d5d; --warn:#ffb020; --flour:#f0d58a;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#101824,#0b0f14);}
+  header .brand{font-weight:700;letter-spacing:.3px}
+  header .brand b{color:var(--accent)}
+  header .sub{color:var(--dim);font-size:13px}
+  .pill{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line)}
+  .pill.run{background:rgba(46,204,113,.12);color:var(--ok);border-color:rgba(46,204,113,.35)}
+  .pill.idle{background:rgba(90,107,123,.15);color:var(--dim)}
+  .spacer{flex:1}
+  .clock{font-family:var(--mono);color:var(--dim);font-size:13px}
+  button{background:var(--panel);color:var(--txt);border:1px solid var(--line);padding:7px 13px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:rgba(57,212,200,.14);border-color:rgba(57,212,200,.4);color:var(--accent)}
+  button.warn{background:rgba(255,176,32,.12);border-color:rgba(255,176,32,.4);color:var(--warn)}
+  main{padding:20px 22px;max-width:1280px;margin:0 auto}
+  .alarm{display:none;align-items:center;gap:12px;background:rgba(255,176,32,.1);border:1px solid rgba(255,176,32,.5);color:#ffe2ad;padding:12px 16px;border-radius:10px;margin-bottom:18px}
+  .alarm.show{display:flex}
+  .alarm .dot{width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 0 rgba(255,176,32,.6);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,176,32,.5)}70%{box-shadow:0 0 0 12px rgba(255,176,32,0)}100%{box-shadow:0 0 0 0 rgba(255,176,32,0)}}
+  .pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;position:relative}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;position:relative}
+  .card h3{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .sdot{width:9px;height:9px;border-radius:50%}
+  .sdot.s1{background:var(--ok)} .sdot.s0{background:var(--stop)} .sdot.s2{background:var(--err)}
+  .metric{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin:5px 0}
+  .metric b{color:var(--txt);font-family:var(--mono)}
+  .bar{height:8px;background:var(--panel2);border-radius:6px;overflow:hidden;margin-top:4px;border:1px solid var(--line)}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
+  .arrow{position:absolute;top:50%;right:-11px;transform:translateY(-50%);color:var(--line);font-size:20px;z-index:2}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .v{font-size:26px;font-weight:700;font-family:var(--mono)}
+  .kpi .l{color:var(--dim);font-size:12px;margin-top:2px}
+  .kpi .v.flour{color:var(--flour)}
+  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .panel h2{margin:0 0 12px;font-size:14px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .perfhead{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+  .perfhead .big{font-size:34px;font-weight:700;font-family:var(--mono)}
+  .perfhead .big.bad{color:var(--err)} .perfhead .big.good{color:var(--ok)}
+  .perfhead .spec{color:var(--dim);font-size:12px}
+  canvas{width:100%;height:170px;display:block}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  td{font-family:var(--mono)}
+  tr.oos td{color:#ffc9a8}
+  .badge{font-size:11px;padding:2px 7px;border-radius:6px}
+  .badge.ok{background:rgba(46,204,113,.12);color:var(--ok)}
+  .badge.oos{background:rgba(255,93,93,.12);color:var(--err)}
+  footer{color:var(--dim);font-size:12px;text-align:center;padding:18px}
+  footer code{font-family:var(--mono);color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TechFlow <b>Mill 1</b></div>
+  <div class="sub">Corn Flour · live data layer demo</div>
+  <span id="statePill" class="pill idle">IDLE</span>
+  <div class="spacer"></div>
+  <span id="clock" class="clock">t = 0 s</span>
+  <button class="primary" onclick="cmd('start')">Start factory</button>
+  <button onclick="cmd('stop')">Stop</button>
+  <button class="warn" onclick="cmd('reset_blades')">Replace blades</button>
+</header>
+
+<main>
+  <div id="alarm" class="alarm">
+    <span class="dot"></span>
+    <div><b>Maintenance heads-up</b> · <span id="alarmMsg"></span></div>
+  </div>
+
+  <div class="pipeline" id="pipeline"></div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v" id="kpiRaw">0</div><div class="l">Raw material in line (kg)</div></div>
+    <div class="kpi"><div class="v flour" id="kpiFlour">0</div><div class="l">Flour buffer (kg)</div></div>
+    <div class="kpi"><div class="v" id="kpiBatchBags">0</div><div class="l">Bags this batch</div></div>
+    <div class="kpi"><div class="v" id="kpiTotBags">0</div><div class="l">Total bags produced</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Grinder performance — the Solve test</h2>
+      <div class="perfhead">
+        <span class="big good" id="perfBig">100%</span>
+        <span class="spec">spec line = <b id="specVal">80</b>% · below this, flour drifts out of spec</span>
+      </div>
+      <canvas id="perfChart"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Batch history</h2>
+      <table>
+        <thead><tr><th>Batch</th><th>Bags</th><th>Flour kg</th><th>Avg perf</th><th></th></tr></thead>
+        <tbody id="batchRows"><tr><td colspan="5" style="color:var(--dim)">waiting for first batch…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    7-step data layer · Connect → Condition → Model → Store → Orchestrate → Visualize → Distribute ·
+    data on <code>/state</code> · €8/month open-source stack
+  </footer>
+</main>
+
+<script>
+const MACHINES = ["Washer","Dryer","Grinder","BagFiller"];
+const perfHist = [];           // client-side ring buffer of grinder performance
+let specThreshold = 80;
+
+function cmd(action){ fetch('/command?action='+action).then(()=>poll()); }
+
+function machineCard(name, m, isLast){
+  const extra = [];
+  if(name==="Dryer") extra.push(["Temperature", m.temperature_c+" °C"]);
+  if(name==="Grinder"){
+    extra.push(["Speed", m.speed_rpm+" rpm"]);
+    extra.push(["Blade wear", m.blade_wear_pct+" %"]);
+    extra.push(["Performance", m.performance_pct+" %"]);
+  }
+  if(name==="BagFiller") extra.push(["Bags (batch)", m.bags_this_batch]);
+  const lvlPct = Math.min(100, (m.level_kg/m.capacity_kg)*100);
+  const extraHtml = extra.map(e=>`<div class="metric"><span>${e[0]}</span><b>${e[1]}</b></div>`).join('');
+  return `<div class="card">
+    <h3><span class="sdot s${m.status}"></span>${name}</h3>
+    <div class="metric"><span>Status</span><b>${m.status_str}</b></div>
+    <div class="metric"><span>Level</span><b>${m.level_kg} / ${m.capacity_kg} kg</b></div>
+    <div class="bar"><i style="width:${lvlPct}%"></i></div>
+    <div class="metric" style="margin-top:8px"><span>Running hrs</span><b>${m.running_hours}</b></div>
+    ${extraHtml}
+    ${isLast?'':'<div class="arrow">›</div>'}
+  </div>`;
+}
+
+function drawChart(){
+  const c = document.getElementById('perfChart');
+  const dpr = window.devicePixelRatio||1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w*dpr; c.height = h*dpr;
+  const ctx = c.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const pad=24, x0=pad, x1=w-8, y0=8, y1=h-18;
+  const ymin=50, ymax=100;
+  const yfor=v=> y1-((v-ymin)/(ymax-ymin))*(y1-y0);
+  // gridlines
+  ctx.strokeStyle='#1e2a38'; ctx.fillStyle='#6b8197'; ctx.font='10px monospace';
+  [50,60,70,80,90,100].forEach(v=>{ const y=yfor(v); ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke(); ctx.fillText(v+'%', 2, y+3); });
+  // spec line
+  const ys=yfor(specThreshold);
+  ctx.strokeStyle='rgba(255,93,93,.7)'; ctx.setLineDash([5,4]); ctx.beginPath();ctx.moveTo(x0,ys);ctx.lineTo(x1,ys);ctx.stroke(); ctx.setLineDash([]);
+  // series
+  if(perfHist.length>1){
+    const n=perfHist.length; const dx=(x1-x0)/Math.max(1,(n-1));
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    perfHist.forEach((v,i)=>{ const x=x0+i*dx, y=yfor(Math.max(ymin,Math.min(ymax,v))); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    const last=perfHist[perfHist.length-1];
+    ctx.strokeStyle = last<specThreshold ? '#ff5d5d' : '#2ecc71';
+    ctx.stroke();
+  }
+}
+
+function render(s){
+  specThreshold = s.spec_threshold_pct;
+  document.getElementById('specVal').textContent = specThreshold;
+  // state pill
+  const pill=document.getElementById('statePill');
+  const running = s.master_running && s.state==='RUNNING';
+  pill.textContent = running?'RUNNING':(s.state||'IDLE');
+  pill.className = 'pill '+(running?'run':'idle');
+  document.getElementById('clock').textContent = 't = '+s.sim_time_s+' s';
+  // pipeline
+  document.getElementById('pipeline').innerHTML =
+    MACHINES.map((n,i)=>machineCard(n, s.machines[n], i===MACHINES.length-1)).join('');
+  // kpis
+  document.getElementById('kpiRaw').textContent = (s.buffers.raw_kg+s.buffers.washed_kg+s.buffers.dried_kg).toFixed(1);
+  document.getElementById('kpiFlour').textContent = s.buffers.flour_kg;
+  document.getElementById('kpiBatchBags').textContent = s.current_batch.bags_this_batch;
+  document.getElementById('kpiTotBags').textContent = s.machines.BagFiller.bags_filled;
+  // grinder perf
+  const perf=s.machines.Grinder.performance_pct;
+  const big=document.getElementById('perfBig');
+  big.textContent=perf+'%'; big.className='big '+(perf<specThreshold?'bad':'good');
+  perfHist.push(perf); if(perfHist.length>240) perfHist.shift();
+  drawChart();
+  // alarm
+  const a=document.getElementById('alarm');
+  if(s.maintenance_alarm){ a.classList.add('show'); document.getElementById('alarmMsg').textContent=s.maintenance_alarm.message; }
+  else a.classList.remove('show');
+  // batches
+  const rows=document.getElementById('batchRows');
+  if(s.batches && s.batches.length){
+    rows.innerHTML=s.batches.map(b=>`<tr class="${b.out_of_spec?'oos':''}">
+      <td>#${b.batch_id}</td><td>${b.bags_out}</td><td>${b.flour_kg_out}</td>
+      <td>${b.avg_grinder_performance_pct}%</td>
+      <td><span class="badge ${b.out_of_spec?'oos':'ok'}">${b.out_of_spec?'out of spec':'in spec'}</span></td></tr>`).join('');
+  }
+}
+
+function poll(){ fetch('/state').then(r=>r.json()).then(render).catch(()=>{}); }
+window.addEventListener('resize', drawChart);
+poll(); setInterval(poll, 1000);
+</script>
+</body>
+</html>

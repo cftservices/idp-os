@@ -155,6 +155,61 @@ services:
     networks:
       - idp-network
 
+  # ── CORN-FLOUR MILL SIMULATOR (AGS-007 workshop demo) ─────────────────────
+  # 4-machine corn-flour mill (Washer → Dryer → Grinder → BagFiller). Serves a
+  # zero-dep live dashboard on 8077 AND publishes ISA-95 MQTT topics:
+  #   TechFlow/Mill1/Milling/{Washer,Dryer,Grinder}/Status/...
+  #   TechFlow/Mill1/Packaging/BagFiller/Status/bags_filled
+  #   TechFlow/Mill1/Plant/Factory/{Status/state,Event/maintenance}
+  # Grinder blades wear → performance droops → maintenance alarm (the Solve test).
+  # OPC-UA Connect path via demos/cornflour-sim/opcua_bridge.py (CIP-compatible).
+  cornflour-sim:
+    build: ./demos/cornflour-sim
+    container_name: cornflour-sim
+    restart: unless-stopped
+    environment:
+      WEAR_RATE: "600"
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cornflour.rule=Host(`cornflour.${DOMAIN}`)"
+      - "traefik.http.routers.cornflour.entrypoints=websecure"
+      - "traefik.http.routers.cornflour.tls.certresolver=letsencrypt"
+      - "traefik.http.services.cornflour.loadbalancer.server.port=8077"
+
+  # ── DAIRYPLANT DEMO (visual HMI + 3 scenarios) ────────────────────────────
+  # Standalone visual demo (separate from the OPC-UA dairy-sim above). Serves an
+  # ISA-101 plant-mimic dashboard on 8078 and publishes:
+  #   DairyPlant/Receiving/Tank01/...  DairyPlant/Process/{Separator,Pasteurizer,Homogenizer}/...
+  #   DairyPlant/Packaging/Bottler/...  DairyPlant/Alarms/<id>
+  # Trigger cooling / leak / machine-fault scenarios from the operator station.
+  # OPC-UA Connect path via demos/dairy-sim/opcua_bridge.py (dairy contract, port 4842).
+  dairy-sim-demo:
+    build: ./demos/dairy-sim
+    container_name: dairy-sim-demo
+    restart: unless-stopped
+    environment:
+      COOL_RATE: "4"
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dairydemo.rule=Host(`dairy.${DOMAIN}`)"
+      - "traefik.http.routers.dairydemo.entrypoints=websecure"
+      - "traefik.http.routers.dairydemo.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dairydemo.loadbalancer.server.port=8078"
+
   # ── RABBITMQ ──────────────────────────────────────────────────────────────
   # Message broker with MQTT plugin. Replaces MonsterMQ.
   #

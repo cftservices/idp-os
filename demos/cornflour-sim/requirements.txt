@@ -1,0 +1,4 @@
+# The dashboard runs with ZERO dependencies (stdlib http.server) — `python sim.py`.
+# These are only needed for the canon Connect-layer paths:
+paho-mqtt>=2.0      # optional: publish telemetry to MonsterMQ (set MQTT_HOST)
+asyncua>=1.0        # optional: OPC-UA server/client Connect path (see opcua_bridge.py)
