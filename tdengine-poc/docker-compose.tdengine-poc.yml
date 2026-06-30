@@ -1,0 +1,93 @@
+name: idp-tdengine-poc
+
+# ════════════════════════════════════════════════════════════════════════════
+# TDengine Store-laag PoC — overlay op de draaiende IDP v3 stack
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Doel: TDengine TSDB-OSS testen als alternatief voor MongoDB in stap 4 (Store),
+# ZONDER de Enterprise-connectoren (taosX). De bridge subscribet op MonsterMQ
+# en schrijft via schemaless line-protocol naar TDengine.
+#
+# Voorwaarde: de hoofd-stack (docker-compose.v3.yml) draait al, want we hangen
+# aan diens netwerk en aan de monstermq-broker.
+#
+#   1. Zoek de netwerknaam van de draaiende stack:
+#        docker network ls | grep idp
+#      (Standaard project 'idp-v3' -> netwerk 'idp-v3_idp-network'.)
+#      Pas 'name:' hieronder aan als die afwijkt.
+#
+#   2. Start de overlay:
+#        docker compose -f docker-compose.tdengine-poc.yml up -d --build
+#
+#   3. Check dat er data binnenkomt:
+#        docker exec -it tdengine taos -s "SELECT COUNT(*) FROM idp.telemetry"
+#        docker exec -it tdengine taos -s "SELECT * FROM idp.telemetry LIMIT 5"
+#        docker exec -it tdengine taos -s "SHOW idp.tables"   # 1 sub-table per topic
+#
+#   4. Grafana: voeg de TDengine datasource toe (zie README) en query
+#        SELECT _wstart, AVG(value) FROM idp.telemetry
+#        WHERE topic = 'idp/plc01/temperature' AND _ts >= now - 1h
+#        INTERVAL(10s)
+#
+#   Afbreken (laat hoofd-stack + data intact):
+#        docker compose -f docker-compose.tdengine-poc.yml down
+#   Inclusief TDengine-data wissen:
+#        docker compose -f docker-compose.tdengine-poc.yml down -v
+# ════════════════════════════════════════════════════════════════════════════
+
+networks:
+  idp-network:
+    external: true
+    name: idp-v3_idp-network   # <-- pas aan als 'docker network ls' iets anders toont
+
+volumes:
+  tdengine-data:
+  tdengine-log:
+
+services:
+
+  # ── TDENGINE (TSDB-OSS, AGPL-3.0) ─────────────────────────────────────────
+  # taosd + taosAdapter in 1 image. REST/line-protocol op 6041, native op 6030.
+  # FQDN MOET matchen met de container-naam (TDengine is FQDN-gevoelig).
+  tdengine:
+    image: tdengine/tdengine:3.3.5.0
+    container_name: tdengine
+    hostname: tdengine
+    restart: unless-stopped
+    environment:
+      TAOS_FQDN: tdengine
+      TZ: Europe/Amsterdam
+    volumes:
+      - tdengine-data:/var/lib/taos
+      - tdengine-log:/var/log/taos
+    ports:
+      - "6041:6041"   # taosAdapter REST + InfluxDB line protocol (Grafana datasource)
+    networks:
+      - idp-network
+    healthcheck:
+      test: ["CMD-SHELL", "taos -s 'SHOW DATABASES' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ── BRIDGE (MonsterMQ -> TDengine) ────────────────────────────────────────
+  mqtt-tdengine-bridge:
+    build: .
+    container_name: mqtt-tdengine-bridge
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MQTT_TOPICS: "idp/#,DairyPlant/#,bakery-works-utrecht/#"
+      TD_URL: "http://tdengine:6041"
+      TD_DB: idp
+      TD_USER: root
+      TD_PASS: taosdata
+      FLUSH_SECONDS: "1.0"
+      FLUSH_LINES: "200"
+    depends_on:
+      tdengine:
+        condition: service_healthy
+    networks:
+      - idp-network

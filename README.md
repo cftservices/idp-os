@@ -20,6 +20,20 @@ This repo is the **technical proof** behind the **Build Your AI Data Layer** pro
 
 ---
 
+## Documentation
+
+Full reference docs live in [`docs/`](./docs/):
+
+| Doc | For |
+|-----|-----|
+| [docs/architecture.md](./docs/architecture.md) | Layering, the dual-broker design, v2 → v3 |
+| [docs/seven-step-build.md](./docs/seven-step-build.md) | Connect → Distribute, plus Solve and DataOps |
+| [docs/data-modeling.md](./docs/data-modeling.md) | ISA-95 / UNS + the 3-layer staging → warehouse → marts discipline |
+| [docs/store-layer.md](./docs/store-layer.md) | MongoDB vs TDengine, and the OT-connector paywall |
+| [docs/dataops-for-ot.md](./docs/dataops-for-ot.md) | The five production-grade disciplines |
+| [docs/operations.md](./docs/operations.md) | Deploy, env vars, sizing, troubleshooting |
+| [docs/adr/](./docs/adr/) | Architecture Decision Records |
+
 ## The 7-step build framework
 
 The layer is built in seven stages — no more, no less. Each stage maps to a module in the program, and every component in this repo belongs to one of them.
