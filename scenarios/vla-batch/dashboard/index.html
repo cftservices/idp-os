@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Vla Batch Demo — DairyWorks</title>
+<style>
+  :root{--bg:#0b1f3a;--panel:#12294a;--panel2:#0f2340;--line:#1e3a63;--txt:#e8f0fb;--mut:#9ab5d0;
+        --blue:#3d8bff;--green:#2ecc71;--grey:#6b7c93;--brown:#b07a2a;--red:#e74c3c;--yellow:#f1c40f;--purple:#9b6ad6}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:14px 20px;background:linear-gradient(90deg,#0b1f3a,#12294a);border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0}header .sub{color:var(--mut);font-size:12px}
+  .pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .ok{background:#123c25;color:var(--green)}.bad{background:#3c1a17;color:var(--red)}
+  nav{display:flex;gap:6px;margin-left:auto}
+  nav button{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 14px;cursor:pointer}
+  nav button.active{background:var(--blue);border-color:var(--blue)}
+  main{padding:18px 20px;max-width:1240px;margin:0 auto}
+  .banner{background:#3c1a17;border:1px solid var(--red);color:#ffd9d3;padding:10px 14px;border-radius:10px;margin-bottom:14px;display:none}
+  h2{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .card h3{margin:0 0 8px;font-size:13px}
+  .kv{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;padding:1px 0}
+  .kv b{color:var(--txt);font-variant-numeric:tabular-nums}
+  .status{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .s-Running,.s-Execute,.s-COOKING{background:#123c25;color:var(--green)}
+  .s-IDLE,.s-Idle{background:#2a2f38;color:#c9d3e0}.s-Held,.s-Holding{background:#3a2f10;color:var(--yellow)}
+  .s-Aborted,.s-Down,.s-Error{background:#3c1a17;color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:600}
+  .badge{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .v-APPROVED{background:#123c25;color:var(--green)}.v-HOLD{background:#3a2f10;color:var(--yellow)}
+  .v-REJECTED{background:#3c1a17;color:var(--red)}.v-PENDING{background:#2a2f38;color:#c9d3e0}
+  button.act{background:var(--blue);color:#fff;border:none;border-radius:7px;padding:6px 12px;cursor:pointer}
+  button.gh{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 10px;cursor:pointer}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 9px}
+  .row{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px}
+  .row label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}
+  .hidden{display:none}
+  a{color:var(--blue)}
+  .prog{height:6px;background:#0f2340;border-radius:4px;overflow:hidden;min-width:90px}
+  .prog>span{display:block;height:100%;background:var(--blue)}
+  /* lifecycle stepper */
+  .stepper{display:flex;gap:0;align-items:stretch;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;overflow-x:auto}
+  .step{flex:1;min-width:100px;text-align:center;position:relative;padding:6px 4px}
+  .step .dot{width:34px;height:34px;border-radius:50%;background:var(--panel2);border:2px solid var(--line);margin:0 auto 6px;
+             display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--mut);font-size:12px}
+  .step .lbl{font-size:11px;color:var(--mut);letter-spacing:.4px}
+  .step.done .dot{background:#123c25;border-color:var(--green);color:var(--green)}
+  .step.active .dot{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px rgba(61,139,255,.18)}
+  .step.active .lbl{color:var(--txt);font-weight:700}
+  .step:not(:last-child):after{content:"";position:absolute;top:23px;right:-50%;width:100%;height:2px;background:var(--line);z-index:0}
+  .step.done:not(:last-child):after{background:var(--green)}
+  /* gauge */
+  .gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .gauge{position:relative;width:150px;height:84px;overflow:hidden}
+  .gauge svg{display:block}
+  .gauge .val{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+  .gauge .unit{font-size:11px;color:var(--mut);font-weight:600}
+  .spec{font-size:11px;color:var(--mut);text-align:center;margin-top:2px}
+  .big{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+  .metric{display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;padding:8px}
+  .metric .lbl{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+  .dose-bar{height:8px;background:#0f2340;border-radius:5px;overflow:hidden;margin-top:3px}
+  .dose-bar>span{display:block;height:100%;background:var(--brown)}
+  .clickable{cursor:pointer}
+  .clickable:hover{border-color:var(--blue)}
+  .detail-back{cursor:pointer;color:var(--blue);font-size:12px;margin-bottom:8px;display:inline-block}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🍮 Vla Batch Demo <span class="sub">— DairyWorks (generic batch-dairy)</span></h1></div>
+  <div id="conn" class="pill bad">offline</div>
+  <nav>
+    <button data-tab="sales" class="active">Sales overview</button>
+    <button data-tab="batches">Batches</button>
+    <button data-tab="admin">SCADA / Admin</button>
+  </nav>
+</header>
+<main>
+  <div id="solve" class="banner">⚠ SOLVE — end viscosity below spec (&lt;150 cP): under-cook detected. Hold batch or re-cook.</div>
+
+  <!-- SALES OVERVIEW -->
+  <section id="tab-sales">
+    <h2>Active batch lifecycle</h2>
+    <div class="stepper" id="stepper"></div>
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+      <!-- cook temp -->
+      <div class="card">
+        <h3>Cook temperature</h3>
+        <div class="metric">
+          <span class="big" id="cookTemp">— °C</span>
+          <span class="lbl">setpoint <b id="cookSp">—</b> · hold <b id="cookHold">—</b></span>
+        </div>
+      </div>
+      <!-- viscosity gauge (the Solve) -->
+      <div class="card">
+        <h3>Viscosity (Solve)</h3>
+        <div class="gauge-wrap">
+          <div class="gauge" id="viscGauge"></div>
+          <div class="spec">spec 150–300 cP · &lt;150 = under spec</div>
+        </div>
+      </div>
+      <!-- packs -->
+      <div class="card">
+        <h3>Packs filled (1 L)</h3>
+        <div class="metric">
+          <span class="big" id="packs">—</span>
+          <span class="lbl">rejects <b id="rejects">—</b></span>
+        </div>
+      </div>
+    </div>
+
+    <h2>Dosing progress (target / actual)</h2>
+    <div class="grid" id="doseCards" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))"></div>
+  </section>
+
+  <!-- BATCHES LIST + DETAIL -->
+  <section id="tab-batches" class="hidden">
+    <div id="batchesList">
+      <h2>Batches</h2>
+      <table><thead><tr><th>Batch</th><th>Product</th><th>State</th><th>Packs</th><th>Verdict</th></tr></thead>
+        <tbody id="batches"></tbody></table>
+    </div>
+    <div id="batchDetail" class="hidden">
+      <span class="detail-back" onclick="closeDetail()">← back to list</span>
+      <h2 id="detailTitle">Batch detail</h2>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+        <div class="card metric"><span class="lbl">Peak cook temp</span><span class="big" id="dPeak">—</span></div>
+        <div class="card metric"><span class="lbl">Hold (sec)</span><span class="big" id="dHold">—</span></div>
+        <div class="card metric"><span class="lbl">End viscosity</span><span class="big" id="dVisc">—</span></div>
+        <div class="card metric"><span class="lbl">Packs total</span><span class="big" id="dPacks">—</span></div>
+        <div class="card metric"><span class="lbl">Verdict</span><span id="dVerdict" class="badge v-PENDING">—</span></div>
+      </div>
+      <h2>Doses</h2>
+      <table><thead><tr><th>Material</th><th>Target (kg)</th><th>Actual (kg)</th><th>Δ</th></tr></thead>
+        <tbody id="detailDoses"></tbody></table>
+      <h2>Samples</h2>
+      <table><thead><tr><th>Type</th><th>Value</th><th>Time</th></tr></thead>
+        <tbody id="detailSamples"></tbody></table>
+      <div class="row" style="margin-top:14px">
+        <a id="reportBtn" class="act" style="text-decoration:none" target="_blank">Report (PDF) ↗</a>
+        <a id="reportJson" class="gh" style="text-decoration:none" target="_blank">JSON</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCADA / ADMIN -->
+  <section id="tab-admin" class="hidden">
+    <h2>New batch</h2>
+    <div class="row">
+      <label>Recipe<select id="recipe"><option value="chocolate-vla-1L">chocolate-vla-1L</option></select></label>
+      <label>Planned (L)<input id="planned" type="number" value="5000" min="100" step="500" style="width:120px"></label>
+      <button class="act" onclick="createBatch()">Create + start batch</button>
+    </div>
+
+    <h2>Batch control</h2>
+    <div class="row">
+      <button class="gh" onclick="lineCmd('StartBatch')">Start current</button>
+      <button class="gh" onclick="lineCmd('Stop')">Stop</button>
+      <button class="gh" onclick="lineCmd('TakeSample','viscosity')">Take sample</button>
+    </div>
+
+    <h2>Setpoints</h2>
+    <div class="row">
+      <label>Target<select id="spTarget">
+        <option value="cook.setpoint_C">cook.setpoint_C</option>
+        <option value="cook.hold_sec">cook.hold_sec</option>
+        <option value="cooler.target_C">cooler.target_C</option>
+        <option value="mixing.agitator_rpm">mixing.agitator_rpm</option>
+        <option value="receiving.fat">receiving.fat</option>
+        <option value="dose.milk">dose.milk</option>
+        <option value="dose.sugar">dose.sugar</option>
+        <option value="dose.starch">dose.starch</option>
+        <option value="dose.cocoa">dose.cocoa</option>
+      </select></label>
+      <label>Value<input id="spValue" type="number" value="88" step="1" style="width:110px"></label>
+      <button class="act" onclick="setSetpoint()">Set setpoint</button>
+    </div>
+
+    <h2>Inject fault (Solve-test)</h2>
+    <div class="row">
+      <label>Fault<select id="fault">
+        <option value="cook_undertemp">cook_undertemp — caps peak cook temp (→ viscosity &lt;150)</option>
+        <option value="agitator_slow">agitator_slow — agitator RPM drop</option>
+        <option value="dose_off">dose_off — dosing off-target</option>
+      </select></label>
+      <label>Magnitude<input id="mag" type="number" value="0.6" min="0" max="1" step="0.1" style="width:90px"></label>
+      <button class="act" onclick="injectFault()">Inject</button>
+      <button class="gh" onclick="clearFault()">Clear faults</button>
+    </div>
+    <p id="adminMsg" class="sub"></p>
+  </section>
+</main>
+<script>
+const API = window.VLA_API || "/api/v1";
+const $ = s => document.querySelector(s);
+async function j(path, opts){ const r = await fetch(API+path, opts); if(!r.ok) throw new Error(r.status+" "+path); return r.json(); }
+async function post(path, body){
+  return j(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
+function num(v,d=1){ const n=parseFloat(v); return isNaN(n)?null:n; }
+function fmt(v,u='',d=1){ const n=num(v); return n===null?'—':(d===0?Math.round(n):n.toFixed(d))+(u?' '+u:''); }
+
+// ── tabs ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['sales','batches','admin'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
+});
+
+// ── UNS tag helpers (contract §ISA-95 tags) ─────────────────────────────────
+// topic pattern: DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}
+//            or: DairyWorks/Vla/Batch/Status/{state|batch_id|active_recipe}
+function tagVal(tags, area, eq, tag){
+  const t = `DairyWorks/Vla/${area}/${eq}/Status/${tag}`;
+  return tags[t];
+}
+function batchStatus(tags, tag){ return tags[`DairyWorks/Vla/Batch/Status/${tag}`]; }
+
+const LIFECYCLE = ['IDLE','DOSING','COOKING','COOLING','FILLING','COMPLETE'];
+const DOSES = [
+  {mat:'milk',   label:'Milk',   sp:'dose_milk_setpoint_kg',   ac:'dose_milk_actual_kg'},
+  {mat:'sugar',  label:'Sugar',  sp:'dose_sugar_setpoint_kg',  ac:'dose_sugar_actual_kg'},
+  {mat:'starch', label:'Starch', sp:'dose_starch_setpoint_kg', ac:'dose_starch_actual_kg'},
+  {mat:'cocoa',  label:'Cocoa',  sp:'dose_cocoa_setpoint_kg',  ac:'dose_cocoa_actual_kg'},
+];
+
+function renderStepper(state){
+  const idx = LIFECYCLE.indexOf(state);
+  $('#stepper').innerHTML = LIFECYCLE.map((s,i)=>{
+    const cls = i<idx ? 'done' : (i===idx ? 'active' : '');
+    const mark = i<idx ? '✓' : (i+1);
+    return `<div class="step ${cls}"><div class="dot">${mark}</div><div class="lbl">${s}</div></div>`;
+  }).join('');
+}
+
+function renderGauge(cP){
+  const el = $('#viscGauge');
+  const min=0, max=350, spec=150;
+  const v = cP===null ? 0 : Math.max(min,Math.min(max,cP));
+  const frac = (v-min)/(max-min);           // 0..1 over 0..350
+  const angle = -90 + frac*180;             // semicircle -90..+90
+  const under = cP!==null && cP < spec;
+  const color = cP===null ? 'var(--grey)' : (under ? 'var(--red)' : (cP>300?'var(--yellow)':'var(--green)'));
+  // spec marker at 150 cP
+  const specFrac=(spec-min)/(max-min), specAng=(-90+specFrac*180)*Math.PI/180;
+  const cx=75,cy=78,r=62;
+  const sx=cx+Math.cos(specAng-Math.PI/2)*r*0, sy=cy; // computed below via polar
+  function polar(a,rad){ const t=a*Math.PI/180; return [cx+rad*Math.cos(t-Math.PI/2), cy+rad*Math.sin(t-Math.PI/2)]; }
+  const [ax,ay]=polar(angle, r);
+  const [m1x,m1y]=polar(-90+specFrac*180, r-14);
+  const [m2x,m2y]=polar(-90+specFrac*180, r+2);
+  el.innerHTML = `
+    <svg width="150" height="90" viewBox="0 0 150 90">
+      <path d="M13,78 A62,62 0 0 1 137,78" fill="none" stroke="#0f2340" stroke-width="12" stroke-linecap="round"/>
+      <path d="M13,78 A62,62 0 0 1 137,78" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+            stroke-dasharray="${frac*195} 400"/>
+      <line x1="${m1x}" y1="${m1y}" x2="${m2x}" y2="${m2y}" stroke="var(--mut)" stroke-width="2"/>
+      <line x1="${cx}" y1="${cy}" x2="${ax}" y2="${ay}" stroke="${color}" stroke-width="3"/>
+      <circle cx="${cx}" cy="${cy}" r="4" fill="${color}"/>
+    </svg>
+    <div class="val" style="color:${color}">${cP===null?'—':Math.round(cP)}<span class="unit"> cP</span></div>`;
+}
+
+// ── SALES live view ─────────────────────────────────────────────────────────
+async function refreshSales(){
+  let data; try{ data = await j('/tags'); }catch(e){ $('#conn').textContent='engine offline'; $('#conn').className='pill bad'; return; }
+  const tags = data.tags || data || {};
+  $('#conn').textContent = 'online'; $('#conn').className='pill ok';
+
+  const state = (batchStatus(tags,'state') || 'IDLE').toString().toUpperCase();
+  renderStepper(state);
+
+  // cook
+  const cookTemp = num(tagVal(tags,'Cook','cook-unit-01','temp_C'));
+  $('#cookTemp').textContent = cookTemp===null ? '— °C' : cookTemp.toFixed(1)+' °C';
+  $('#cookSp').textContent   = fmt(tagVal(tags,'Cook','cook-unit-01','setpoint_C'),'°C');
+  const he=num(tagVal(tags,'Cook','cook-unit-01','hold_elapsed_sec')), hs=num(tagVal(tags,'Cook','cook-unit-01','hold_sec'));
+  $('#cookHold').textContent = (he===null||hs===null)?'—':`${Math.round(he)}/${Math.round(hs)} s`;
+
+  // viscosity gauge (the Solve)
+  const visc = num(tagVal(tags,'Cook','cook-unit-01','viscosity_cP'));
+  renderGauge(visc);
+  $('#solve').style.display = (visc!==null && visc < 150 && state!=='IDLE') ? 'block' : 'none';
+
+  // packs
+  $('#packs').textContent   = fmt(tagVal(tags,'Filling','filler-01','packs_total'),'',0);
+  $('#rejects').textContent = fmt(tagVal(tags,'Filling','filler-01','reject_count'),'',0);
+
+  // dosing progress
+  $('#doseCards').innerHTML = DOSES.map(d=>{
+    const target=num(tagVal(tags,'Mixing','process-tank-01',d.sp));
+    const actual=num(tagVal(tags,'Mixing','process-tank-01',d.ac));
+    const pct = (target&&target>0)?Math.min(100,Math.round(100*(actual||0)/target)):0;
+    return `<div class="card"><h3>${d.label}</h3>
+      <div class="kv"><span>actual</span><b>${fmt(actual,'kg',0)}</b></div>
+      <div class="kv"><span>target</span><b>${fmt(target,'kg',0)}</b></div>
+      <div class="dose-bar"><span style="width:${pct}%"></span></div>
+      <div class="kv" style="margin-top:4px"><span>progress</span><b>${pct}%</b></div></div>`;
+  }).join('');
+}
+
+// ── BATCHES list ────────────────────────────────────────────────────────────
+async function refreshBatches(){
+  if($('#batchDetail').classList.contains('hidden')===false) return; // detail open
+  let list; try{ list = await j('/batches'); }catch(e){ return; }
+  if(!Array.isArray(list)) list = list.batches||list.data||[];
+  $('#batches').innerHTML = list.map(b=>{
+    const id=b.batch_id||b.id, pr=b.product_name||b.recipe_id||'', st=b.state||'',
+      v=b.verdict||'PENDING', packs=b.packs_total!=null?b.packs_total:'—';
+    return `<tr class="clickable" onclick="openDetail('${id}')">
+      <td>${id}</td><td>${pr}</td><td><span class="status s-${st}">${st}</span></td>
+      <td>${packs}</td><td><span class="badge v-${v}">${v}</span></td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="sub">No batches yet — create one in the SCADA / Admin tab.</td></tr>';
+}
+
+async function openDetail(id){
+  let b; try{ b = await j('/batches/'+encodeURIComponent(id)); }catch(e){ alert('Load failed: '+e.message); return; }
+  $('#batchesList').classList.add('hidden');
+  $('#batchDetail').classList.remove('hidden');
+  $('#detailTitle').textContent = `Batch ${b.batch_id||id} — ${b.product_name||b.recipe_id||''}`;
+  $('#dPeak').textContent   = fmt(b.peak_cook_temp_C,'°C');
+  $('#dHold').textContent   = fmt(b.hold_sec,'',0);
+  const visc=num(b.end_viscosity_cP);
+  $('#dVisc').textContent   = visc===null?'—':Math.round(visc)+' cP';
+  $('#dVisc').style.color   = (visc!==null&&visc<150)?'var(--red)':'var(--txt)';
+  $('#dPacks').textContent  = b.packs_total!=null?b.packs_total:'—';
+  const v=b.verdict||'PENDING';
+  $('#dVerdict').textContent=v; $('#dVerdict').className='badge v-'+v;
+
+  const doses=b.doses||[];
+  $('#detailDoses').innerHTML = doses.map(d=>{
+    const t=num(d.qty_target), a=num(d.qty_actual), delta=(t!==null&&a!==null)?(a-t):null;
+    return `<tr><td>${d.material_id||''}</td><td>${fmt(t,'',1)}</td><td>${fmt(a,'',1)}</td>
+      <td style="color:${delta!==null&&Math.abs(delta)>0.5?'var(--yellow)':'var(--mut)'}">${delta===null?'—':(delta>=0?'+':'')+delta.toFixed(1)}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="sub">No dose records.</td></tr>';
+
+  const samples=b.samples||[];
+  $('#detailSamples').innerHTML = samples.map(s=>
+    `<tr><td>${s.sample_type||s.type||''}</td><td>${s.value!=null?s.value:(s.result||'')}</td><td>${(s.ts||s.taken_at||'').toString().replace('T',' ').slice(0,19)}</td></tr>`
+  ).join('') || '<tr><td colspan="3" class="sub">No samples.</td></tr>';
+
+  $('#reportBtn').href  = `${API}/report/${encodeURIComponent(id)}?format=pdf`;
+  $('#reportJson').href = `${API}/report/${encodeURIComponent(id)}?format=json`;
+}
+function closeDetail(){
+  $('#batchDetail').classList.add('hidden');
+  $('#batchesList').classList.remove('hidden');
+  refreshBatches();
+}
+
+// ── SCADA / admin actions (contract §batch-engine REST) ─────────────────────
+async function createBatch(){
+  const recipe_id=$('#recipe').value, planned_L=parseFloat($('#planned').value);
+  try{ const r=await post('/batches',{recipe_id,planned_L}); msg(r); refreshBatches(); }
+  catch(e){ msg({error:e.message}); }
+}
+async function lineCmd(command, value){
+  try{ const r=await post('/admin/command',{target:'batch',command,value}); msg(r); }catch(e){ msg({error:e.message}); }
+}
+async function setSetpoint(){
+  try{ const r=await post('/admin/command',{target:'batch',command:'SetSetpoint',value:$('#spValue').value,setpoint_target:$('#spTarget').value}); msg(r); }
+  catch(e){ msg({error:e.message}); }
+}
+async function injectFault(){
+  try{ const r=await post('/admin/command',{target:'batch',command:'InjectFault',value:parseFloat($('#mag').value),fault_id:$('#fault').value}); msg(r); }
+  catch(e){ msg({error:e.message}); }
+}
+async function clearFault(){
+  try{ const r=await post('/admin/command',{target:'batch',command:'ClearFault'}); msg(r); }catch(e){ msg({error:e.message}); }
+}
+function msg(o){ $('#adminMsg').textContent = JSON.stringify(o); }
+
+// ── boot + poll (~1-2s) ─────────────────────────────────────────────────────
+renderStepper('IDLE');
+refreshSales(); refreshBatches();
+setInterval(refreshSales, 1500);
+setInterval(refreshBatches, 2500);
+</script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+{
+  "title": "Vla Batch — Trends & Production",
+  "tags": ["vla-batch", "scenario", "dairyworks"],
+  "timezone": "Europe/Amsterdam",
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "type": "datasource",
+        "query": "tdengine-datasource",
+        "current": { "text": "TDengine", "value": "vla-tdengine" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Cook temperature (live)",
+      "description": "Latest cook-unit temp_C. Setpoint 88 C for chocolate-vla-1L.",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "sql": "SELECT LAST(value) AS temp_C FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 85 }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "End viscosity (live)",
+      "description": "Latest viscosity_cP. Spec 150-300 cP. Below 150 = under spec = Solve trigger.",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "sql": "SELECT LAST(value) AS viscosity_cP FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Cook/cook-unit-01/Status/viscosity_cP'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 150 }, { "color": "yellow", "value": 300 }] }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Packs filled (live)",
+      "description": "Latest filler-01 packs_total (1 L packs).",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "sql": "SELECT LAST(value) AS packs FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Filling/filler-01/Status/packs_total'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Batch state",
+      "description": "Latest line state string (IDLE|DOSING|COOKING|COOLING|FILLING|COMPLETE).",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "sql": "SELECT LAST(valuestr) AS state FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Batch/Status/state'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "purple" } }
+      },
+      "options": { "textMode": "value", "colorMode": "background" }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Cook temperature over time",
+      "description": "cook-unit-01 temp_C vs setpoint_C. Fault cook_undertemp caps the peak (under-cook).",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 9 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "T",
+          "alias": "temp_C",
+          "sql": "SELECT _wstart AS ts, AVG(value) AS temp_C FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C' AND ts >= $from AND ts <= $to INTERVAL($interval) FILL(PREV)"
+        },
+        {
+          "refId": "S",
+          "alias": "setpoint_C",
+          "sql": "SELECT _wstart AS ts, AVG(value) AS setpoint_C FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Cook/cook-unit-01/Status/setpoint_C' AND ts >= $from AND ts <= $to INTERVAL($interval) FILL(PREV)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "spanNulls": true },
+          "min": 20,
+          "max": 100
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "setpoint_C" }, "properties": [{ "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 6] } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }] }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Viscosity over time (the Solve)",
+      "description": "viscosity_cP with the 150 cP spec floor. Dropping below 150 => under-cook => verdict HOLD/REJECTED.",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 9 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "V",
+          "alias": "viscosity_cP",
+          "sql": "SELECT _wstart AS ts, AVG(value) AS viscosity_cP FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Cook/cook-unit-01/Status/viscosity_cP' AND ts >= $from AND ts <= $to INTERVAL($interval) FILL(PREV)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 3, "fillOpacity": 12, "spanNulls": true, "thresholdsStyle": { "mode": "line" } },
+          "min": 0,
+          "max": 320,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 150 }, { "color": "yellow", "value": 300 }] }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Packs production over time",
+      "description": "filler-01 packs_total (cumulative) and reject_count.",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "P",
+          "alias": "packs_total",
+          "sql": "SELECT _wstart AS ts, MAX(value) AS packs_total FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Filling/filler-01/Status/packs_total' AND ts >= $from AND ts <= $to INTERVAL($interval) FILL(PREV)"
+        },
+        {
+          "refId": "R",
+          "alias": "reject_count",
+          "sql": "SELECT _wstart AS ts, MAX(value) AS reject_count FROM idp.telemetry WHERE topic = 'DairyWorks/Vla/Filling/filler-01/Status/reject_count' AND ts >= $from AND ts <= $to INTERVAL($interval) FILL(PREV)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "spanNulls": true }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "reject_count" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "logs",
+      "title": "Batch events — line status changes",
+      "description": "String-valued status topics (state / batch_id / active_recipe) as an event stream, plus phase transitions from the mixing tank.",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "E",
+          "sql": "SELECT ts, topic, valuestr FROM idp.telemetry WHERE topic LIKE 'DairyWorks/Vla/%' AND valuestr IS NOT NULL AND ts >= $from AND ts <= $to ORDER BY ts DESC LIMIT 200"
+        }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true }
+    }
+  ]
+}

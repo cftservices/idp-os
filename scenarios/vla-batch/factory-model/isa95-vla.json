@@ -1,0 +1,504 @@
+{
+  "schema_version": "1.0",
+  "standard": "ISA-95 / IEC 62264 (hierarchy) + ISA-88 / IEC 61512 (batch/recipes)",
+  "product": "Vla Batch Demo",
+  "scenario": "DairyWorks — generic anonymized batch-dairy line 'Vla' (Receiving -> Mixing -> Cook -> Cooling -> Filling)",
+  "namespace_convention": "DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}",
+  "opcua_convention": "ns=2;s=DairyWorks.Vla.{Area}.{Equipment}.{tag}",
+  "opcua_endpoint": "opc.tcp://vla-factory:4840/DairyWorks",
+  "opcua_namespace_uri": "urn:dairyworks",
+  "opcua_namespace_index": 2,
+  "anonymization": "Generic factory 'DairyWorks'. No real client/vendor names, IPs or schemas. Modelled on generic batch-dairy know-how; fully fictional.",
+  "enterprise": {
+    "id": "ENT-DW",
+    "name": "DairyWorks BV",
+    "sites": [
+      {
+        "id": "SITE-DW",
+        "name": "DairyWorks Plant",
+        "location": {
+          "city": "generic",
+          "country": "-",
+          "timezone": "Europe/Amsterdam"
+        },
+        "lines": [
+          {
+            "id": "LINE-VLA",
+            "name": "Vla",
+            "description": "Batch-lijn voor chocolade-vla (Receiving -> Mixing -> Cook -> Cooling -> Filling).",
+            "areas": [
+              {
+                "id": "AREA-RCV",
+                "name": "Receiving",
+                "description": "Ontvangst en gestandaardiseerde melk-buffer met vet-instelling.",
+                "work_centers": [
+                  {
+                    "id": "WC-RCVT-01",
+                    "name": "Receiving tank 01",
+                    "equipment_id": "receiving-tank-01",
+                    "physics_type": "storage-tank",
+                    "process_type": "continuous",
+                    "description": "Melk-ontvangsttank met vet-setpoint (standaardisatie).",
+                    "mqtt_namespace": "DairyWorks/Vla/Receiving/receiving-tank-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Receiving.receiving-tank-01",
+                    "tags": [
+                      {
+                        "id": "receiving-tank-01:level_L",
+                        "display_name": "Niveau",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/receiving-tank-01/Status/level_L",
+                        "engineering_unit": "L",
+                        "writable": false,
+                        "normal_range": { "min": 0, "max": 8000 }
+                      },
+                      {
+                        "id": "receiving-tank-01:temp_C",
+                        "display_name": "Temperatuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/receiving-tank-01/Status/temp_C",
+                        "engineering_unit": "°C",
+                        "writable": false,
+                        "setpoint": 4.0
+                      },
+                      {
+                        "id": "receiving-tank-01:fat_setpoint_pct",
+                        "display_name": "Vet-setpoint",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/receiving-tank-01/Status/fat_setpoint_pct",
+                        "engineering_unit": "%",
+                        "writable": true,
+                        "command_target": "receiving.fat",
+                        "setpoint": 3.5
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "AREA-MIX",
+                "name": "Mixing",
+                "description": "Doseren en mengen van melk, suiker, zetmeel en cacao volgens recept.",
+                "work_centers": [
+                  {
+                    "id": "WC-PROT-01",
+                    "name": "Process tank 01",
+                    "equipment_id": "process-tank-01",
+                    "physics_type": "batch-mixer",
+                    "process_type": "batch",
+                    "description": "Meng-/procestank met agitator en 4 doseringen.",
+                    "mqtt_namespace": "DairyWorks/Vla/Mixing/process-tank-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Mixing.process-tank-01",
+                    "tags": [
+                      {
+                        "id": "process-tank-01:level_L",
+                        "display_name": "Niveau",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                        "engineering_unit": "L",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:temp_C",
+                        "display_name": "Temperatuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/temp_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:agitator_rpm",
+                        "display_name": "Agitator-toeren",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/agitator_rpm",
+                        "engineering_unit": "rpm",
+                        "writable": true,
+                        "command_target": "mixing.agitator_rpm"
+                      },
+                      {
+                        "id": "process-tank-01:dose_milk_actual_kg",
+                        "display_name": "Dosering melk (actueel)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_milk_actual_kg",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:dose_sugar_actual_kg",
+                        "display_name": "Dosering suiker (actueel)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_sugar_actual_kg",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:dose_starch_actual_kg",
+                        "display_name": "Dosering zetmeel (actueel)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_starch_actual_kg",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:dose_cocoa_actual_kg",
+                        "display_name": "Dosering cacao (actueel)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_cocoa_actual_kg",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:phase",
+                        "display_name": "Fase",
+                        "opcua_datatype": "String",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/phase",
+                        "engineering_unit": "enum",
+                        "writable": false
+                      },
+                      {
+                        "id": "process-tank-01:dose_milk_setpoint_kg",
+                        "display_name": "Dosering melk (setpoint)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_milk_setpoint_kg",
+                        "engineering_unit": "kg",
+                        "writable": true,
+                        "command_target": "dose.milk"
+                      },
+                      {
+                        "id": "process-tank-01:dose_sugar_setpoint_kg",
+                        "display_name": "Dosering suiker (setpoint)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_sugar_setpoint_kg",
+                        "engineering_unit": "kg",
+                        "writable": true,
+                        "command_target": "dose.sugar"
+                      },
+                      {
+                        "id": "process-tank-01:dose_starch_setpoint_kg",
+                        "display_name": "Dosering zetmeel (setpoint)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_starch_setpoint_kg",
+                        "engineering_unit": "kg",
+                        "writable": true,
+                        "command_target": "dose.starch"
+                      },
+                      {
+                        "id": "process-tank-01:dose_cocoa_setpoint_kg",
+                        "display_name": "Dosering cacao (setpoint)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/dose_cocoa_setpoint_kg",
+                        "engineering_unit": "kg",
+                        "writable": true,
+                        "command_target": "dose.cocoa"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "AREA-COOK",
+                "name": "Cook",
+                "description": "Verhitten tot cook-setpoint en houden (gelatinisatie zetmeel = viscositeit).",
+                "work_centers": [
+                  {
+                    "id": "WC-COOK-01",
+                    "name": "Cook unit 01",
+                    "equipment_id": "cook-unit-01",
+                    "physics_type": "cooker",
+                    "process_type": "batch",
+                    "description": "Kook-eenheid; peak-temp x hold bepaalt de eind-viscositeit (Solve).",
+                    "mqtt_namespace": "DairyWorks/Vla/Cook/cook-unit-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Cook.cook-unit-01",
+                    "tags": [
+                      {
+                        "id": "cook-unit-01:temp_C",
+                        "display_name": "Temperatuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "cook-unit-01:setpoint_C",
+                        "display_name": "Cook-setpoint",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/setpoint_C",
+                        "engineering_unit": "°C",
+                        "writable": true,
+                        "command_target": "cook.setpoint_C",
+                        "setpoint": 88.0
+                      },
+                      {
+                        "id": "cook-unit-01:hold_sec",
+                        "display_name": "Hold-tijd (setpoint)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/hold_sec",
+                        "engineering_unit": "s",
+                        "writable": true,
+                        "command_target": "cook.hold_sec",
+                        "setpoint": 300
+                      },
+                      {
+                        "id": "cook-unit-01:hold_elapsed_sec",
+                        "display_name": "Hold-tijd (verstreken)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/hold_elapsed_sec",
+                        "engineering_unit": "s",
+                        "writable": false
+                      },
+                      {
+                        "id": "cook-unit-01:viscosity_cP",
+                        "display_name": "Viscositeit",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/viscosity_cP",
+                        "engineering_unit": "cP",
+                        "writable": false,
+                        "critical": true,
+                        "normal_range": { "min": 150, "max": 300 }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "AREA-COOL",
+                "name": "Cooling",
+                "description": "Terugkoelen naar afvultemperatuur.",
+                "work_centers": [
+                  {
+                    "id": "WC-COOL-01",
+                    "name": "Cooler 01",
+                    "equipment_id": "cooler-01",
+                    "physics_type": "cooler",
+                    "process_type": "batch",
+                    "description": "Koelt de vla naar de doeltemperatuur voor afvullen.",
+                    "mqtt_namespace": "DairyWorks/Vla/Cooling/cooler-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Cooling.cooler-01",
+                    "tags": [
+                      {
+                        "id": "cooler-01:temp_C",
+                        "display_name": "Temperatuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cooling/cooler-01/Status/temp_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "cooler-01:target_C",
+                        "display_name": "Koel-doeltemperatuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Cooling/cooler-01/Status/target_C",
+                        "engineering_unit": "°C",
+                        "writable": true,
+                        "command_target": "cooler.target_C",
+                        "setpoint": 22.0
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "AREA-FILL",
+                "name": "Filling",
+                "description": "Afvullen in 1L-packs; goed- en afkeur-telling.",
+                "work_centers": [
+                  {
+                    "id": "WC-FILL-01",
+                    "name": "Filler 01",
+                    "equipment_id": "filler-01",
+                    "physics_type": "fill-line",
+                    "process_type": "continuous",
+                    "description": "Afvuller 1L-packs.",
+                    "mqtt_namespace": "DairyWorks/Vla/Filling/filler-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Filling.filler-01",
+                    "tags": [
+                      {
+                        "id": "filler-01:packs_total",
+                        "display_name": "Packs totaal",
+                        "opcua_datatype": "Int64",
+                        "mqtt_topic": "DairyWorks/Vla/Filling/filler-01/Status/packs_total",
+                        "engineering_unit": "count",
+                        "writable": false
+                      },
+                      {
+                        "id": "filler-01:reject_count",
+                        "display_name": "Afkeur",
+                        "opcua_datatype": "Int64",
+                        "mqtt_topic": "DairyWorks/Vla/Filling/filler-01/Status/reject_count",
+                        "engineering_unit": "count",
+                        "writable": false
+                      },
+                      {
+                        "id": "filler-01:pack_size_L",
+                        "display_name": "Pack-grootte",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Filling/filler-01/Status/pack_size_L",
+                        "engineering_unit": "L",
+                        "writable": false,
+                        "setpoint": 1.0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "batch_object": {
+              "id": "LINE-VLA-BATCH",
+              "name": "Batch",
+              "equipment_id": "Batch",
+              "description": "Line-level batch-object met de ISA-88 batch-state en methods.",
+              "mqtt_namespace": "DairyWorks/Vla/Batch/Status",
+              "opcua_node_base": "ns=2;s=DairyWorks.Vla.Batch",
+              "tags": [
+                {
+                  "id": "Batch:state",
+                  "display_name": "Batch-state",
+                  "opcua_datatype": "String",
+                  "mqtt_topic": "DairyWorks/Vla/Batch/Status/state",
+                  "engineering_unit": "enum",
+                  "writable": false,
+                  "enum": ["IDLE", "DOSING", "COOKING", "COOLING", "FILLING", "COMPLETE"]
+                },
+                {
+                  "id": "Batch:batch_id",
+                  "display_name": "Batch-id",
+                  "opcua_datatype": "String",
+                  "mqtt_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                  "engineering_unit": "id",
+                  "writable": false
+                },
+                {
+                  "id": "Batch:active_recipe",
+                  "display_name": "Actief recept",
+                  "opcua_datatype": "String",
+                  "mqtt_topic": "DairyWorks/Vla/Batch/Status/active_recipe",
+                  "engineering_unit": "id",
+                  "writable": false
+                }
+              ],
+              "methods": [
+                {
+                  "name": "StartBatch",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [{ "name": "recipeId", "datatype": "String" }],
+                  "returns": "Int32",
+                  "mqtt_command_topic": "DairyWorks/Vla/Batch/Command/StartBatch",
+                  "note": "0=OK, >0=geweigerd."
+                },
+                {
+                  "name": "Stop",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [],
+                  "returns": "Int32",
+                  "mqtt_command_topic": "DairyWorks/Vla/Batch/Command/Stop"
+                },
+                {
+                  "name": "SetSetpoint",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [
+                    { "name": "target", "datatype": "String" },
+                    { "name": "value", "datatype": "Double" }
+                  ],
+                  "returns": "Int32",
+                  "targets": [
+                    "cook.setpoint_C",
+                    "cook.hold_sec",
+                    "cooler.target_C",
+                    "mixing.agitator_rpm",
+                    "dose.milk",
+                    "dose.sugar",
+                    "dose.starch",
+                    "dose.cocoa",
+                    "receiving.fat"
+                  ]
+                },
+                {
+                  "name": "TakeSample",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [{ "name": "sampleType", "datatype": "String" }],
+                  "returns": "Int32",
+                  "mqtt_command_topic": "DairyWorks/Vla/Batch/Command/TakeSample"
+                },
+                {
+                  "name": "InjectFault",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [
+                    { "name": "faultId", "datatype": "String" },
+                    { "name": "magnitude", "datatype": "Double" }
+                  ],
+                  "returns": "Int32",
+                  "mqtt_command_topic": "DairyWorks/Vla/Batch/Command/InjectFault",
+                  "fault_ids": ["cook_undertemp", "agitator_slow", "dose_off"]
+                },
+                {
+                  "name": "ClearFault",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [],
+                  "returns": "Int32",
+                  "mqtt_command_topic": "DairyWorks/Vla/Batch/Command/ClearFault"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "materials": [
+    { "material_id": "MILK", "name": "Milk", "category": "LiquidBase", "uom": "kg", "storage_temp_c": 4.0 },
+    { "material_id": "SUGAR", "name": "Sugar", "category": "DryPowder", "uom": "kg", "storage_temp_c": 20.0 },
+    { "material_id": "STARCH", "name": "Starch", "category": "DryPowder", "uom": "kg", "storage_temp_c": 20.0 },
+    { "material_id": "COCOA", "name": "Cocoa", "category": "DryPowder", "uom": "kg", "storage_temp_c": 20.0 }
+  ],
+  "recipes": [
+    {
+      "recipe_id": "chocolate-vla-1L",
+      "product_id": "P-CHOCVLA",
+      "product_name": "Chocolate Vla 1L",
+      "version": "1.0",
+      "basis_L": 5000,
+      "pack_size_L": 1.0,
+      "type": "Vla",
+      "process_path": [
+        "receiving-tank-01",
+        "process-tank-01",
+        "cook-unit-01",
+        "cooler-01",
+        "filler-01"
+      ],
+      "doses": [
+        { "material_id": "MILK", "qty_kg": 5000 },
+        { "material_id": "SUGAR", "qty_kg": 500 },
+        { "material_id": "STARCH", "qty_kg": 250 },
+        { "material_id": "COCOA", "qty_kg": 100 }
+      ],
+      "cook_setpoint_C": 88,
+      "hold_sec": 300,
+      "cool_target_C": 22,
+      "viscosity_spec_cP": { "min": 150, "max": 300 }
+    }
+  ],
+  "sample_types": [
+    {
+      "type": "viscosity_cP",
+      "phase": "cooking",
+      "location": "cook-unit-01",
+      "critical": true,
+      "unit": "cP",
+      "spec": { "min": 150, "max": 300 }
+    }
+  ],
+  "equipment_states": ["Running", "Idle", "Dosing", "Cooking", "Cooling", "Filling", "Down", "Error"],
+  "batch_states": ["IDLE", "DOSING", "COOKING", "COOLING", "FILLING", "COMPLETE"],
+  "verdict_rule": {
+    "spec_min_cP": 150,
+    "spec_max_cP": 300,
+    "logic": "end_viscosity_cP < spec_min OR unresolved CRITICAL -> REJECTED/HOLD; afwijking -> HOLD; alles OK -> APPROVED; anders -> PENDING"
+  },
+  "solve_event": {
+    "id": "SOLVE-VISCOSITY",
+    "name": "Onder-gekookte vla -> viscositeit onder spec -> HOLD/REJECT + Solve-actie",
+    "trigger": "cook-unit-01/Status/viscosity_cP < 150 (te lage peak-temp x hold; fault cook_undertemp)",
+    "auto_action": "batch verdict HOLD/REJECTED + critical batch alarm + audit entry",
+    "outcome": "Raw data (peak-temp x hold) leidt tot een echte beslissing: vasthouden/herkoken i.p.v. blind afvullen"
+  }
+}

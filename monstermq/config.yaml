@@ -33,3 +33,20 @@ Archive:
         - "bakery-works-utrecht/#"
       Enabled: true
       RetentionDays: 30
+    # DairyWorks — Milk Production Demo (generic anonymized batch-dairy).
+    # packml-sim units publish DairyWorks/Plant/<Area>/<Unit>/Status/* directly
+    # to MonsterMQ; the mes-engine adds Order/HU/Sample/OEE events on the same tree.
+    - Name: dairyworks_data
+      Topics:
+        - "DairyWorks/#"
+      Enabled: true
+      RetentionDays: 30
+    # Vla Batch v2 demo — generic anonymized batch-dairy line 'Vla'.
+    # vla-factory (OPC-UA) -> vla-connector -> MonsterMQ publishes
+    # DairyWorks/Vla/{Area}/{Equipment}/Status/* + Batch state on the same tree;
+    # archived to Mongo collection vla_data and bridged to TDengine.
+    - Name: vla_data
+      Topics:
+        - "DairyWorks/Vla/#"
+      Enabled: true
+      RetentionDays: 30

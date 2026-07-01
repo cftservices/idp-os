@@ -1,0 +1,504 @@
+"""BatchRunner — the batch-centric MES core for the Vla demo.
+
+Drives a batch through its lifecycle:
+  IDLE -> DOSING -> COOKING -> COOLING -> FILLING -> COMPLETE
+
+For each batch it:
+  * creates the batch from a recipe, scaling doses to planned_L
+  * pushes dose setpoints + cook/cool setpoints as SetSetpoint commands (MQTT)
+  * starts the batch via the line-level StartBatch(recipeId) method (MQTT)
+  * follows UNS telemetry (from the bus tag-cache) for state / peak cook temp /
+    hold / viscosity / packs — and books dose actuals + samples from it
+  * determines the verdict per §verdict-regel
+
+Offline-first: with no broker/DB it fabricates the process values it would
+otherwise read from the sim (a "pure-simulation" fallback), so the whole
+lifecycle + verdict logic is exercised headless in selftest.
+
+Telemetry can also be injected directly (dict of readings) so tests can force a
+normal run (APPROVED) or a cook_undertemp / low-viscosity run (HOLD/REJECTED)
+without a broker.
+"""
+
+from __future__ import annotations
+
+import logging
+import random
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from . import model as M
+
+log = logging.getLogger("vla.batches")
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt: Optional[datetime] = None) -> str:
+    return (dt or _now()).isoformat()
+
+
+# Map SetSetpoint dose-target short names -> recipe material ids.
+_DOSE_TARGET = {m: f"dose.{m}" for m in M.DOSE_MATERIALS}
+
+# Sample plan for the demo (phase-anchored QA points).
+_SAMPLE_PLAN = [
+    ("in-process-viscosity", M.COOLING),
+    ("finished-product", M.FILLING),
+]
+
+
+class BatchRunner:
+    """Creates and runs Vla batches against the recipe seed + factory model."""
+
+    def __init__(self, db, bus=None, control=None,
+                 rng: Optional[random.Random] = None):
+        self.db = db
+        self.bus = bus            # MQTT: telemetry READ + secondary Command fallback
+        self.control = control    # OPC-UA: PRIMARY control (write/command) path
+        self.rng = rng or random.Random()
+
+    # ------------------------------------------------------------------ create
+
+    def create_batch(self, recipe_id: str, planned_L: Optional[float] = None,
+                     auto_start: bool = False) -> dict:
+        recipe = M.get_recipe(recipe_id)
+        if recipe is None:
+            raise ValueError(f"unknown recipe_id {recipe_id!r}")
+        planned_L = float(planned_L) if planned_L else recipe.basis_L
+        if planned_L <= 0:
+            raise ValueError("planned_L must be > 0")
+
+        batch_id = f"B-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        scaled = recipe.scaled_doses(planned_L)
+
+        batch_doc = {
+            "batch_id": batch_id,
+            "recipe_id": recipe_id,
+            "product_name": recipe.product_name,
+            "planned_L": planned_L,
+            "state": M.IDLE,
+            "verdict": None,
+            "peak_cook_temp_C": None,
+            "hold_sec": recipe.hold_sec,
+            "hold_elapsed_sec": None,
+            "end_viscosity_cP": None,
+            "packs_total": 0,
+            "reject_count": 0,
+            "cook_setpoint_C": recipe.cook_setpoint_C,
+            "cool_target_C": recipe.cool_target_C,
+            "spec_min_cP": recipe.spec_min_cP,
+            "spec_max_cP": recipe.spec_max_cP,
+            "critical_alarm_during_batch": False,
+            "created_at": _iso(),
+            "started_at": None,
+            "completed_at": None,
+        }
+        self.db.vla_batches.insert_one(batch_doc)
+
+        # dose rows (targets; actuals booked during DOSING)
+        for d in scaled:
+            self.db.vla_doses.insert_one({
+                "batch_id": batch_id,
+                "material_id": d.material_id,
+                "qty_target": d.qty_target,
+                "qty_actual": None,
+                "tol_min": d.tol_min,
+                "tol_max": d.tol_max,
+                "uom": d.uom,
+                "in_tolerance": None,
+            })
+
+        self._event(batch_id, "batch_created",
+                    {"recipe_id": recipe_id, "planned_L": planned_L})
+
+        # push setpoints (MQTT no-op when offline)
+        self._push_setpoints(batch_id, recipe, scaled)
+
+        if auto_start:
+            self.start_batch(batch_id)
+        return self.get_batch(batch_id)
+
+    def _set_setpoint(self, target: str, value: float) -> None:
+        """PRIMARY: OPC-UA SetSetpoint on the factory. Secondary: MQTT Command."""
+        if self.control is not None:
+            self.control.set_setpoint(target, value)
+        if self.bus is not None:
+            self.bus.set_setpoint(target, value)
+
+    def _push_setpoints(self, batch_id: str, recipe: M.Recipe,
+                        scaled_doses: list[M.Dose]) -> None:
+        for d in scaled_doses:
+            tgt = _DOSE_TARGET.get(d.material_id)
+            if tgt:
+                self._set_setpoint(tgt, d.qty_target)
+        self._set_setpoint("cook.setpoint_C", recipe.cook_setpoint_C)
+        self._set_setpoint("cook.hold_sec", recipe.hold_sec)
+        self._set_setpoint("cooler.target_C", recipe.cool_target_C)
+        self._set_setpoint("mixing.agitator_rpm", recipe.agitator_rpm)
+        self._event(batch_id, "setpoints_pushed", {
+            "cook_setpoint_C": recipe.cook_setpoint_C,
+            "hold_sec": recipe.hold_sec,
+            "cool_target_C": recipe.cool_target_C,
+        })
+
+    # ------------------------------------------------------------------- start
+
+    def start_batch(self, batch_id: str,
+                    telemetry: Optional[dict[str, Any]] = None) -> dict:
+        """Send StartBatch + drive the batch to COMPLETE.
+
+        `telemetry` (optional) forces process values for offline/test runs, e.g.
+        {"peak_cook_temp_C":88, "hold_elapsed_sec":300, "packs_total":5000,
+         "reject_count":20, "fault":"cook_undertemp", "magnitude":0.6}.
+        If omitted, values are read from the bus tag-cache, else fabricated.
+        """
+        batch = self._raw_batch(batch_id)
+        if batch is None:
+            raise ValueError(f"unknown batch {batch_id!r}")
+        if batch["state"] in (M.COMPLETE,):
+            return self.get_batch(batch_id)
+
+        recipe = M.get_recipe(batch["recipe_id"])
+        started = _now()
+        self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started)})
+        self._event(batch_id, "batch_started", {})
+
+        # PRIMARY: OPC-UA StartBatch on the factory. Secondary: MQTT Command.
+        if self.control is not None:
+            self.control.start_batch(batch["recipe_id"])
+        if self.bus is not None:
+            self.bus.start_batch(batch["recipe_id"])
+
+        # --- DOSING: book dose actuals ---
+        self._book_doses(batch_id, telemetry)
+
+        # --- COOKING: capture peak temp + hold ---
+        self._update(batch_id, {"state": M.COOKING})
+        peak_temp, hold_elapsed, fault, magnitude = self._read_cook(recipe, telemetry)
+        self._update(batch_id, {
+            "peak_cook_temp_C": peak_temp,
+            "hold_elapsed_sec": hold_elapsed,
+        })
+        self._event(batch_id, "cook_captured",
+                    {"peak_cook_temp_C": peak_temp, "hold_elapsed_sec": hold_elapsed,
+                     "fault": fault})
+        if fault == "cook_undertemp":
+            self._alarm(batch_id, "cook-unit-01", "cook_undertemp", M.HIGH,
+                        f"Peak cook temp capped at {peak_temp} C "
+                        f"(setpoint {recipe.cook_setpoint_C} C)",
+                        impact=True, resolved=False)
+
+        # --- COOLING: compute viscosity (the Solve) + in-process sample ---
+        self._update(batch_id, {"state": M.COOLING})
+        end_visc = M.physics_viscosity(peak_temp, hold_elapsed, recipe.hold_sec)
+        self._update(batch_id, {"end_viscosity_cP": end_visc})
+        self._event(batch_id, "viscosity_computed", {"end_viscosity_cP": end_visc})
+        self._take_sample(batch_id, "in-process-viscosity", M.COOLING,
+                          value=end_visc, unit="cP",
+                          spec_min=recipe.spec_min_cP, spec_max=recipe.spec_max_cP)
+        if end_visc < recipe.spec_min_cP:
+            # SOLVE trigger: out-of-spec viscosity -> CRITICAL (hold/rework)
+            self._alarm(batch_id, "cook-unit-01", "viscosity_out_of_spec", M.CRITICAL,
+                        f"End viscosity {end_visc} cP below spec_min "
+                        f"{recipe.spec_min_cP} cP — SOLVE: hold + rework",
+                        impact=True, resolved=False)
+            self._event(batch_id, "solve_viscosity", {"end_viscosity_cP": end_visc})
+
+        # --- FILLING: packs ---
+        self._update(batch_id, {"state": M.FILLING})
+        packs, rejects = self._read_packs(batch, telemetry)
+        self._update(batch_id, {"packs_total": packs, "reject_count": rejects})
+        self._event(batch_id, "filling_done",
+                    {"packs_total": packs, "reject_count": rejects})
+        self._take_sample(batch_id, "finished-product", M.FILLING,
+                          value=None, unit=None)
+
+        # --- COMPLETE ---
+        completed = _now()
+        self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(completed)})
+        self._event(batch_id, "batch_complete", {})
+
+        # --- verdict ---
+        verdict, crit = self._verdict(batch_id)
+        self._update(batch_id, {
+            "verdict": verdict,
+            "critical_alarm_during_batch": crit,
+        })
+        self._event(batch_id, "verdict_set", {"verdict": verdict})
+        return self.get_batch(batch_id)
+
+    # ------------------------------------------------------------------- doses
+
+    def _book_doses(self, batch_id: str, telemetry: Optional[dict]) -> None:
+        doses = self.db.vla_doses.find({"batch_id": batch_id})
+        actuals = (telemetry or {}).get("dose_actuals", {})
+        for line in doses:
+            target = float(line["qty_target"])
+            if line["material_id"] in actuals:
+                actual = float(actuals[line["material_id"]])
+            else:
+                # try bus tag: process-tank-01 dose_<m>_actual_kg
+                actual = None
+                if self.bus is not None:
+                    raw = self.bus.latest_value(
+                        "process-tank-01", f"dose_{line['material_id']}_actual_kg")
+                    if raw is not None:
+                        try:
+                            actual = float(raw)
+                        except (TypeError, ValueError):
+                            actual = None
+                if actual is None:
+                    # fabricate: small variance around target
+                    actual = target + self.rng.uniform(-0.004, 0.004) * target
+            actual = round(actual, 4)
+            in_tol = float(line["tol_min"]) <= actual <= float(line["tol_max"])
+            self.db.vla_doses.update_one(
+                {"batch_id": batch_id, "material_id": line["material_id"]},
+                {"$set": {"qty_actual": actual, "in_tolerance": in_tol,
+                          "ts": _iso()}},
+            )
+            self._event(batch_id, "dose_booked", {
+                "material_id": line["material_id"], "qty_actual": actual,
+                "in_tolerance": in_tol,
+            })
+            if not in_tol:
+                self._alarm(batch_id, "process-tank-01", "dose_out_of_tolerance",
+                            M.MEDIUM,
+                            f"{line['material_id']} dose {actual} kg out of tol "
+                            f"({line['tol_min']}-{line['tol_max']})",
+                            impact=True, resolved=False)
+
+    # ------------------------------------------------------------------- cook
+
+    def _read_cook(self, recipe: M.Recipe,
+                   telemetry: Optional[dict]) -> tuple[float, float, Optional[str], float]:
+        """Return (peak_cook_temp_C, hold_elapsed_sec, fault, magnitude)."""
+        t = telemetry or {}
+        fault = t.get("fault")
+        magnitude = float(t.get("magnitude", 0.0) or 0.0)
+
+        # explicit override wins
+        if "peak_cook_temp_C" in t:
+            peak = float(t["peak_cook_temp_C"])
+        elif fault == "cook_undertemp":
+            # §physics: capped peak ≈ 70 + (1-magnitude)*18
+            peak = 70.0 + (1.0 - magnitude) * 18.0
+        else:
+            # try bus, else fabricate a healthy peak near setpoint
+            peak = None
+            if self.bus is not None:
+                raw = self.bus.latest_value("cook-unit-01", "temp_C")
+                if raw is not None:
+                    try:
+                        peak = float(raw)
+                    except (TypeError, ValueError):
+                        peak = None
+            if peak is None:
+                peak = round(recipe.cook_setpoint_C - self.rng.uniform(0.0, 0.6), 2)
+
+        if "hold_elapsed_sec" in t:
+            hold_elapsed = float(t["hold_elapsed_sec"])
+        else:
+            hold_elapsed = None
+            if self.bus is not None:
+                raw = self.bus.latest_value("cook-unit-01", "hold_elapsed_sec")
+                if raw is not None:
+                    try:
+                        hold_elapsed = float(raw)
+                    except (TypeError, ValueError):
+                        hold_elapsed = None
+            if hold_elapsed is None:
+                # healthy: full hold reached
+                hold_elapsed = float(recipe.hold_sec)
+
+        return round(peak, 2), round(hold_elapsed, 2), fault, magnitude
+
+    # ------------------------------------------------------------------- packs
+
+    def _read_packs(self, batch: dict, telemetry: Optional[dict]) -> tuple[int, int]:
+        t = telemetry or {}
+        if "packs_total" in t:
+            packs = int(t["packs_total"])
+            rejects = int(t.get("reject_count", 0))
+            return packs, rejects
+        # try bus filler tags
+        packs = None
+        rejects = 0
+        if self.bus is not None:
+            raw = self.bus.latest_value("filler-01", "packs_total")
+            if raw is not None:
+                try:
+                    packs = int(float(raw))
+                except (TypeError, ValueError):
+                    packs = None
+            rj = self.bus.latest_value("filler-01", "reject_count")
+            if rj is not None:
+                try:
+                    rejects = int(float(rj))
+                except (TypeError, ValueError):
+                    rejects = 0
+        if packs is None:
+            # fabricate: ~planned_L packs at 1 L/pack minus small reject rate
+            total = max(1, int(round(float(batch["planned_L"]))))
+            rejects = int(round(total * self.rng.uniform(0.002, 0.012)))
+            packs = total - rejects
+        return packs, rejects
+
+    # ------------------------------------------------------------------ samples
+
+    def _take_sample(self, batch_id: str, sample_type: str, phase: str,
+                     value: Optional[float] = None, unit: Optional[str] = None,
+                     spec_min: Optional[float] = None,
+                     spec_max: Optional[float] = None) -> dict:
+        sample_id = f"S-{batch_id}-{uuid.uuid4().hex[:5].upper()}"
+        status, result = "completed", "pass"
+        if value is not None and spec_min is not None and spec_max is not None:
+            if spec_min <= value <= spec_max:
+                status, result = "approved", "pass"
+            else:
+                status, result = "failed", "fail"
+        row = {
+            "sample_id": sample_id,
+            "batch_id": batch_id,
+            "sample_type": sample_type,
+            "phase": phase,
+            "status": status,
+            "result": result,
+            "value": value,
+            "unit": unit,
+            "ts": _iso(),
+        }
+        self.db.vla_samples.insert_one(row)
+        self._event(batch_id, "sample_taken",
+                    {"sample_type": sample_type, "status": status, "value": value})
+        # PRIMARY: OPC-UA TakeSample on the factory. Secondary: MQTT Command.
+        if self.control is not None:
+            self.control.take_sample(sample_type)
+        if self.bus is not None:
+            self.bus.take_sample(sample_type)
+        return row
+
+    def take_sample(self, batch_id: str, sample_type: str) -> dict:
+        """Ad-hoc sample requested via POST /samples (contract §REST)."""
+        batch = self._raw_batch(batch_id)
+        phase = batch["state"] if batch else M.IDLE
+        return self._take_sample(batch_id, sample_type, phase)
+
+    # ---------------------------------------------------------------- verdict
+
+    def _verdict(self, batch_id: str) -> tuple[str, bool]:
+        """§verdict-regel:
+          end_viscosity < spec_min OR unresolved CRITICAL -> REJECTED/HOLD
+          afwijking (warning/out-of-tol/failed sample) -> HOLD
+          alles OK -> APPROVED
+          anders (pending sample) -> PENDING
+        """
+        batch = self._raw_batch(batch_id)
+        alarms = self.db.vla_alarms.find({"batch_id": batch_id})
+        samples = self.db.vla_samples.find({"batch_id": batch_id})
+        doses = self.db.vla_doses.find({"batch_id": batch_id})
+
+        end_visc = batch.get("end_viscosity_cP")
+        spec_min = batch.get("spec_min_cP", M.SPEC_MIN_CP)
+
+        unresolved_critical = any(
+            a.get("severity") == M.CRITICAL and not a.get("resolved", False)
+            for a in alarms
+        )
+        crit_during_batch = any(a.get("severity") == M.CRITICAL for a in alarms)
+        out_of_spec_visc = end_visc is not None and end_visc < spec_min
+
+        has_warning = any(
+            a.get("severity") in (M.HIGH, M.MEDIUM) and not a.get("resolved", False)
+            for a in alarms
+        )
+        out_of_tol = any(d.get("in_tolerance") is False for d in doses)
+        failed_sample = any(s.get("status") == "failed" for s in samples)
+        pending_sample = any(s.get("status") == "pending" for s in samples)
+
+        if out_of_spec_visc or unresolved_critical:
+            # out-of-spec viscosity is a critical quality fail -> REJECTED
+            verdict = M.REJECTED
+        elif has_warning or out_of_tol or failed_sample:
+            verdict = M.HOLD
+        elif pending_sample:
+            verdict = M.PENDING
+        else:
+            verdict = M.APPROVED
+        return verdict, crit_during_batch
+
+    # ------------------------------------------------------------ persistence
+
+    def _raw_batch(self, batch_id: str) -> Optional[dict]:
+        return self.db.vla_batches.find_one({"batch_id": batch_id})
+
+    def get_batch(self, batch_id: str) -> Optional[dict]:
+        batch = self._raw_batch(batch_id)
+        if batch is None:
+            return None
+        doses = self.db.vla_doses.find({"batch_id": batch_id})
+        samples = self.db.vla_samples.find({"batch_id": batch_id})
+        alarms = self.db.vla_alarms.find({"batch_id": batch_id})
+        return {
+            **batch,
+            "doses": [{"material_id": d["material_id"],
+                       "qty_target": d["qty_target"],
+                       "qty_actual": d.get("qty_actual"),
+                       "tol_min": d.get("tol_min"),
+                       "tol_max": d.get("tol_max"),
+                       "in_tolerance": d.get("in_tolerance"),
+                       "uom": d.get("uom", "kg")} for d in doses],
+            "samples": samples,
+            "alarms": alarms,
+        }
+
+    def list_batches(self) -> list[dict]:
+        out = []
+        for b in self.db.vla_batches.find({}):
+            out.append({
+                "batch_id": b["batch_id"],
+                "recipe_id": b["recipe_id"],
+                "product_name": b.get("product_name"),
+                "state": b.get("state"),
+                "started_at": b.get("started_at"),
+                "verdict": b.get("verdict"),
+                "packs_total": b.get("packs_total", 0),
+            })
+        return out
+
+    def get_samples(self, batch_id: Optional[str] = None) -> list[dict]:
+        query = {"batch_id": batch_id} if batch_id else {}
+        return self.db.vla_samples.find(query)
+
+    def _update(self, batch_id: str, fields: dict) -> None:
+        self.db.vla_batches.update_one(
+            {"batch_id": batch_id}, {"$set": fields})
+        # mirror line-level Batch/Status to UNS
+        if self.bus is not None and "state" in fields:
+            self.bus.command("Batch", "state", value=fields["state"])
+
+    def _event(self, batch_id: str, event_type: str, payload: dict) -> None:
+        self.db.vla_events.insert_one({
+            "batch_id": batch_id,
+            "event_type": event_type,
+            "payload": payload,
+            "ts": _iso(),
+        })
+
+    def _alarm(self, batch_id: str, equipment_id: str, alarm_type: str,
+               severity: str, message: str, impact: bool, resolved: bool) -> None:
+        self.db.vla_alarms.insert_one({
+            "batch_id": batch_id,
+            "equipment_id": equipment_id,
+            "alarm_type": alarm_type,
+            "severity": severity,
+            "message": message,
+            "acknowledged": False,
+            "impact_on_batch": impact,
+            "resolved": resolved,
+            "ts": _iso(),
+        })

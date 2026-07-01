@@ -1,0 +1,233 @@
+# Vla Batch v2 demo — scenario overlay (fabriek-als-OPC-UA -> MonsterMQ=UNS -> historian + MES)
+#
+# v2-architectuur (zie README.md + factory-model/isa95-vla.json):
+#
+#   vla-factory (asyncua OPC-UA server + batch-physics, "black box met SCADA-knoppen")
+#      |  opc.tcp://vla-factory:4840/DairyWorks  (ns=2)
+#      v  MonsterMQ ingest de fabriek NATIVE via zijn OPC-UA-client
+#         (addOpcUaDevice, geregistreerd door de one-shot vla-opcua-init container).
+#      v
+#   monstermq (MQTT broker = data layer / UNS-bus)  --archive group vla_data--> mongo (idp.vla_data)
+#      |
+#      +-> vla-tdengine-bridge (reuse tdengine-poc/bridge.py) -> vla-tdengine (historian)
+#      +-> vla-batch-engine (FastAPI MES-laag, REST + report) <-> mongo (domein-collections)
+#      |     control-pad: batch-engine commandeert de factory DIRECT via OPC-UA methods
+#      +-> grafana (leest vla-tdengine)  +  vla-dashboard (leest vla-batch-engine REST)
+#
+# vla-connector = OPTIONELE FALLBACK (profile "fallback") als MonsterMQ's OPC-UA-
+# client config-quirks geeft (bv. ns-index-afwijking). Draait NIET default.
+#
+# Run (from idp-os root) — ALTIJD samen met de slim-base:
+#   docker compose -f docker-compose.slim.yml \
+#                  -f scenarios/vla-batch/docker-compose.vla.yml up -d --build
+#
+# Fallback (native OPC-UA-client faalt) — start de connector erbij:
+#   docker compose -f docker-compose.slim.yml \
+#                  -f scenarios/vla-batch/docker-compose.vla.yml --profile fallback up -d vla-connector
+#
+# Requires a .env (see scenarios/vla-batch/.env.example).
+# Only vla-dashboard + grafana (uit slim-base) zijn web-facing via Traefik; de
+# rest (factory / init / batch-engine / tdengine / bridge) blijft intern.
+
+volumes:
+  vla-tdengine-data:
+  vla-tdengine-log:
+
+services:
+
+  # ── VLA FACTORY (asyncua OPC-UA server + batch-physics) ──────────────────
+  # Draait de ISA-88 batch-FSM + physics en exposeert alles als OPC-UA nodes
+  # (ns=2) + methods. GEEN publieke poort — intern bereikbaar op
+  # opc.tcp://vla-factory:4840/DairyWorks voor MonsterMQ's OPC-UA-client (native
+  # ingest) en voor de batch-engine (method-calls / control-pad).
+  vla-factory:
+    build:
+      context: ./scenarios/vla-batch/factory
+      dockerfile: Dockerfile
+    image: techflow/vla-factory:latest
+    container_name: vla-factory
+    restart: unless-stopped
+    environment:
+      OPCUA_ENDPOINT: "opc.tcp://0.0.0.0:4840/DairyWorks"
+      FACTORY_MODEL: /model/isa95-vla.json
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 256m
+    networks:
+      - idp-network
+
+  # ── VLA OPC-UA INIT (★ PRIMARY ingest path) ──────────────────────────────
+  # One-shot: registers vla-factory as an OPC-UA device in MonsterMQ via GraphQL
+  # (addOpcUaDevice). After this runs, MonsterMQ's OWN OPC-UA client ingests the
+  # factory natively and republishes onto DairyWorks/Vla/#. Config persists in
+  # Mongo, so this exits 0 and is not restarted.
+  vla-opcua-init:
+    image: curlimages/curl:latest
+    container_name: vla-opcua-init
+    restart: "no"
+    volumes:
+      - ./scenarios/vla-batch/monstermq-init:/init:ro
+    entrypoint: ["sh", "/init/init-vla-opcua.sh"]
+    depends_on:
+      monstermq:
+        condition: service_healthy
+      vla-factory:
+        condition: service_started
+    networks:
+      - idp-network
+
+  # ── VLA CONNECTOR (OPTIONAL FALLBACK — profile "fallback") ───────────────
+  # NOT part of the default stack. Only runs with:  --profile fallback
+  # Use it if MonsterMQ's native OPC-UA client hits config quirks (e.g. an
+  # ns-index mismatch on the factory). Same job: OPC-UA client <-> MQTT.
+  #   Status:  reads vla-factory OPC-UA nodes -> publishes on the UNS.
+  #   Command: subscribes DairyWorks/Vla/.../Command/# -> writes/calls methods.
+  # ⚠ Do NOT run this together with a registered/enabled vla OPC-UA device
+  #   (double-publish). Pick one: native (default) OR connector (--profile
+  #   fallback + toggleOpcUaDevice(name:"vla",enabled:false)).
+  vla-connector:
+    profiles: ["fallback"]
+    build:
+      context: ./scenarios/vla-batch/connector
+      dockerfile: Dockerfile
+    image: techflow/vla-connector:latest
+    container_name: vla-connector
+    restart: unless-stopped
+    environment:
+      OPCUA_ENDPOINT: "opc.tcp://vla-factory:4840/DairyWorks"
+      FACTORY_MODEL: /model/isa95-vla.json
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 256m
+    depends_on:
+      vla-factory:
+        condition: service_started
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── VLA BATCH ENGINE (FastAPI MES-laag: orders/batches/samples/report) ────
+  # REST op poort 8000 (intern; nginx-dashboard proxiet /api -> hier).
+  # Offline-first: draait ook zonder Mongo/MQTT.
+  vla-batch-engine:
+    build:
+      context: ./scenarios/vla-batch/batch-engine
+      dockerfile: Dockerfile
+    image: techflow/vla-batch-engine:latest
+    container_name: vla-batch-engine
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DB: ${MONGO_DB}
+      FACTORY_MODEL: /model/isa95-vla.json
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 256m
+    depends_on:
+      mongo:
+        condition: service_started
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── VLA TDENGINE (historian, TSDB-OSS) ───────────────────────────────────
+  # taosd + taosAdapter in 1 image. FQDN MOET matchen met de container-naam.
+  # Geen publieke poort — Grafana leest via de interne datasource.
+  vla-tdengine:
+    image: tdengine/tdengine:latest
+    container_name: vla-tdengine
+    hostname: vla-tdengine
+    restart: unless-stopped
+    environment:
+      TAOS_FQDN: vla-tdengine
+      TZ: Europe/Amsterdam
+    volumes:
+      - vla-tdengine-data:/var/lib/taos
+      - vla-tdengine-log:/var/log/taos
+    mem_limit: 640m
+    networks:
+      - idp-network
+    healthcheck:
+      test: ["CMD-SHELL", "taos -s 'SHOW DATABASES' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ── VLA TDENGINE BRIDGE (MonsterMQ -> TDengine, reuse tdengine-poc/bridge.py) ─
+  # Herbruikt de bestaande bridge ONgewijzigd; alleen env aangepast op de
+  # vla-UNS-topics + de vla-tdengine host.
+  vla-tdengine-bridge:
+    build:
+      context: ./tdengine-poc
+      dockerfile: Dockerfile
+    image: techflow/vla-tdengine-bridge:latest
+    container_name: vla-tdengine-bridge
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MQTT_TOPICS: "DairyWorks/Vla/#"
+      TD_URL: "http://vla-tdengine:6041"
+      TD_DB: ${TD_DB:-idp}
+      TD_USER: ${TD_USER:-root}
+      TD_PASS: ${TD_PASS:-taosdata}
+      FLUSH_SECONDS: "1.0"
+      FLUSH_LINES: "200"
+    depends_on:
+      vla-tdengine:
+        condition: service_healthy
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── VLA DASHBOARD (sales + admin SPA; nginx serveert ./dashboard, proxy /api) ─
+  # Enige web-facing service uit deze overlay (naast grafana uit de slim-base).
+  vla-dashboard:
+    image: nginx:alpine
+    container_name: vla-dashboard
+    restart: unless-stopped
+    volumes:
+      - ./scenarios/vla-batch/dashboard:/usr/share/nginx/html:ro
+      - ./scenarios/vla-batch/dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - vla-batch-engine
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.milkdemo.rule=Host(`milkdemo.${DOMAIN}`)"
+      - "traefik.http.routers.milkdemo.entrypoints=websecure"
+      - "traefik.http.routers.milkdemo.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.milkdemo.middlewares=milkdemo-auth"
+      - "traefik.http.middlewares.milkdemo-auth.basicauth.users=${DASHBOARD_AUTH}"
+      - "traefik.http.services.milkdemo.loadbalancer.server.port=80"
+
+  # ── GRAFANA (uit slim-base) — mount de vla-provisioning ───────────────────
+  # De grafana-service is al gedefinieerd in docker-compose.slim.yml (web-facing
+  # via Traefik op grafana.${DOMAIN}). Deze override VERVANGT de provisioning-
+  # mounts door de vla-provisioning (TDengine-datasource -> vla-tdengine + 1
+  # vla-dashboard json), zodat Grafana ze op de standaard-paden inleest
+  # (/etc/grafana/provisioning/{datasources,dashboards}). Grafana leest de
+  # historian uit vla-tdengine via de tdengine-datasource-plugin.
+  #
+  # NB: docker-compose merge't volumes NIET per-item weg; deze lijst herhaalt
+  # daarom bewust ook grafana-data zodat de eerdere slim-base-mounts naar
+  # /etc/grafana/provisioning worden overschreven door de vla-versie.
+  grafana:
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./scenarios/vla-batch/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./scenarios/vla-batch/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_INSTALL_PLUGINS: marcusolsson-json-datasource,tdengine-datasource
+    depends_on:
+      vla-tdengine:
+        condition: service_healthy

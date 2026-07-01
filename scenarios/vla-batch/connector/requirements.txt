@@ -1,0 +1,2 @@
+asyncua==1.1.5
+paho-mqtt==2.1.0
