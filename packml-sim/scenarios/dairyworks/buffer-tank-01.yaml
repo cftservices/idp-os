@@ -1,0 +1,24 @@
+# DairyWorks batch-demo unit — buffer-tank-01
+# UNS: DairyWorks/Plant/Storage/buffer-tank-01/Status/...
+
+type: storage-tank
+site: DairyWorks
+line: Plant
+area: Storage
+equipment: buffer-tank-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 90.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  capacity_l: 20000
+  initial_level_l: 8000
+  draw_rate_l_min: 400
+  target_temp_c: 6.0
+  ambient_temp_c: 18.0

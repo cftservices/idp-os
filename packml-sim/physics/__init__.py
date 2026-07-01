@@ -14,5 +14,10 @@ from . import separator  # noqa: F401
 from . import pasteurizer  # noqa: F401
 from . import homogenizer  # noqa: F401
 from . import bottler  # noqa: F401
+# DairyWorks batch-demo modules
+from . import fermenter  # noqa: F401
+from . import fill_line  # noqa: F401
+from . import palletizer  # noqa: F401
+from . import preheater  # noqa: F401
 
 __all__ = ["PhysicsBase", "PhysicsRegistry"]

@@ -1,0 +1,22 @@
+# DairyWorks batch-demo unit — fill-line-01
+# UNS: DairyWorks/Plant/Packaging/fill-line-01/Status/...
+
+type: fill-line
+site: DairyWorks
+line: Plant
+area: Packaging
+equipment: fill-line-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  pack_size_l: 1.0
+  nominal_ppm: 120
+  reject_base_pct: 0.4

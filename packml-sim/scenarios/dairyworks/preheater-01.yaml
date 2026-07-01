@@ -1,0 +1,21 @@
+# DairyWorks batch-demo unit — preheater-01
+# UNS: DairyWorks/Plant/Processing/preheater-01/Status/...
+
+type: preheater
+site: DairyWorks
+line: Plant
+area: Processing
+equipment: preheater-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  setpoint_c: 45.0
+  ambient_temp_c: 8.0

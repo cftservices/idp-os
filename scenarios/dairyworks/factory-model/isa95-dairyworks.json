@@ -1,0 +1,785 @@
+{
+  "schema_version": "1.0",
+  "standard": "ISA-95 / IEC 62264 (hierarchy) + ISA-88 / IEC 61512 (batch/recipes)",
+  "product": "Milk Production Demo",
+  "scenario": "DairyWorks — generic anonymized batch-dairy factory (Preparation -> Processing -> Packaging)",
+  "namespace_convention": "DairyWorks/Plant/{Area}/{Equipment}/Status/{tag}",
+  "opcua_convention": "ns=2;s=DairyWorks.{Area}.{Equipment}.{tag}",
+  "anonymization": "Generic factory 'DairyWorks'. No real client/vendor names, IPs or schemas. SSCC uses placeholder GS1 prefix.",
+  "enterprise": {
+    "id": "ENT-DW",
+    "name": "DairyWorks BV",
+    "sites": [
+      {
+        "id": "SITE-DW",
+        "name": "DairyWorks Plant",
+        "location": {
+          "city": "generic",
+          "country": "-",
+          "timezone": "Europe/Amsterdam"
+        },
+        "areas": [
+          {
+            "id": "AREA-STO",
+            "name": "Storage",
+            "description": "Rauwe-melk ontvangst + buffer-tanks.",
+            "work_centers": [
+              {
+                "id": "WC-RMT-01",
+                "name": "Raw milk tank 01",
+                "equipment_id": "raw-milk-tank-01",
+                "physics_type": "storage-tank",
+                "description": "Gekoelde buffer voor rauwe melk (4°C).",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Storage/raw-milk-tank-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Storage.raw-milk-tank-01",
+                "tags": [
+                  {
+                    "id": "raw-milk-tank-01:level_L",
+                    "display_name": "Niveau",
+                    "mqtt_topic": "DairyWorks/Plant/Storage/raw-milk-tank-01/Status/level_L",
+                    "engineering_unit": "L",
+                    "normal_range": {
+                      "min": 5000,
+                      "max": 25000
+                    }
+                  },
+                  {
+                    "id": "raw-milk-tank-01:in_temp_C",
+                    "display_name": "Temperatuur",
+                    "mqtt_topic": "DairyWorks/Plant/Storage/raw-milk-tank-01/Status/in_temp_C",
+                    "engineering_unit": "°C",
+                    "normal_range": {
+                      "min": 3.5,
+                      "max": 4.5
+                    },
+                    "setpoint": 4.0
+                  },
+                  {
+                    "id": "raw-milk-tank-01:draw_L_min",
+                    "display_name": "Afname",
+                    "mqtt_topic": "DairyWorks/Plant/Storage/raw-milk-tank-01/Status/draw_L_min",
+                    "engineering_unit": "L/min"
+                  }
+                ]
+              },
+              {
+                "id": "WC-BUF-01",
+                "name": "Buffer tank 01",
+                "equipment_id": "buffer-tank-01",
+                "physics_type": "storage-tank",
+                "description": "",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Storage/buffer-tank-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Storage.buffer-tank-01",
+                "tags": [
+                  {
+                    "id": "buffer-tank-01:level_L",
+                    "display_name": "Niveau",
+                    "mqtt_topic": "DairyWorks/Plant/Storage/buffer-tank-01/Status/level_L",
+                    "engineering_unit": "L",
+                    "normal_range": {
+                      "min": 2000,
+                      "max": 18000
+                    }
+                  },
+                  {
+                    "id": "buffer-tank-01:in_temp_C",
+                    "display_name": "Temperatuur",
+                    "mqtt_topic": "DairyWorks/Plant/Storage/buffer-tank-01/Status/in_temp_C",
+                    "engineering_unit": "°C",
+                    "setpoint": 6.0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-PREP",
+            "name": "Preparation",
+            "description": "Afwegen van ingrediënten per order (recept/BOM).",
+            "work_centers": [
+              {
+                "id": "WC-WEIGH-01",
+                "name": "Weigh station 01",
+                "equipment_id": "weigh-station-01",
+                "physics_type": "mes-managed",
+                "process_type": "batch",
+                "description": "Afweeg-station (scanner + weegschaal). MES-gestuurd; geen sim-container.",
+                "mqtt_namespace": "DairyWorks/Plant/Preparation/weigh-station-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Preparation.weigh-station-01",
+                "tags": []
+              },
+              {
+                "id": "WC-PBUF-01",
+                "name": "Pallet buffer 01",
+                "equipment_id": "pallet-buffer-01",
+                "physics_type": "mes-managed",
+                "process_type": "batch",
+                "description": "Stagerings-pallet met afgewogen ingrediënten. MES-gestuurd.",
+                "mqtt_namespace": "DairyWorks/Plant/Preparation/pallet-buffer-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Preparation.pallet-buffer-01",
+                "tags": []
+              }
+            ]
+          },
+          {
+            "id": "AREA-PROC",
+            "name": "Processing",
+            "description": "Voorverwarmen, mengen (Almix), pasteuriseren (HTST), fermenteren, bufferen.",
+            "work_centers": [
+              {
+                "id": "WC-PRE-01",
+                "name": "Preheater 01",
+                "equipment_id": "preheater-01",
+                "physics_type": "preheater",
+                "description": "Voorverwarmer richting procestemperatuur.",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Processing/preheater-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Processing.preheater-01",
+                "tags": [
+                  {
+                    "id": "preheater-01:temp_C",
+                    "display_name": "Temperatuur",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/preheater-01/Status/temp_C",
+                    "engineering_unit": "°C",
+                    "setpoint": 45.0
+                  },
+                  {
+                    "id": "preheater-01:flow_L_min",
+                    "display_name": "Doorstroom",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/preheater-01/Status/flow_L_min",
+                    "engineering_unit": "L/min"
+                  }
+                ]
+              },
+              {
+                "id": "WC-MIX-01",
+                "name": "Mixer 01 (Almix)",
+                "equipment_id": "mixer-01",
+                "physics_type": "batch-mixer",
+                "description": "Mengvat gevoed via hoppers 1..9.",
+                "process_type": "batch",
+                "mqtt_namespace": "DairyWorks/Plant/Processing/mixer-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Processing.mixer-01",
+                "tags": [
+                  {
+                    "id": "mixer-01:load",
+                    "display_name": "Belading",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/mixer-01/Status/load",
+                    "engineering_unit": "kg"
+                  },
+                  {
+                    "id": "mixer-01:dough-temp",
+                    "display_name": "Mengsel-temp",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/mixer-01/Status/dough-temp",
+                    "engineering_unit": "°C"
+                  },
+                  {
+                    "id": "mixer-01:phase",
+                    "display_name": "Fase",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/mixer-01/Status/phase",
+                    "engineering_unit": "enum"
+                  },
+                  {
+                    "id": "mixer-01:batch-counter",
+                    "display_name": "Batch-teller",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/mixer-01/Status/batch-counter",
+                    "engineering_unit": "count"
+                  }
+                ]
+              },
+              {
+                "id": "WC-HTST-01",
+                "name": "HTST Pasteurizer 01",
+                "equipment_id": "pasteurizer-01",
+                "physics_type": "pasteurizer",
+                "description": "HTST-pasteurisatie; onder 71.5°C → divert + audit (Solve).",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Processing/pasteurizer-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Processing.pasteurizer-01",
+                "tags": [
+                  {
+                    "id": "pasteurizer-01:HTST_temp_C",
+                    "display_name": "HTST temperatuur",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/pasteurizer-01/Status/HTST_temp_C",
+                    "engineering_unit": "°C",
+                    "normal_range": {
+                      "min": 72.0,
+                      "max": 74.0
+                    },
+                    "setpoint": 73.0,
+                    "alarm_low": 71.5,
+                    "critical": true
+                  },
+                  {
+                    "id": "pasteurizer-01:divert_valve_status",
+                    "display_name": "Divert-klep",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/pasteurizer-01/Status/divert_valve_status",
+                    "engineering_unit": "bool",
+                    "critical": true
+                  },
+                  {
+                    "id": "pasteurizer-01:hold_sec",
+                    "display_name": "Hold-tijd",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/pasteurizer-01/Status/hold_sec",
+                    "engineering_unit": "s",
+                    "setpoint": 20
+                  },
+                  {
+                    "id": "pasteurizer-01:regen_efficiency_pct",
+                    "display_name": "Regen-efficiency",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/pasteurizer-01/Status/regen_efficiency_pct",
+                    "engineering_unit": "%",
+                    "setpoint": 85
+                  }
+                ]
+              },
+              {
+                "id": "WC-FER-01",
+                "name": "Fermenter 01",
+                "equipment_id": "fermenter-01",
+                "physics_type": "fermenter",
+                "description": "Cultuur-fermentatie (yoghurt/karnemelk); pH → 3,8-4,0.",
+                "process_type": "batch",
+                "mqtt_namespace": "DairyWorks/Plant/Processing/fermenter-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Processing.fermenter-01",
+                "tags": [
+                  {
+                    "id": "fermenter-01:temp_C",
+                    "display_name": "Temperatuur",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/fermenter-01/Status/temp_C",
+                    "engineering_unit": "°C",
+                    "setpoint": 43.0
+                  },
+                  {
+                    "id": "fermenter-01:pH",
+                    "display_name": "pH",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/fermenter-01/Status/pH",
+                    "engineering_unit": "pH",
+                    "normal_range": {
+                      "min": 3.8,
+                      "max": 6.6
+                    },
+                    "setpoint": 3.9
+                  },
+                  {
+                    "id": "fermenter-01:ferment_elapsed_min",
+                    "display_name": "Fermentatie-tijd",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/fermenter-01/Status/ferment_elapsed_min",
+                    "engineering_unit": "min"
+                  }
+                ]
+              },
+              {
+                "id": "WC-PRB-01",
+                "name": "Product buffer 01",
+                "equipment_id": "product-buffer-01",
+                "physics_type": "storage-tank",
+                "description": "",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Processing/product-buffer-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Processing.product-buffer-01",
+                "tags": [
+                  {
+                    "id": "product-buffer-01:level_L",
+                    "display_name": "Niveau",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/product-buffer-01/Status/level_L",
+                    "engineering_unit": "L"
+                  },
+                  {
+                    "id": "product-buffer-01:in_temp_C",
+                    "display_name": "Temperatuur",
+                    "mqtt_topic": "DairyWorks/Plant/Processing/product-buffer-01/Status/in_temp_C",
+                    "engineering_unit": "°C",
+                    "setpoint": 6.0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "AREA-PACK",
+            "name": "Packaging",
+            "description": "Vullen, HU/SSCC vormen, palletiseren, naar magazijn.",
+            "work_centers": [
+              {
+                "id": "WC-FILL-01",
+                "name": "Fill line 01",
+                "equipment_id": "fill-line-01",
+                "physics_type": "fill-line",
+                "description": "Vullijn 1L.",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Packaging/fill-line-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Packaging.fill-line-01",
+                "tags": [
+                  {
+                    "id": "fill-line-01:pack_count",
+                    "display_name": "Packs",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-01/Status/pack_count",
+                    "engineering_unit": "count"
+                  },
+                  {
+                    "id": "fill-line-01:reject_count",
+                    "display_name": "Rejects",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-01/Status/reject_count",
+                    "engineering_unit": "count"
+                  },
+                  {
+                    "id": "fill-line-01:packs_per_min",
+                    "display_name": "Snelheid",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-01/Status/packs_per_min",
+                    "engineering_unit": "packs/min"
+                  },
+                  {
+                    "id": "fill-line-01:quality_pct",
+                    "display_name": "Kwaliteit",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-01/Status/quality_pct",
+                    "engineering_unit": "%",
+                    "normal_range": {
+                      "min": 98,
+                      "max": 100
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "WC-FILL-02",
+                "name": "Fill line 02",
+                "equipment_id": "fill-line-02",
+                "physics_type": "fill-line",
+                "description": "Vullijn 1,5L.",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Packaging/fill-line-02/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Packaging.fill-line-02",
+                "tags": [
+                  {
+                    "id": "fill-line-02:pack_count",
+                    "display_name": "Packs",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-02/Status/pack_count",
+                    "engineering_unit": "count"
+                  },
+                  {
+                    "id": "fill-line-02:reject_count",
+                    "display_name": "Rejects",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-02/Status/reject_count",
+                    "engineering_unit": "count"
+                  },
+                  {
+                    "id": "fill-line-02:quality_pct",
+                    "display_name": "Kwaliteit",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/fill-line-02/Status/quality_pct",
+                    "engineering_unit": "%"
+                  }
+                ]
+              },
+              {
+                "id": "WC-PAL-01",
+                "name": "Palletizer 01",
+                "equipment_id": "palletizer-01",
+                "physics_type": "palletizer",
+                "description": "Palletizer (~42 packs/pallet); HU-vorming.",
+                "process_type": "continuous",
+                "mqtt_namespace": "DairyWorks/Plant/Packaging/palletizer-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Packaging.palletizer-01",
+                "tags": [
+                  {
+                    "id": "palletizer-01:pallet_count",
+                    "display_name": "Pallets",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/palletizer-01/Status/pallet_count",
+                    "engineering_unit": "count"
+                  },
+                  {
+                    "id": "palletizer-01:packs_on_pallet",
+                    "display_name": "Packs op pallet",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/palletizer-01/Status/packs_on_pallet",
+                    "engineering_unit": "count"
+                  },
+                  {
+                    "id": "palletizer-01:packs_per_pallet",
+                    "display_name": "Packs/pallet",
+                    "mqtt_topic": "DairyWorks/Plant/Packaging/palletizer-01/Status/packs_per_pallet",
+                    "engineering_unit": "count"
+                  }
+                ]
+              },
+              {
+                "id": "WC-WH-01",
+                "name": "Warehouse 01",
+                "equipment_id": "warehouse-01",
+                "physics_type": "mes-managed",
+                "process_type": "logistics",
+                "description": "Koelmagazijn; HU inboeken (COMPLETE). MES-gestuurd.",
+                "mqtt_namespace": "DairyWorks/Plant/Packaging/warehouse-01/Status",
+                "opcua_node_base": "ns=2;s=DairyWorks.Packaging.warehouse-01",
+                "tags": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "materials": [
+    {
+      "material_id": "MILK",
+      "name": "Milk",
+      "category": "LiquidBase",
+      "uom": "kg",
+      "storage_temp_c": 4.0
+    },
+    {
+      "material_id": "SUGAR",
+      "name": "Sugar",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "STARCH",
+      "name": "Starch",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "MILKPOWDER",
+      "name": "Milk powder",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "LACTOSE",
+      "name": "Lactose",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "COCOA",
+      "name": "Cocoa",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "CASEINATE",
+      "name": "Caseinate",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "STABILIZER",
+      "name": "Stabilizer",
+      "category": "DryPowder",
+      "uom": "kg",
+      "storage_temp_c": 20.0
+    },
+    {
+      "material_id": "VANILLA",
+      "name": "Vanilla flavour",
+      "category": "Aroma",
+      "uom": "kg",
+      "storage_temp_c": 15.0
+    },
+    {
+      "material_id": "CULTURE",
+      "name": "Culture",
+      "category": "Culture",
+      "uom": "kg",
+      "storage_temp_c": 4.0
+    }
+  ],
+  "recipes": [
+    {
+      "recipe_id": "R-MILK",
+      "product_id": "P-MILK",
+      "product_name": "Fresh Milk",
+      "version": "1.0",
+      "basis_kg": 1000,
+      "prep_stages": 1,
+      "type": "Milk",
+      "process_path": [
+        "preheater-01",
+        "pasteurizer-01",
+        "product-buffer-01"
+      ],
+      "bom": [
+        {
+          "bom_pos": 0,
+          "material_id": "P-MILK",
+          "qty_per_parent_item": 1000
+        },
+        {
+          "bom_pos": 1,
+          "material_id": "MILK",
+          "qty_per_parent_item": 1000,
+          "tol_min": 990,
+          "tol_max": 1010,
+          "full_bag": false
+        }
+      ]
+    },
+    {
+      "recipe_id": "R-CUST",
+      "product_id": "P-CUST",
+      "product_name": "Custard",
+      "version": "1.0",
+      "basis_kg": 1000,
+      "prep_stages": 2,
+      "type": "Custard",
+      "process_path": [
+        "weigh-station-01",
+        "mixer-01",
+        "pasteurizer-01",
+        "product-buffer-01"
+      ],
+      "bom": [
+        {
+          "bom_pos": 0,
+          "material_id": "P-CUST",
+          "qty_per_parent_item": 1000
+        },
+        {
+          "bom_pos": 1,
+          "material_id": "MILK",
+          "qty_per_parent_item": 465,
+          "tol_min": 460,
+          "tol_max": 470,
+          "full_bag": false
+        },
+        {
+          "bom_pos": 2,
+          "material_id": "SUGAR",
+          "qty_per_parent_item": 100,
+          "tol_min": 98,
+          "tol_max": 102,
+          "full_bag": true
+        },
+        {
+          "bom_pos": 3,
+          "material_id": "STARCH",
+          "qty_per_parent_item": 25,
+          "tol_min": 24,
+          "tol_max": 26,
+          "full_bag": true
+        },
+        {
+          "bom_pos": 4,
+          "material_id": "MILKPOWDER",
+          "qty_per_parent_item": 18,
+          "tol_min": 17,
+          "tol_max": 19,
+          "full_bag": true
+        },
+        {
+          "bom_pos": 5,
+          "material_id": "LACTOSE",
+          "qty_per_parent_item": 8,
+          "tol_min": 7.5,
+          "tol_max": 8.5,
+          "full_bag": false
+        },
+        {
+          "bom_pos": 6,
+          "material_id": "COCOA",
+          "qty_per_parent_item": 30,
+          "tol_min": 29,
+          "tol_max": 31,
+          "full_bag": true
+        },
+        {
+          "bom_pos": 7,
+          "material_id": "CASEINATE",
+          "qty_per_parent_item": 5,
+          "tol_min": 4.7,
+          "tol_max": 5.3,
+          "full_bag": false
+        },
+        {
+          "bom_pos": 8,
+          "material_id": "STABILIZER",
+          "qty_per_parent_item": 1.5,
+          "tol_min": 1.4,
+          "tol_max": 1.6,
+          "full_bag": false
+        },
+        {
+          "bom_pos": 9,
+          "material_id": "VANILLA",
+          "qty_per_parent_item": 0.8,
+          "tol_min": 0.7,
+          "tol_max": 0.9,
+          "full_bag": false
+        }
+      ]
+    },
+    {
+      "recipe_id": "R-YOG",
+      "product_id": "P-YOG",
+      "product_name": "Yoghurt",
+      "version": "1.0",
+      "basis_kg": 1000,
+      "prep_stages": 2,
+      "type": "Yoghurt",
+      "process_path": [
+        "weigh-station-01",
+        "mixer-01",
+        "pasteurizer-01",
+        "fermenter-01",
+        "product-buffer-01"
+      ],
+      "bom": [
+        {
+          "bom_pos": 0,
+          "material_id": "P-YOG",
+          "qty_per_parent_item": 1000
+        },
+        {
+          "bom_pos": 1,
+          "material_id": "MILK",
+          "qty_per_parent_item": 900,
+          "tol_min": 890,
+          "tol_max": 910,
+          "full_bag": false
+        },
+        {
+          "bom_pos": 2,
+          "material_id": "SUGAR",
+          "qty_per_parent_item": 70,
+          "tol_min": 68,
+          "tol_max": 72,
+          "full_bag": true
+        },
+        {
+          "bom_pos": 3,
+          "material_id": "MILKPOWDER",
+          "qty_per_parent_item": 20,
+          "tol_min": 19,
+          "tol_max": 21,
+          "full_bag": true
+        },
+        {
+          "bom_pos": 4,
+          "material_id": "CULTURE",
+          "qty_per_parent_item": 15,
+          "tol_min": 14,
+          "tol_max": 16,
+          "full_bag": false
+        }
+      ]
+    },
+    {
+      "recipe_id": "R-BUT",
+      "product_id": "P-BUT",
+      "product_name": "Buttermilk",
+      "version": "1.0",
+      "basis_kg": 1000,
+      "prep_stages": 1,
+      "type": "Buttermilk",
+      "process_path": [
+        "pasteurizer-01",
+        "fermenter-01",
+        "product-buffer-01"
+      ],
+      "bom": [
+        {
+          "bom_pos": 0,
+          "material_id": "P-BUT",
+          "qty_per_parent_item": 1000
+        },
+        {
+          "bom_pos": 1,
+          "material_id": "MILK",
+          "qty_per_parent_item": 985,
+          "tol_min": 980,
+          "tol_max": 990,
+          "full_bag": false
+        },
+        {
+          "bom_pos": 2,
+          "material_id": "CULTURE",
+          "qty_per_parent_item": 15,
+          "tol_min": 14,
+          "tol_max": 16,
+          "full_bag": false
+        }
+      ]
+    }
+  ],
+  "sample_types": [
+    {
+      "type": "bacto-begin",
+      "phase": "Preparation",
+      "location": "source-tank"
+    },
+    {
+      "type": "physical",
+      "phase": "Processing",
+      "location": "mixer"
+    },
+    {
+      "type": "processing",
+      "phase": "Processing",
+      "location": "mixer"
+    },
+    {
+      "type": "mixing",
+      "phase": "Processing",
+      "location": "hopper"
+    },
+    {
+      "type": "buffertank",
+      "phase": "Processing",
+      "location": "buffer"
+    },
+    {
+      "type": "bacto-end",
+      "phase": "Processing",
+      "location": "pasteurizer"
+    },
+    {
+      "type": "shelf-life",
+      "phase": "Packaging",
+      "location": "product"
+    },
+    {
+      "type": "packing",
+      "phase": "Packaging",
+      "location": "fill-line"
+    }
+  ],
+  "equipment_states": [
+    "Running",
+    "Idle",
+    "Dirty",
+    "Allocated",
+    "Available",
+    "Down",
+    "Error"
+  ],
+  "oee": {
+    "formula": "OEE = Availability x Performance x Quality",
+    "targets": {
+      "availability_pct": 95,
+      "performance_pct": 97,
+      "quality_pct": 99,
+      "oee_pct": 91
+    }
+  },
+  "sscc": {
+    "length": 18,
+    "checkdigit": "Luhn/GS1",
+    "prefix": "80",
+    "note": "Placeholder GS1 prefix; format + Luhn are public standards."
+  },
+  "solve_event": {
+    "id": "SOLVE-HTST",
+    "name": "HTST onder-pasteurisatie → auto-divert + audit-trail",
+    "trigger": "pasteurizer-01/Status/HTST_temp_C < 71.5",
+    "auto_action": "divert_valve_status = 1 + audit entry + critical batch alarm",
+    "outcome": "Voorkomen regulatoire batch-rejects + 100% audit-compliance"
+  }
+}

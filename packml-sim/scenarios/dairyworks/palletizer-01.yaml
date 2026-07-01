@@ -1,0 +1,21 @@
+# DairyWorks batch-demo unit — palletizer-01
+# UNS: DairyWorks/Plant/Packaging/palletizer-01/Status/...
+
+type: palletizer
+site: DairyWorks
+line: Plant
+area: Packaging
+equipment: palletizer-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  packs_per_pallet: 42
+  nominal_ppm: 120

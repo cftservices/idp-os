@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Milk Production Demo — DairyWorks</title>
+<style>
+  :root{--bg:#0b1f3a;--panel:#12294a;--panel2:#0f2340;--line:#1e3a63;--txt:#e8f0fb;--mut:#9ab5d0;
+        --blue:#3d8bff;--green:#2ecc71;--grey:#6b7c93;--brown:#b07a2a;--red:#e74c3c;--yellow:#f1c40f;--purple:#9b6ad6}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:14px 20px;background:linear-gradient(90deg,#0b1f3a,#12294a);border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0}header .sub{color:var(--mut);font-size:12px}
+  .pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .ok{background:#123c25;color:var(--green)}.bad{background:#3c1a17;color:var(--red)}
+  nav{display:flex;gap:6px;margin-left:auto}
+  nav button{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 14px;cursor:pointer}
+  nav button.active{background:var(--blue);border-color:var(--blue)}
+  main{padding:18px 20px;max-width:1200px;margin:0 auto}
+  .banner{background:#3c1a17;border:1px solid var(--red);color:#ffd9d3;padding:10px 14px;border-radius:10px;margin-bottom:14px;display:none}
+  h2{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .card h3{margin:0 0 6px;font-size:13px}
+  .kv{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;padding:1px 0}
+  .kv b{color:var(--txt);font-variant-numeric:tabular-nums}
+  .status{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .s-Running,.s-Execute{background:#123c25;color:var(--green)}
+  .s-Idle{background:#2a2f38;color:#c9d3e0}.s-Held,.s-Holding{background:#3a2f10;color:var(--yellow)}
+  .s-Aborted,.s-Down,.s-Error{background:#3c1a17;color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:600}
+  .badge{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .v-APPROVED{background:#123c25;color:var(--green)}.v-HOLD{background:#3a2f10;color:var(--yellow)}
+  .v-REJECTED{background:#3c1a17;color:var(--red)}.v-PENDING{background:#2a2f38;color:#c9d3e0}
+  button.act{background:var(--blue);color:#fff;border:none;border-radius:7px;padding:6px 12px;cursor:pointer}
+  button.gh{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 10px;cursor:pointer}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 9px}
+  .row{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px}
+  .row label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}
+  .hidden{display:none}
+  a{color:var(--blue)}
+  .prog{height:6px;background:#0f2340;border-radius:4px;overflow:hidden;min-width:90px}
+  .prog>span{display:block;height:100%;background:var(--blue)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🥛 Milk Production Demo <span class="sub">— DairyWorks (generic batch-dairy)</span></h1></div>
+  <div id="conn" class="pill bad">offline</div>
+  <nav>
+    <button data-tab="factory" class="active">Fabriek</button>
+    <button data-tab="orders">Orders</button>
+    <button data-tab="admin">Admin</button>
+  </nav>
+</header>
+<main>
+  <div id="solve" class="banner">⚠ SOLVE — HTST onder-pasteurisatie: divert actief + kritiek batch-alarm.</div>
+
+  <!-- FACTORY -->
+  <section id="tab-factory">
+    <div id="areas"></div>
+  </section>
+
+  <!-- ORDERS -->
+  <section id="tab-orders" class="hidden">
+    <h2>Nieuwe order</h2>
+    <div class="row">
+      <label>Recept<select id="recipe"></select></label>
+      <label>Hoeveelheid (kg)<input id="qty" type="number" value="1000" min="100" step="100" style="width:120px"></label>
+      <button class="act" onclick="createOrder()">Order aanmaken + starten</button>
+    </div>
+    <h2>Orders</h2>
+    <table><thead><tr><th>Order</th><th>Product</th><th>Status</th><th>Voortgang</th><th>Verdict</th><th>EBR</th></tr></thead>
+      <tbody id="orders"></tbody></table>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="tab-admin" class="hidden">
+    <h2>Unit aansturen</h2>
+    <div class="row">
+      <label>Equipment<select id="adminEq"></select></label>
+      <button class="gh" onclick="cmd('Start')">Start</button>
+      <button class="gh" onclick="cmd('Stop')">Stop</button>
+      <button class="gh" onclick="cmd('Reset')">Reset</button>
+      <button class="gh" onclick="cmd('Hold')">Hold</button>
+    </div>
+    <div class="row">
+      <label>MachSpeed<input id="speed" type="number" value="100" min="0" max="120" style="width:90px"></label>
+      <button class="gh" onclick="setSpeed()">Zet snelheid</button>
+    </div>
+    <h2>Fault injecteren (Solve-test)</h2>
+    <div class="row">
+      <label>Fault<select id="fault">
+        <option value="f12">f12 — verwarmingsverlies (HTST&lt;71.5 → divert)</option>
+        <option value="f8">f8 — actuator/vervuiling</option>
+        <option value="f13">f13 — motor-slip</option>
+        <option value="f1">f1 — sensor-bias</option>
+      </select></label>
+      <label>Magnitude<input id="mag" type="number" value="0.4" min="0" max="1" step="0.1" style="width:90px"></label>
+      <button class="act" onclick="injectFault()">Injecteer</button>
+      <button class="gh" onclick="cmd('Fault/Clear')">Clear faults</button>
+    </div>
+    <p id="adminMsg" class="sub"></p>
+  </section>
+</main>
+<script>
+const API = window.MES_API || "/api";
+const $ = s => document.querySelector(s);
+async function j(path, opts){ const r = await fetch(API+path, opts); if(!r.ok) throw new Error(r.status+" "+path); return r.json(); }
+
+// tabs
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['factory','orders','admin'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
+});
+
+let UNITS=[], RECIPES=[];
+async function boot(){
+  try{
+    const h = await j('/health');
+    RECIPES = h.recipes||[]; UNITS = (h.units||[]);
+    $('#conn').textContent = 'online · db:'+(h.db_backend||'?')+' · mqtt:'+(h.mqtt_connected?'ja':'nee');
+    $('#conn').className = 'pill '+(h.mqtt_connected?'ok':'bad');
+    $('#recipe').innerHTML = RECIPES.map(r=>`<option>${r}</option>`).join('');
+    // physics units only (skip mes-managed weigh/pallet/warehouse)
+    const phys = UNITS.filter(u=>!/weigh-station|pallet-buffer|warehouse/.test(u));
+    $('#adminEq').innerHTML = phys.map(u=>`<option>${u}</option>`).join('');
+  }catch(e){ $('#conn').textContent='engine offline'; }
+}
+
+function parseTags(tags){ // topic -> {area,eq,tag}
+  const byEq={};
+  for(const [topic,val] of Object.entries(tags||{})){
+    const p=topic.split('/'); if(p.length<6||p[4]!=='Status') continue;
+    const area=p[2], eq=p[3], tag=p.slice(5).join('/');
+    (byEq[eq]=byEq[eq]||{area,eq,tags:{}}).tags[tag]=val;
+  }
+  return byEq;
+}
+const KEY_TAGS={ 'storage-tank':['level_L','in_temp_C'],'preheater':['temp_C','flow_L_min'],
+  'HTST':['HTST_temp_C','divert_valve_status'],'fermenter':['temp_C','pH'],
+  'fill':['pack_count','quality_pct'],'palletizer':['pallet_count','packs_on_pallet'],'mixer':['load','phase'] };
+function keyTagsFor(eq){ for(const k in KEY_TAGS){ if(eq.toLowerCase().includes(k.toLowerCase())) return KEY_TAGS[k]; } return []; }
+
+async function refreshFactory(){
+  let data; try{ data = await j('/tags'); }catch(e){ return; }
+  const byEq = parseTags(data.tags);
+  const areas={}; Object.values(byEq).forEach(u=>{(areas[u.area]=areas[u.area]||[]).push(u);});
+  const order=['Storage','Preparation','Processing','Packaging'];
+  let solve=false, html='';
+  for(const area of order){ if(!areas[area]) continue;
+    html+=`<h2>${area}</h2><div class="grid">`;
+    for(const u of areas[area].sort((a,b)=>a.eq<b.eq?-1:1)){
+      const st=u.tags['StateCurrentStr']||u.tags['StateCurrent']||'—';
+      const faults=parseInt(u.tags['FaultCount']||'0');
+      if((u.tags['divert_valve_status']||'').toString().match(/1|true/i)) solve=true;
+      let kv='';
+      for(const t of keyTagsFor(u.eq)){ if(u.tags[t]!==undefined) kv+=`<div class="kv"><span>${t}</span><b>${u.tags[t]}</b></div>`; }
+      html+=`<div class="card"><h3>${u.eq}</h3>
+        <div class="kv"><span>status</span><span class="status s-${st}">${st}</span></div>
+        ${kv}${faults?`<div class="kv"><span>faults</span><b style="color:var(--red)">${faults}</b></div>`:''}</div>`;
+    }
+    html+=`</div>`;
+  }
+  $('#areas').innerHTML = html || '<p class="sub">Nog geen live sim-data (draait de stack + zijn de units gestart?).</p>';
+  $('#solve').style.display = solve?'block':'none';
+}
+
+async function refreshOrders(){
+  let list; try{ list = await j('/orders'); }catch(e){ return; }
+  if(!Array.isArray(list)) list = list.data||list.orders||[];
+  $('#orders').innerHTML = list.map(o=>{
+    const id=o.order_id||o.id, pr=o.product_name||o.product||o.recipe_id||'', st=o.status||'',
+      v=o.verdict||'PENDING', pg=Math.round(o.progress_pct||o.progress||0);
+    return `<tr><td>${id}</td><td>${pr}</td><td>${st}</td>
+      <td><div class="prog"><span style="width:${pg}%"></span></div></td>
+      <td><span class="badge v-${v}">${v}</span></td>
+      <td><a href="${API}/ebr/${id}?fmt=html" target="_blank">EBR ↗</a></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="sub">Nog geen orders — maak er hierboven één aan.</td></tr>';
+}
+
+async function createOrder(){
+  const recipe_id=$('#recipe').value, planned_qty=parseFloat($('#qty').value);
+  try{ await j('/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipe_id,planned_qty})});
+    refreshOrders(); }catch(e){ alert('Order mislukt: '+e.message); }
+}
+async function cmd(command){ await post('/admin/command',{equipment:$('#adminEq').value,command,payload:'1'}); }
+async function setSpeed(){ await post('/admin/command',{equipment:$('#adminEq').value,command:'MachSpeed',payload:$('#speed').value}); }
+async function injectFault(){ await post('/admin/fault',{equipment:$('#adminEq').value,fault:$('#fault').value,magnitude:parseFloat($('#mag').value)}); }
+async function post(path,body){
+  try{ const r=await j(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    $('#adminMsg').textContent = JSON.stringify(r); }catch(e){ $('#adminMsg').textContent='fout: '+e.message; }
+}
+
+boot();
+refreshFactory(); refreshOrders();
+setInterval(refreshFactory,3000); setInterval(refreshOrders,4000);
+</script>
+</body>
+</html>

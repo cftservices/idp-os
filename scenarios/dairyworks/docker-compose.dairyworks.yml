@@ -1,0 +1,281 @@
+# DairyWorks — Milk Production Demo scenario overlay (PackML + MQTT direct)
+#
+# Run (from idp-os root):
+#   docker compose -f docker-compose.v3.yml -f scenarios/dairyworks/docker-compose.dairyworks.yml up -d --build
+#
+# Each unit = one packml-sim container publishing DairyWorks/Plant/<Area>/<Unit>/Status/*
+# to MonsterMQ (interne bus). The OPC-UA facade + mes-engine consume/drive via MQTT.
+
+services:
+
+  packml-dw-raw-milk-tank-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-raw-milk-tank-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/raw-milk-tank-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-buffer-tank-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-buffer-tank-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/buffer-tank-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-preheater-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-preheater-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/preheater-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-mixer-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-mixer-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/mixer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-pasteurizer-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-pasteurizer-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/pasteurizer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-fermenter-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-fermenter-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/fermenter-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-product-buffer-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-product-buffer-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/product-buffer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-fill-line-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-fill-line-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/fill-line-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-fill-line-02:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-fill-line-02
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/fill-line-02.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  packml-dw-palletizer-01:
+    build:
+      context: ../../packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: packml-dw-palletizer-01
+    restart: unless-stopped
+    environment:
+      UNIT_CONFIG: /scenarios/dairyworks/palletizer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+    volumes:
+      - ../../packml-sim/scenarios:/scenarios:ro
+    mem_limit: 96m
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── MES ENGINE (orders · recipes · HU/SSCC · samples · OEE · EBR) ─────────
+  dw-mes-engine:
+    build:
+      context: ../../mes-engine
+      dockerfile: Dockerfile
+    image: techflow/dw-mes-engine:latest
+    container_name: dw-mes-engine
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MONGO_URL: ${MONGO_URL}
+      MONGO_DB: ${MONGO_DB}
+      FACTORY_MODEL: /model/isa95-dairyworks.json
+    volumes:
+      - ./factory-model:/model:ro
+    ports:
+      - "8010:8000"
+    depends_on:
+      mongo:
+        condition: service_started
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── OPC-UA FACADE (★ primary external surface: read + methods → MQTT) ─────
+  dw-opcua-server:
+    build:
+      context: ../../opcua-server
+      dockerfile: Dockerfile
+    image: techflow/dw-opcua-server:latest
+    container_name: dw-opcua-server
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      FACTORY_MODEL: /model/isa95-dairyworks.json
+      OPCUA_ENDPOINT: "opc.tcp://0.0.0.0:4840/DairyWorks"
+    volumes:
+      - ./factory-model:/model:ro
+    ports:
+      - "4840:4840"
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    networks:
+      - idp-network
+
+  # ── DASHBOARD (sales + admin SPA; nginx proxies /api → mes-engine) ───────
+  dw-dashboard:
+    image: nginx:alpine
+    container_name: dw-dashboard
+    restart: unless-stopped
+    volumes:
+      - ./dashboard/index.html:/usr/share/nginx/html/index.html:ro
+      - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8090:80"
+    depends_on:
+      - dw-mes-engine
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.milkdemo.rule=Host(`milkdemo.${DOMAIN}`)"
+      - "traefik.http.routers.milkdemo.entrypoints=websecure"
+      - "traefik.http.routers.milkdemo.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.milkdemo.middlewares=milkdemo-auth"
+      - "traefik.http.middlewares.milkdemo-auth.basicauth.users=${DASHBOARD_AUTH}"
+      - "traefik.http.services.milkdemo.loadbalancer.server.port=80"

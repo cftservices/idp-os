@@ -1,0 +1,23 @@
+# DairyWorks batch-demo unit — mixer-01
+# UNS: DairyWorks/Plant/Processing/mixer-01/Status/...
+
+type: batch-mixer
+site: DairyWorks
+line: Plant
+area: Processing
+equipment: mixer-01
+
+publish_interval_s: 1.0
+sim_step_s: 0.2
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 100.0
+  transient_duration_s: 8.0
+  auto_start: true
+
+physics:
+  capacity_kg: 1000
+  target_dough_temp_c: 40.0
+  ambient_temp_c: 20.0
+  recipe_id: 201
