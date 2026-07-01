@@ -5,3 +5,9 @@ grafana/data/
 mongo/data/
 n8n/data/
 portainer/data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/

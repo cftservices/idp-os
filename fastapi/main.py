@@ -30,6 +30,7 @@ ARCHIVE_COLLECTIONS = {
     "plc": "plc_data",
     "dairy": "dairy_data",
     "bakery": "bakery_data",
+    "dairyworks": "dairyworks_data",
 }
 
 
