@@ -95,7 +95,7 @@ Werkt de MonsterMQ-native ingest niet meteen, gebruik de meegeleverde connector 
 
 ## 7. Anonimisering (vóór delen/demo)
 
-- [ ] Alleen `DairyWorks`/generieke namen zichtbaar (dashboard, Grafana, rapport). Geen een NL-zuivelbedrijf/[geanonimiseerd]/ICT.
+- [ ] Alleen `DairyWorks`/generieke namen zichtbaar (dashboard, Grafana, rapport). Geen werkgever-/klant-/leverancier-namen.
 - [ ] Demo-URL enkel achter basic-auth delen; interne poorten niet publiek (zie firewall).
 
 ---
