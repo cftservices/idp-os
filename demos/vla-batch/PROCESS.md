@@ -1,10 +1,10 @@
-# Vla batch-proces — demo-fabriek (een NL-zuivelbedrijf-stijl)
+# Vla batch-proces — demo-fabriek (generiek batch-food)
 
 > De batch-fabriek die we simuleren voor de workshop + demo. Klein, uitlegbaar, batch
 > (geen continu proces). Raw materials → één produced material. Dit is de input die
 > Eugene vroeg: "schrijf het proces uit — wat is de business, raw materials, produced material?"
 >
-> Gekozen product: **chocoladevla** (iconisch een NL-zuivelbedrijf, simpel batch-recept).
+> Gekozen product: **chocoladevla** (herkenbaar NL zuivelproduct, simpel batch-recept).
 
 ## Business in één zin
 We maken **1-liter pakken chocoladevla** in batches: per batch gaat een tank raw materials
@@ -62,18 +62,21 @@ ingrediënt, piek-kooktemperatuur, hold-tijd, eind-viscositeit, aantal pakken.
 - Start / stop batch
 
 ## ISA-95 / OPC-UA tags (de "fabriek als OPC-UA")
+> UNS-topics zoals de gebouwde stack ze publiceert (site `DairyWorks`, line `Vla`).
+> OPC-UA node-ids: `ns=2;s=DairyWorks.Vla.{Area}.{Equipment}.{tag}` → MonsterMQ's native
+> OPC-UA-client publiceert ze op `DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}`.
 ```
-TechFlow/Vla/Mixing/Tank/level_l
-TechFlow/Vla/Mixing/Tank/temp_c
-TechFlow/Vla/Mixing/Tank/agitator_rpm
-TechFlow/Vla/Cook/temp_c
-TechFlow/Vla/Cook/setpoint_c
-TechFlow/Vla/Cook/hold_sec
-TechFlow/Vla/Cook/viscosity_cP        # afgeleide kwaliteit
-TechFlow/Vla/Cooling/temp_c
-TechFlow/Vla/Filling/packs_total
-TechFlow/Vla/Batch/state              # IDLE | DOSING | COOKING | COOLING | FILLING | COMPLETE
-TechFlow/Vla/Batch/event              # ad-hoc: volledig batch-record (JSON)
+DairyWorks/Vla/Mixing/process-tank-01/Status/level_L
+DairyWorks/Vla/Mixing/process-tank-01/Status/temp_C
+DairyWorks/Vla/Mixing/process-tank-01/Status/agitator_rpm
+DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C
+DairyWorks/Vla/Cook/cook-unit-01/Status/setpoint_C
+DairyWorks/Vla/Cook/cook-unit-01/Status/hold_sec
+DairyWorks/Vla/Cook/cook-unit-01/Status/viscosity_cP    # afgeleide kwaliteit
+DairyWorks/Vla/Cooling/cooler-01/Status/temp_C
+DairyWorks/Vla/Filling/filler-01/Status/packs_total
+DairyWorks/Vla/Batch/Status/state          # IDLE | DOSING | COOKING | COOLING | FILLING | COMPLETE
+DairyWorks/Vla/Batch/Status/batch_id       # actieve batch-id
 ```
 
 ## De Solve-test (het bewijs dat de data layer waarde levert)
@@ -88,10 +91,13 @@ Dat is precies waarom je de data layer wil: de afwijking (kooktemp → viscosite
 en per batch, niet pas achteraf.
 
 ## Hoe dit in de demo-architectuur past
-De Vla-fabriek is de **bron**: hij wordt als **OPC-UA** ontsloten (zwarte doos met knoppen),
-MonsterMQ haalt het op naar de **data layer / UNS-bus**, een bridge schrijft de time-series naar
-**TDengine** (historian), en **Grafana** (trends/productie) + **BIRT** (shift-rapporten) + AI
-consumeren daarvandaan. Zie [`architecture.html`](../../../strategy-os/user-workspace/Meetings/2026-06-30-eugene/architecture.html).
+De Vla-fabriek is de **bron**: hij wordt als **OPC-UA server** ontsloten (zwarte doos met knoppen).
+**MonsterMQ** ingest hem via zijn **native OPC-UA-client** naar de **data layer / UNS-bus** (+ archive
+naar MongoDB voor context); een **bridge (MQTT → line-protocol)** schrijft de time-series naar
+**TDengine** (historian), en **Grafana** (trends/productie) + **BIRT** (batch/shift-rapporten) + AI
+consumeren vanaf de UNS. Zie [`architecture.html`](../../../strategy-os/user-workspace/Meetings/2026-06-30-eugene/architecture.html).
 
-> Hergebruik: het batch-lifecycle patroon staat al in [`demos/cornflour-sim/machines.py`](../cornflour-sim/machines.py)
-> (IDLE → RUNNING → COMPLETE) en kan voor Vla worden omgebouwd wanneer we de sim echt bouwen.
+> **Gebouwd** in [`scenarios/vla-batch/`](../../scenarios/vla-batch/) (2026-07-01): `factory/` (asyncua
+> OPC-UA server + 5-staps batch-physics, lifecycle IDLE→DOSING→COOKING→COOLING→FILLING→COMPLETE),
+> `batch-engine/` (FastAPI MES + BIRT-stijl PDF), `monstermq-init/` (native OPC-UA ingest),
+> `connector/` (optionele fallback), `dashboard/` + `grafana/`. Deploy: `scenarios/vla-batch/DEPLOY.md`.
