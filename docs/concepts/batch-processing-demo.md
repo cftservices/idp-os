@@ -65,7 +65,7 @@ Events o.a.: *prep started*, *HU scanned*, *productie boeken*, *equipment alarms
 | Wie | Actie |
 |-----|-------|
 | **Samen** | Melk-proces verder uitwerken / modelleren (conceptueel én functioneel): wat simuleren, wat visualiseren, dashboard, rapporten, etc. |
-| **Johannes** | Docs van geanonimiseerde food/dairy-projecten |
+| **Johannes** | Docs uit eerdere MES-projecten (geanonimiseerd) |
 | **Johannes** | Hoofdlijnen in PowerPoint |
 | **Samen** | Data-architectuur technisch uitwerken: tool-keuzes, software stack |
 | **Eugene** | Corn-flower (witte mais) speciaal voor Oost-Afrika |
