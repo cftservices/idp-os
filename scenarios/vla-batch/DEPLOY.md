@@ -86,6 +86,25 @@ Werkt de MonsterMQ-native ingest niet meteen, gebruik de meegeleverde connector 
       ```
 - [ ] De connector ontdekt/leest de nodes zelf; geen ns-index-config nodig.
 
+## 5b. Variant — gedeelde VPS met host-nginx (zo draait techflow24.com)
+
+Heeft de VPS al een reverse proxy op 80/443 (host-nginx + certbot) en is host-1883
+bezet (legacy mosquitto), gebruik dan de extra overlay
+[`docker-compose.vps-shared.yml`](docker-compose.vps-shared.yml):
+
+- Traefik uit de slim-base wordt uitgeschakeld; MonsterMQ krijgt geen host-poort.
+- `vla-dashboard` → `127.0.0.1:8090`, `grafana` → `127.0.0.1:3001`; host-nginx
+  doet TLS + routing + basic-auth (`/etc/nginx/.htpasswd-milkdemo`).
+- Alle deploy.sh commando's werken via env `VLA_EXTRA_COMPOSE`:
+  ```bash
+  export VLA_EXTRA_COMPOSE=scenarios/vla-batch/docker-compose.vps-shared.yml
+  ./scenarios/vla-batch/deploy.sh up      # of verify / smoke / fallback
+  ```
+- ⚠ Draai `up` op zo'n VPS nooit ZONDER de overlay — Traefik zou 80/443 claimen
+  en botsen met nginx.
+- nginx-vhost + hardening + runbook: techflow-os hub-repo `infra/vps-techflow24/`
+  (private).
+
 ## 6. Beheer
 
 - [ ] Logs: `./scenarios/vla-batch/deploy.sh logs [service]`

@@ -21,7 +21,10 @@ set -euo pipefail
 SLIM="docker-compose.slim.yml"
 VLA="scenarios/vla-batch/docker-compose.vla.yml"
 NET="idp-network"
-DC="docker compose -f $SLIM -f $VLA"
+# Optionele extra overlay (bv. docker-compose.vps-shared.yml op een gedeelde
+# VPS met host-nginx). Zet VLA_EXTRA_COMPOSE naar het pad van de overlay.
+EXTRA="${VLA_EXTRA_COMPOSE:-}"
+DC="docker compose -f $SLIM -f $VLA${EXTRA:+ -f $EXTRA}"
 
 c_g(){ printf "\033[32m%s\033[0m\n" "$*"; }
 c_y(){ printf "\033[33m%s\033[0m\n" "$*"; }
@@ -122,7 +125,7 @@ cmd_fallback(){
   require
   hr; c_y "Overschakelen naar de connector-fallback (MonsterMQ native OPC-UA uit)"; hr
   c_y "1) MonsterMQ OPC-UA device 'vla' uitschakelen..."
-  gql "mutation{toggleOpcUaDevice(name:\\\"vla\\\",enabled:false){success}}"; echo
+  gql "mutation{opcUaDevice{toggle(name:\\\"vla\\\",enabled:false){success}}}"; echo
   c_y "2) connector starten (profile fallback)..."
   $DC --profile fallback up -d --build vla-connector
   c_g "Fallback actief. Verifieer opnieuw: $0 verify"

@@ -1,0 +1,36 @@
+# VPS-shared overlay — draai de vla-stack NAAST een bestaande host-nginx + mosquitto.
+#
+# Gebruik dit als de VPS al een reverse proxy op 80/443 heeft (host-nginx met
+# certbot, zoals op techflow24.com) en host-poort 1883 al bezet is (mosquitto
+# van de legacy v1-stack). Traefik uit de slim-base wordt uitgeschakeld; de
+# host-nginx doet TLS + routing naar localhost-poorten:
+#
+#   milkdemo.<domain>  ->  127.0.0.1:8090  (vla-dashboard; basic-auth in nginx)
+#   grafana.<domain>   ->  127.0.0.1:3001  (grafana met vla-provisioning)
+#
+# Run (from idp-os root):
+#   VLA_EXTRA_COMPOSE=scenarios/vla-batch/docker-compose.vps-shared.yml \
+#     ./scenarios/vla-batch/deploy.sh up
+#
+# Zonder deze overlay (dedicated VPS) doet Traefik TLS + routing zelf — zie
+# DEPLOY.md. Beide modes gebruiken dezelfde .env.
+
+services:
+
+  # Host-nginx bezit 80/443 — Traefik niet starten op deze VPS.
+  traefik:
+    profiles: ["disabled"]
+
+  # Host-1883 is van de legacy mosquitto; interne clients bereiken MonsterMQ
+  # via monstermq:1883 op idp-network, dus geen host-mapping nodig.
+  monstermq:
+    ports: !reset []
+
+  # Web-facing services alleen op loopback — host-nginx proxiet er naartoe.
+  vla-dashboard:
+    ports:
+      - "127.0.0.1:8090:80"
+
+  grafana:
+    ports:
+      - "127.0.0.1:3001:3000"

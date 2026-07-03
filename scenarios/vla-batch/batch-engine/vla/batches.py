@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -147,14 +149,25 @@ class BatchRunner:
 
     # ------------------------------------------------------------------- start
 
+    # live-follow tuning (factory: TIME_SCALE=6, hele batch ~2-3 min realtime)
+    POLL_S = 2.0
+    START_TIMEOUT_S = 30.0
+    FOLLOW_TIMEOUT_S = 900.0
+
     def start_batch(self, batch_id: str,
                     telemetry: Optional[dict[str, Any]] = None) -> dict:
-        """Send StartBatch + drive the batch to COMPLETE.
+        """Send StartBatch and drive the batch to COMPLETE.
 
-        `telemetry` (optional) forces process values for offline/test runs, e.g.
+        LIVE mode (bus connected, no forced telemetry): StartBatch goes to the
+        factory and a background thread FOLLOWS the real batch over the UNS —
+        mirroring phases, tracking peak cook temp / hold, and reading the
+        factory's end viscosity — until the factory reports COMPLETE. The call
+        returns immediately with state DOSING; poll GET /batches/{id}.
+
+        INSTANT mode (offline/selftest, or `telemetry` given): the lifecycle is
+        completed synchronously with fabricated/forced values, e.g.
         {"peak_cook_temp_C":88, "hold_elapsed_sec":300, "packs_total":5000,
          "reject_count":20, "fault":"cook_undertemp", "magnitude":0.6}.
-        If omitted, values are read from the bus tag-cache, else fabricated.
         """
         batch = self._raw_batch(batch_id)
         if batch is None:
@@ -163,9 +176,17 @@ class BatchRunner:
             return self.get_batch(batch_id)
 
         recipe = M.get_recipe(batch["recipe_id"])
+        live = (telemetry is None and self.bus is not None
+                and getattr(self.bus, "connected", False))
+        if live:
+            fstate = self._bus_str("Batch", "state")
+            if fstate in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
+                raise ValueError("factory line is busy with another batch")
+
         started = _now()
         self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started)})
-        self._event(batch_id, "batch_started", {})
+        self._event(batch_id, "batch_started",
+                    {"mode": "live" if live else "instant"})
 
         # PRIMARY: OPC-UA StartBatch on the factory. Secondary: MQTT Command.
         if self.control is not None:
@@ -173,12 +194,116 @@ class BatchRunner:
         if self.bus is not None:
             self.bus.start_batch(batch["recipe_id"])
 
-        # --- DOSING: book dose actuals ---
-        self._book_doses(batch_id, telemetry)
+        if live:
+            threading.Thread(target=self._follow_live,
+                             args=(batch_id, recipe),
+                             name=f"vla-follow-{batch_id}", daemon=True).start()
+            return self.get_batch(batch_id)
 
-        # --- COOKING: capture peak temp + hold ---
+        # INSTANT: book doses + capture cook from telemetry/fabricated values.
+        self._book_doses(batch_id, telemetry)
         self._update(batch_id, {"state": M.COOKING})
-        peak_temp, hold_elapsed, fault, magnitude = self._read_cook(recipe, telemetry)
+        peak_temp, hold_elapsed, fault, _mag = self._read_cook(recipe, telemetry)
+        packs, rejects = self._read_packs(batch, telemetry)
+        self._finalize(batch_id, recipe, peak_temp, hold_elapsed, fault,
+                       end_visc=None, packs=packs, rejects=rejects)
+        return self.get_batch(batch_id)
+
+    # -------------------------------------------------------------- live follow
+
+    def _bus_float(self, equipment: str, tag: str) -> Optional[float]:
+        if self.bus is None:
+            return None
+        raw = self.bus.latest_value(equipment, tag)
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _bus_str(self, equipment: str, tag: str) -> Optional[str]:
+        if self.bus is None:
+            return None
+        raw = self.bus.latest_value(equipment, tag)
+        return None if raw is None else str(raw)
+
+    def _follow_live(self, batch_id: str, recipe: M.Recipe) -> None:
+        """Follow the REAL factory batch over the UNS until COMPLETE, then
+        finalize the MES batch from the observed telemetry (runs in a thread)."""
+        try:
+            peak: Optional[float] = None
+            hold = 0.0
+            mirrored = M.DOSING
+            saw_running = False
+            t0 = time.monotonic()
+
+            while time.monotonic() - t0 < self.FOLLOW_TIMEOUT_S:
+                st = self._bus_str("Batch", "state")
+
+                tv = self._bus_float("cook-unit-01", "temp_C")
+                if tv is not None:
+                    peak = tv if peak is None else max(peak, tv)
+                hv = self._bus_float("cook-unit-01", "hold_elapsed_sec")
+                if hv is not None:
+                    hold = max(hold, hv)
+
+                if st in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
+                    saw_running = True
+                    if st != mirrored:
+                        mirrored = st
+                        self._update(batch_id, {"state": st})
+                        self._event(batch_id, "phase_mirrored", {"state": st})
+                elif st == M.COMPLETE and saw_running:
+                    break
+                elif st == M.IDLE and saw_running:
+                    # factory aborted/stopped mid-batch — finalize with what we saw
+                    self._event(batch_id, "factory_stopped_early", {})
+                    break
+                elif not saw_running and time.monotonic() - t0 > self.START_TIMEOUT_S:
+                    log.warning("factory never left IDLE for %s — "
+                                "falling back to instant simulation", batch_id)
+                    self._event(batch_id, "factory_start_timeout", {})
+                    batch = self._raw_batch(batch_id)
+                    self._book_doses(batch_id, None)
+                    p, h, fault, _m = self._read_cook(recipe, None)
+                    packs, rejects = self._read_packs(batch, None)
+                    self._finalize(batch_id, recipe, p, h, fault,
+                                   end_visc=None, packs=packs, rejects=rejects)
+                    return
+                time.sleep(self.POLL_S)
+
+            # --- finalize from the live tag-cache (post-batch values persist) ---
+            self._book_doses(batch_id, None)
+            if peak is None:
+                peak = 20.0
+            fault = None
+            if peak < recipe.cook_setpoint_C - 5.0:
+                fault = "cook_undertemp"
+            end_visc = self._bus_float("cook-unit-01", "viscosity_cP")
+            packs_f = self._bus_float("filler-01", "packs_total")
+            rejects_f = self._bus_float("filler-01", "reject_count")
+            batch = self._raw_batch(batch_id)
+            if packs_f is None:
+                packs, rejects = self._read_packs(batch, None)
+            else:
+                packs, rejects = int(packs_f), int(rejects_f or 0)
+            self._finalize(batch_id, recipe, round(peak, 2), round(hold, 2),
+                           fault, end_visc=end_visc, packs=packs, rejects=rejects)
+        except Exception as e:  # pragma: no cover - defensive: thread must not die silent
+            log.exception("live follow failed for %s", batch_id)
+            try:
+                self._event(batch_id, "live_follow_error", {"error": str(e)})
+            except Exception:
+                pass
+
+    # ---------------------------------------------------------------- finalize
+
+    def _finalize(self, batch_id: str, recipe: M.Recipe, peak_temp: float,
+                  hold_elapsed: float, fault: Optional[str],
+                  end_visc: Optional[float], packs: int, rejects: int) -> None:
+        """Shared tail of the lifecycle: cook capture -> viscosity/Solve ->
+        filling -> COMPLETE -> verdict. `end_visc` None = compute via physics."""
         self._update(batch_id, {
             "peak_cook_temp_C": peak_temp,
             "hold_elapsed_sec": hold_elapsed,
@@ -192,9 +317,11 @@ class BatchRunner:
                         f"(setpoint {recipe.cook_setpoint_C} C)",
                         impact=True, resolved=False)
 
-        # --- COOLING: compute viscosity (the Solve) + in-process sample ---
+        # --- COOLING: viscosity (the Solve) + in-process sample ---
         self._update(batch_id, {"state": M.COOLING})
-        end_visc = M.physics_viscosity(peak_temp, hold_elapsed, recipe.hold_sec)
+        if end_visc is None:
+            end_visc = M.physics_viscosity(peak_temp, hold_elapsed, recipe.hold_sec)
+        end_visc = round(float(end_visc), 1)
         self._update(batch_id, {"end_viscosity_cP": end_visc})
         self._event(batch_id, "viscosity_computed", {"end_viscosity_cP": end_visc})
         self._take_sample(batch_id, "in-process-viscosity", M.COOLING,
@@ -210,7 +337,6 @@ class BatchRunner:
 
         # --- FILLING: packs ---
         self._update(batch_id, {"state": M.FILLING})
-        packs, rejects = self._read_packs(batch, telemetry)
         self._update(batch_id, {"packs_total": packs, "reject_count": rejects})
         self._event(batch_id, "filling_done",
                     {"packs_total": packs, "reject_count": rejects})
@@ -218,8 +344,7 @@ class BatchRunner:
                           value=None, unit=None)
 
         # --- COMPLETE ---
-        completed = _now()
-        self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(completed)})
+        self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(_now())})
         self._event(batch_id, "batch_complete", {})
 
         # --- verdict ---
@@ -229,7 +354,6 @@ class BatchRunner:
             "critical_alarm_during_batch": crit,
         })
         self._event(batch_id, "verdict_set", {"verdict": verdict})
-        return self.get_batch(batch_id)
 
     # ------------------------------------------------------------------- doses
 
