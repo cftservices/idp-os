@@ -97,7 +97,8 @@ cmd_verify(){
     ok=0
   fi
   hr; c_y "5) TDengine historian gevuld?"; hr
-  local td; td=$(curl_net 8 -u "root:taosdata" -d 'select count(*) from idp.telemetry' http://vla-tdengine:6041/rest/sql)
+  local tdpass; tdpass=$(grep -E '^TD_PASS=' .env 2>/dev/null | cut -d= -f2-); tdpass="${tdpass:-taosdata}"
+  local td; td=$(curl_net 8 -u "root:${tdpass}" -d 'select count(*) from idp.telemetry' http://vla-tdengine:6041/rest/sql)
   echo "  $td"; echo "$td" | grep -q '"code":0' && c_g "  TDengine bereikbaar." || c_y "  TDengine nog geen data (kan even duren, of geen UNS-flow)."
   hr; [ "$ok" = 1 ] && c_g "VERIFY: primaire pad OK." || c_r "VERIFY: aandachtspunten hierboven (zie ns-index / fallback)."
   return 0

@@ -10,13 +10,14 @@ datasources:
     type: tdengine-datasource
     uid: vla-tdengine
     access: proxy
-    url: http://tdengine:6041
+    # Host = container-naam vla-tdengine (niet 'tdengine'); taosAdapter REST :6041.
+    url: http://vla-tdengine:6041
     isDefault: true
     jsonData:
-      # taosAdapter REST auth (matches contract: user root / pass taosdata, db idp)
-      url: http://tdengine:6041
+      url: http://vla-tdengine:6041
       user: root
       # database is selected per-query via the super-table name; default db = idp
     secureJsonData:
-      password: taosdata
+      # env-interpolatie — echte waarde uit .env TD_PASS (niet in git).
+      password: ${TD_PASS}
     editable: true

@@ -154,7 +154,10 @@ services:
     networks:
       - idp-network
     healthcheck:
-      test: ["CMD-SHELL", "taos -s 'SHOW DATABASES' || exit 1"]
+      # Wachtwoord-loze probe: taosAdapter REST-poort open? (`taos -s` zou de
+      # root-creds nodig hebben — die zijn niet default meer.) /bin/sh is dash
+      # (geen /dev/tcp), dus expliciet bash.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/6041"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -228,6 +231,8 @@ services:
       - ./scenarios/vla-batch/grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       GF_INSTALL_PLUGINS: marcusolsson-json-datasource,tdengine-datasource
+      # doorgegeven aan de TDengine-datasource provisioning (${TD_PASS}).
+      TD_PASS: ${TD_PASS:-taosdata}
     depends_on:
       vla-tdengine:
         condition: service_healthy
