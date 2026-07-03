@@ -34,3 +34,10 @@ services:
   grafana:
     ports:
       - "127.0.0.1:3001:3000"
+
+  # taos-explorer web-UI (poort 6060) alleen op loopback — host-nginx proxiet
+  # tdengine.<domain> hiernaartoe (TLS + TDengine-eigen login root/taosdata).
+  # REST-API (6041) blijft volledig intern.
+  vla-tdengine:
+    ports:
+      - "127.0.0.1:6060:6060"
