@@ -27,6 +27,7 @@ Env vars (defaults werken binnen het idp docker-network):
     FLUSH_SECONDS   1.0
     FLUSH_LINES     200
 """
+import json
 import os
 import threading
 import time
@@ -62,17 +63,44 @@ def _escape_str_field(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _num_field(v) -> str:
+    """bool/int/float -> ILP numeriek 'value=<double>'."""
+    if isinstance(v, bool):
+        return f"value={1 if v else 0}"
+    return f"value={float(v)}"
+
+
 def _coerce_field(payload: str) -> str:
-    """MQTT-payload -> ILP field. Numeriek -> double; bool -> 0/1; rest -> string."""
+    """MQTT-payload -> ILP field. Numeriek -> double; bool -> 0/1; rest -> string.
+
+    UNS-payloads zijn JSON-objecten ({"value":60.0,"timestamp":..,"status":0}).
+    Die pakken we uit naar het numerieke `value`-veld zodat ANOMALY_WINDOW /
+    forecasting (TDgpt) en Grafana-trends erop kunnen werken. Alleen als de
+    payload noch een kaal getal noch JSON-met-numerieke-value is, valt het terug
+    op het string-veld `valuestr` (recept-namen, fase-strings, e.d.).
+    """
     p = payload.strip()
     low = p.lower()
     if low in ("true", "false"):
         return f"value={1 if low == 'true' else 0}"
     try:
-        return f"value={float(p)}"  # double field (TDengine maakt er DOUBLE van)
+        return f"value={float(p)}"  # kaal getal -> double
     except ValueError:
-        # niet-numeriek (recept-naam, fase-string, JSON-blob) -> apart string-field
-        return f'valuestr="{_escape_str_field(p)}"'
+        pass
+    # UNS JSON {"value": <num>, ...} -> numeriek value uitpakken
+    if p[:1] in ("{", "["):
+        try:
+            obj = json.loads(p)
+        except (ValueError, TypeError):
+            obj = None
+        if isinstance(obj, dict) and "value" in obj:
+            v = obj["value"]
+            if isinstance(v, bool) or isinstance(v, (int, float)):
+                return _num_field(v)
+            # value is een string (recept/fase) -> string-veld
+            return f'valuestr="{_escape_str_field(str(v))}"'
+    # niet-numeriek / onbekend -> string-veld
+    return f'valuestr="{_escape_str_field(p)}"'
 
 
 def to_line(topic: str, payload: str, ts_ms: int) -> str:

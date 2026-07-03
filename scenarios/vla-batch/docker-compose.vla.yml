@@ -163,6 +163,32 @@ services:
       retries: 12
       start_period: 20s
 
+  # ── VLA TDGPT ANODE (open-source AI-laag: forecasting + anomaly-detection) ──
+  # taosanode (TDgpt) als losse analyse-node. De SLIM image (1.9 GB, geen zware
+  # deep-learning modellen) levert de statistische algoritmes (IQR, k-sigma,
+  # Grubbs, LOF) die ANOMALY_WINDOW gebruikt. taosd roept deze node aan; hij is
+  # zelf stateless compute. Geen publieke poort — intern op idp-network :6090.
+  # Registreren vanuit taosd:  CREATE ANODE 'vla-tdgpt:6090';
+  #   ⚠ deze image bindt op 6090 (niet de 6035 uit sommige docs — geverifieerd).
+  # Bewijst het canon-punt: de "AI agent" is open source (AGPL), géén Enterprise
+  # taosX/IDMP nodig — draait op dezelfde €8 VPS.
+  vla-tdgpt:
+    image: tdengine/tdengine-tdgpt:3.3.6.0
+    container_name: vla-tdgpt
+    hostname: vla-tdgpt
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Amsterdam
+    mem_limit: 1500m
+    networks:
+      - idp-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/6090"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
   # ── VLA TDENGINE BRIDGE (MonsterMQ -> TDengine, reuse tdengine-poc/bridge.py) ─
   # Herbruikt de bestaande bridge ONgewijzigd; alleen env aangepast op de
   # vla-UNS-topics + de vla-tdengine host.
