@@ -32,6 +32,7 @@
 volumes:
   vla-tdengine-data:
   vla-tdengine-log:
+  vla-ollama-data:
 
 services:
 
@@ -188,6 +189,49 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
+
+  # ── VLA OLLAMA (lokale LLM — "Praat met je fabriek", geen externe API) ──────
+  # Draait een klein open-source model op de VPS zelf. Geen publieke poort; geen
+  # data naar buiten. Model wordt na start gepulld (zie deploy.sh / handmatig:
+  # docker exec vla-ollama ollama pull ${OLLAMA_MODEL:-qwen2.5:3b}).
+  vla-ollama:
+    image: ollama/ollama:latest
+    container_name: vla-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: "30m"
+    volumes:
+      - vla-ollama-data:/root/.ollama
+    mem_limit: 4g
+    networks:
+      - idp-network
+
+  # ── VLA AI (NL->SQL FastAPI: natuurlijke taal -> TDengine, read-only) ───────
+  # De open-source tegenhanger van IDMP's "AI Chat". Vraag in gewone taal ->
+  # lokaal Ollama-model genereert SQL -> read-only op TDengine -> antwoord.
+  vla-ai:
+    build:
+      context: ./scenarios/vla-batch/ai-nl2sql
+      dockerfile: Dockerfile
+    image: techflow/vla-ai:latest
+    container_name: vla-ai
+    restart: unless-stopped
+    environment:
+      OLLAMA_URL: "http://vla-ollama:11434"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      TD_URL: "http://vla-tdengine:6041"
+      TD_DB: ${TD_DB:-idp}
+      TD_USER: ${TD_USER:-root}
+      TD_PASS: ${TD_PASS:-taosdata}
+      PHRASE: "1"
+    depends_on:
+      vla-tdengine:
+        condition: service_healthy
+      vla-ollama:
+        condition: service_started
+    mem_limit: 256m
+    networks:
+      - idp-network
 
   # ── VLA TDENGINE BRIDGE (MonsterMQ -> TDengine, reuse tdengine-poc/bridge.py) ─
   # Herbruikt de bestaande bridge ONgewijzigd; alleen env aangepast op de

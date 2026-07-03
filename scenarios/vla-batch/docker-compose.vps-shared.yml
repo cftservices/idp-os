@@ -41,3 +41,9 @@ services:
   vla-tdengine:
     ports:
       - "127.0.0.1:6060:6060"
+
+  # "Praat met je fabriek" chat-UI + NL->SQL API, alleen op loopback — host-nginx
+  # proxiet ai.<domain> hiernaartoe (TLS + basic-auth).
+  vla-ai:
+    ports:
+      - "127.0.0.1:8095:8080"
