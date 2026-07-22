@@ -94,6 +94,11 @@ class BatchRunner:
         if status != "released":
             raise ValueError(f"recipe {recipe_id!r} is not released (status={status})")
 
+        # CIP gate (PR-29): cook-unit-01 must be clean before a new batch.
+        if self.equipment is not None and self.equipment.is_dirty("cook-unit-01"):
+            raise ValueError("cook-unit-01 is Dirty — CIP cleaning required "
+                             "before a new batch (PR-29)")
+
         # Production order (PR-24): explicit order_id must exist and be open;
         # without one, an implicit order is created when a manager is wired.
         if order_id is not None:
@@ -164,6 +169,11 @@ class BatchRunner:
         # push setpoints (MQTT no-op when offline)
         self._push_setpoints(batch_id, recipe, scaled)
 
+        # PR-29: allocate the line's equipment to this batch (Allocated
+        # history row) before the lifecycle starts moving equipment states.
+        if self.equipment is not None:
+            self._feed_allocated()
+
         if auto_start:
             self.start_batch(batch_id)
         return self.get_batch(batch_id)
@@ -229,6 +239,20 @@ class BatchRunner:
             })
             if self.equipment is not None:
                 self.equipment.on_state_change(eq, state)
+
+    def _feed_allocated(self) -> None:
+        """PR-29: write an Allocated history row for every line equipment on
+        batch create — NOT via _feed_equipment_state (that maps unknown
+        states to Idle)."""
+        for eq in EQUIPMENT_IDS:
+            self.db.dw_equipment_state.insert_one({
+                "equipment_id": eq,
+                "area": M.area_of(eq),
+                "state": "Allocated",
+                "ts": _iso(),
+            })
+            if self.equipment is not None:
+                self.equipment.on_state_change(eq, "Allocated")
 
     # ------------------------------------------------------------------- start
 

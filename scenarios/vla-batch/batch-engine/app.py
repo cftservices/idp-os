@@ -27,7 +27,7 @@ from vla import model as M
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
-from vla.equipment import EquipmentMonitor
+from vla.equipment import EQUIPMENT_IDS, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
 from vla.orders import OrderManager
@@ -130,6 +130,10 @@ class BookProduction(BaseModel):
     operator_id: str | None = None
 
 
+class CipRequest(BaseModel):
+    operator_id: str | None = None
+
+
 def _runner() -> BatchRunner:
     runner = STATE.get("runner")
     if runner is None:
@@ -221,6 +225,18 @@ def equipment_snapshot():
     if eq is None:
         raise HTTPException(503, "engine not initialized")
     return eq.snapshot()
+
+
+@app.post(f"{API}/equipment/{{equipment_id}}/cip")
+def equipment_cip(equipment_id: str, body: CipRequest):
+    """PR-29: CIP cleaning action — resets fouling counter, clears Dirty,
+    resolves open fouling alerts."""
+    if equipment_id not in EQUIPMENT_IDS:
+        raise HTTPException(404, f"unknown equipment {equipment_id!r}")
+    eq = STATE.get("equipment")
+    if eq is None:
+        raise HTTPException(503, "engine not initialized")
+    return eq.perform_cip(equipment_id, operator_id=body.operator_id)
 
 
 @app.get(f"{API}/materials")

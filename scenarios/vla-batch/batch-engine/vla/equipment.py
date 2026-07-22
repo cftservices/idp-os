@@ -107,13 +107,15 @@ class EquipmentMonitor:
 
     def record_batch_completed(self, batch_id: str,
                                cook_heatup_sec: float) -> Optional[dict]:
-        """PR-18: increment batches_since_cip for cook-unit-01, trend the
+        """PR-18/29: increment batches_since_cip for cook-unit-01, trend the
         heat-up in heatup_history (last 20), mark Dirty at
-        DIRTY_AFTER_BATCHES, and raise a fouling alert once heat-up crosses
+        DIRTY_AFTER_BATCHES (history row + equipment_dirty event, once on the
+        transition), and raise a fouling alert once heat-up crosses
         BASE_HEATUP_SEC * CBM_ALERT_FACTOR (only one unresolved alert at a
         time). Returns the alert row, or None."""
         equipment_id = "cook-unit-01"
         meta = self.ensure_meta(equipment_id)
+        was_dirty = bool(meta.get("dirty"))
         batches_since_cip = meta.get("batches_since_cip", 0) + 1
         hist = list(meta.get("heatup_history") or [])
         hist.append({"batch_id": batch_id, "heatup_sec": cook_heatup_sec,
@@ -126,39 +128,97 @@ class EquipmentMonitor:
                       "heatup_history": hist, "dirty": dirty}},
         )
 
+        alert = None
         threshold = BASE_HEATUP_SEC * CBM_ALERT_FACTOR
-        if cook_heatup_sec < threshold:
-            return None
-        if self.open_alerts(equipment_id):
-            return None  # only one unresolved fouling alert at a time
+        if cook_heatup_sec >= threshold and not self.open_alerts(equipment_id):
+            alert = {
+                "alert_id": f"CBM-{uuid.uuid4().hex[:8].upper()}",
+                "equipment_id": equipment_id,
+                "alert_type": "fouling_heatup",
+                "message": (f"Heat-up time {cook_heatup_sec}s exceeds "
+                           f"{threshold}s — plan CIP cleaning"),
+                "heatup_sec": cook_heatup_sec,
+                "batches_since_cip": batches_since_cip,
+                "resolved": False,
+                "ts": _iso(),
+            }
+            self.db.dw_cbm_alerts.insert_one(alert)
+            if self.bus is not None:
+                self.bus.publish_json(
+                    f"{M.area_of(equipment_id)}/{equipment_id}/Alert/fouling_heatup",
+                    {"value": alert["message"], "ts": _iso()})
+            self.db.dw_batch_events.insert_one({
+                "batch_id": batch_id,
+                "event_type": "cbm_alert",
+                "payload": {"equipment_id": equipment_id,
+                           "alert_type": "fouling_heatup",
+                           "heatup_sec": cook_heatup_sec,
+                           "batches_since_cip": batches_since_cip},
+                "ts": _iso(),
+            })
+            log.warning("CBM fouling alert: %s", alert["message"])
 
-        alert = {
-            "alert_id": f"CBM-{uuid.uuid4().hex[:8].upper()}",
-            "equipment_id": equipment_id,
-            "alert_type": "fouling_heatup",
-            "message": (f"Heat-up time {cook_heatup_sec}s exceeds "
-                       f"{threshold}s — plan CIP cleaning"),
-            "heatup_sec": cook_heatup_sec,
-            "batches_since_cip": batches_since_cip,
-            "resolved": False,
-            "ts": _iso(),
-        }
-        self.db.dw_cbm_alerts.insert_one(alert)
-        if self.bus is not None:
-            self.bus.publish_json(
-                f"{M.area_of(equipment_id)}/{equipment_id}/Alert/fouling_heatup",
-                {"value": alert["message"], "ts": _iso()})
-        self.db.dw_batch_events.insert_one({
-            "batch_id": batch_id,
-            "event_type": "cbm_alert",
-            "payload": {"equipment_id": equipment_id,
-                       "alert_type": "fouling_heatup",
-                       "heatup_sec": cook_heatup_sec,
-                       "batches_since_cip": batches_since_cip},
-            "ts": _iso(),
-        })
-        log.warning("CBM fouling alert: %s", alert["message"])
+        # PR-29: mark Dirty once the counter crosses the threshold (only on
+        # the not-dirty -> dirty transition, not on every subsequent batch).
+        if dirty and not was_dirty:
+            area = M.area_of(equipment_id)
+            self.db.dw_equipment_state.insert_one({
+                "equipment_id": equipment_id, "area": area,
+                "state": "Dirty", "ts": _iso(),
+            })
+            if self.bus is not None:
+                self.bus.publish_json(
+                    f"{area}/{equipment_id}/Status/state",
+                    {"value": "Dirty", "ts": _iso()})
+            self.db.dw_batch_events.insert_one({
+                "batch_id": batch_id,
+                "event_type": "equipment_dirty",
+                "payload": {"equipment_id": equipment_id,
+                           "batches_since_cip": batches_since_cip},
+                "ts": _iso(),
+            })
+            log.warning("Equipment %s marked Dirty after %s batches since CIP",
+                       equipment_id, batches_since_cip)
+
         return alert
+
+    def is_dirty(self, equipment_id: str) -> bool:
+        return bool(self.ensure_meta(equipment_id).get("dirty"))
+
+    def perform_cip(self, equipment_id: str,
+                    operator_id: Optional[str] = None) -> dict:
+        """PR-29: CIP cleaning action — resets the fouling counter/history,
+        clears Dirty, resolves any open fouling alerts, writes an Idle
+        history row, and fires a cip_performed event. Returns fresh meta."""
+        self.ensure_meta(equipment_id)
+        now = _iso()
+        self.db.dw_equipment_meta.update_one(
+            {"equipment_id": equipment_id},
+            {"$set": {"batches_since_cip": 0, "dirty": False,
+                      "last_cip_at": now, "heatup_history": []}},
+        )
+        for alert in self.open_alerts(equipment_id):
+            self.db.dw_cbm_alerts.update_one(
+                {"alert_id": alert["alert_id"]},
+                {"$set": {"resolved": True, "resolved_at": now}},
+            )
+
+        area = M.area_of(equipment_id)
+        self.db.dw_equipment_state.insert_one({
+            "equipment_id": equipment_id, "area": area,
+            "state": "Idle", "ts": now,
+        })
+        if self.bus is not None:
+            self.bus.publish_json(f"{area}/{equipment_id}/Status/state",
+                                  {"value": "Idle", "ts": now})
+        self.db.dw_batch_events.insert_one({
+            "batch_id": None,
+            "event_type": "cip_performed",
+            "payload": {"equipment_id": equipment_id, "operator_id": operator_id},
+            "ts": now,
+        })
+        log.info("CIP performed on %s (operator=%s)", equipment_id, operator_id)
+        return self.db.dw_equipment_meta.find_one({"equipment_id": equipment_id})
 
     def open_alerts(self, equipment_id: Optional[str] = None) -> list[dict]:
         query = {"resolved": False}
