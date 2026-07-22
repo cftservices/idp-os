@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from . import inventory, model as M
+from .equipment import BASE_HEATUP_SEC, HEATUP_INCREASE_PER_BATCH
 
 log = logging.getLogger("vla.batches")
 
@@ -290,7 +291,8 @@ class BatchRunner:
         peak_temp, hold_elapsed, fault, _mag = self._read_cook(recipe, telemetry)
         packs, rejects = self._read_packs(batch, telemetry)
         self._finalize(batch_id, recipe, peak_temp, hold_elapsed, fault,
-                       end_visc=None, packs=packs, rejects=rejects)
+                       end_visc=None, packs=packs, rejects=rejects,
+                       telemetry=telemetry)
         return self.get_batch(batch_id)
 
     # -------------------------------------------------------------- live follow
@@ -385,7 +387,8 @@ class BatchRunner:
 
     def _finalize(self, batch_id: str, recipe: M.Recipe, peak_temp: float,
                   hold_elapsed: float, fault: Optional[str],
-                  end_visc: Optional[float], packs: int, rejects: int) -> None:
+                  end_visc: Optional[float], packs: int, rejects: int,
+                  telemetry: Optional[dict] = None) -> None:
         """Shared tail of the lifecycle: cook capture -> viscosity/Solve ->
         filling -> COMPLETE -> verdict. `end_visc` None = compute via physics."""
         self._update(batch_id, {
@@ -438,6 +441,21 @@ class BatchRunner:
         # --- COMPLETE ---
         self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(_now())})
         self._event(batch_id, "batch_complete", {})
+
+        # --- CBM fouling (PR-18): capture heat-up + trend it on the monitor.
+        # Skipped entirely when no monitor is attached (offline/legacy runs).
+        if self.equipment is not None:
+            if telemetry and "cook_heatup_sec" in telemetry:
+                cook_heatup_sec = float(telemetry["cook_heatup_sec"])
+            else:
+                meta = self.equipment.ensure_meta("cook-unit-01")
+                n = meta.get("batches_since_cip", 0) + 1
+                cook_heatup_sec = BASE_HEATUP_SEC * (1.0 + HEATUP_INCREASE_PER_BATCH * n)
+            cook_heatup_sec = round(cook_heatup_sec, 2)
+            self._update(batch_id, {"cook_heatup_sec": cook_heatup_sec})
+            self._event(batch_id, "heatup_captured",
+                        {"cook_heatup_sec": cook_heatup_sec})
+            self.equipment.record_batch_completed(batch_id, cook_heatup_sec)
 
         # --- verdict ---
         verdict, crit = self._verdict(batch_id)

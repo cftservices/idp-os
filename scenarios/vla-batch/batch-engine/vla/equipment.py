@@ -6,6 +6,7 @@ measured (live) or fabricated (instant) and trended here."""
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -101,3 +102,66 @@ class EquipmentMonitor:
                 "last_cip_at": meta.get("last_cip_at"),
             })
         return out
+
+    # ------------------------------------------------------------ CBM fouling
+
+    def record_batch_completed(self, batch_id: str,
+                               cook_heatup_sec: float) -> Optional[dict]:
+        """PR-18: increment batches_since_cip for cook-unit-01, trend the
+        heat-up in heatup_history (last 20), mark Dirty at
+        DIRTY_AFTER_BATCHES, and raise a fouling alert once heat-up crosses
+        BASE_HEATUP_SEC * CBM_ALERT_FACTOR (only one unresolved alert at a
+        time). Returns the alert row, or None."""
+        equipment_id = "cook-unit-01"
+        meta = self.ensure_meta(equipment_id)
+        batches_since_cip = meta.get("batches_since_cip", 0) + 1
+        hist = list(meta.get("heatup_history") or [])
+        hist.append({"batch_id": batch_id, "heatup_sec": cook_heatup_sec,
+                     "ts": _iso()})
+        hist = hist[-20:]
+        dirty = batches_since_cip >= DIRTY_AFTER_BATCHES
+        self.db.dw_equipment_meta.update_one(
+            {"equipment_id": equipment_id},
+            {"$set": {"batches_since_cip": batches_since_cip,
+                      "heatup_history": hist, "dirty": dirty}},
+        )
+
+        threshold = BASE_HEATUP_SEC * CBM_ALERT_FACTOR
+        if cook_heatup_sec < threshold:
+            return None
+        if self.open_alerts(equipment_id):
+            return None  # only one unresolved fouling alert at a time
+
+        alert = {
+            "alert_id": f"CBM-{uuid.uuid4().hex[:8].upper()}",
+            "equipment_id": equipment_id,
+            "alert_type": "fouling_heatup",
+            "message": (f"Heat-up time {cook_heatup_sec}s exceeds "
+                       f"{threshold}s — plan CIP cleaning"),
+            "heatup_sec": cook_heatup_sec,
+            "batches_since_cip": batches_since_cip,
+            "resolved": False,
+            "ts": _iso(),
+        }
+        self.db.dw_cbm_alerts.insert_one(alert)
+        if self.bus is not None:
+            self.bus.publish_json(
+                f"{M.area_of(equipment_id)}/{equipment_id}/Alert/fouling_heatup",
+                {"value": alert["message"], "ts": _iso()})
+        self.db.dw_batch_events.insert_one({
+            "batch_id": batch_id,
+            "event_type": "cbm_alert",
+            "payload": {"equipment_id": equipment_id,
+                       "alert_type": "fouling_heatup",
+                       "heatup_sec": cook_heatup_sec,
+                       "batches_since_cip": batches_since_cip},
+            "ts": _iso(),
+        })
+        log.warning("CBM fouling alert: %s", alert["message"])
+        return alert
+
+    def open_alerts(self, equipment_id: Optional[str] = None) -> list[dict]:
+        query = {"resolved": False}
+        if equipment_id is not None:
+            query["equipment_id"] = equipment_id
+        return list(self.db.dw_cbm_alerts.find(query))
