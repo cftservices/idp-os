@@ -4,9 +4,9 @@ If MONGO_URL is set and pymongo can connect, collections are Mongo-backed
 (db from MONGO_DB, default 'idp'); otherwise an in-memory dict-of-lists store
 with the same minimal API is used so demos and tests run fully offline.
 
-Domain collections (§batch-engine REST):
-  vla_batches, vla_recipes, vla_materials, vla_doses, vla_production,
-  vla_samples, vla_events, vla_alarms
+Domain collections (§05-Backend §3):
+  dw_batches, dw_recipes, dw_materials, dw_doses, dw_production,
+  dw_samples, dw_batch_events, dw_alarms, dw_orders, dw_equipment_state
 """
 
 from __future__ import annotations
@@ -18,14 +18,16 @@ from typing import Any, Optional
 log = logging.getLogger("vla.db")
 
 COLLECTIONS = [
-    "vla_batches",
-    "vla_recipes",
-    "vla_materials",
-    "vla_doses",
-    "vla_production",
-    "vla_samples",
-    "vla_events",
-    "vla_alarms",
+    "dw_batches",
+    "dw_recipes",
+    "dw_materials",
+    "dw_doses",
+    "dw_production",
+    "dw_samples",
+    "dw_batch_events",
+    "dw_alarms",
+    "dw_orders",
+    "dw_equipment_state",
 ]
 
 
@@ -165,9 +167,9 @@ def seed_recipes(db: Database) -> None:
     """Persist the recipe + material seed if the collections are empty."""
     from . import model as M
 
-    if db.vla_recipes.count_documents({}) == 0:
+    if db.dw_recipes.count_documents({}) == 0:
         for rid, r in M.RECIPES.items():
-            db.vla_recipes.insert_one({
+            db.dw_recipes.insert_one({
                 "recipe_id": r.recipe_id,
                 "product_name": r.product_name,
                 "basis_L": r.basis_L,
@@ -180,8 +182,8 @@ def seed_recipes(db: Database) -> None:
                 "spec_max_cP": r.spec_max_cP,
                 "agitator_rpm": r.agitator_rpm,
             })
-    if db.vla_materials.count_documents({}) == 0:
+    if db.dw_materials.count_documents({}) == 0:
         for mid, m in M.MATERIALS.items():
-            db.vla_materials.insert_one({
+            db.dw_materials.insert_one({
                 "material_id": m.material_id, "name": m.name, "uom": m.uom,
             })

@@ -99,11 +99,11 @@ class BatchRunner:
             "started_at": None,
             "completed_at": None,
         }
-        self.db.vla_batches.insert_one(batch_doc)
+        self.db.dw_batches.insert_one(batch_doc)
 
         # dose rows (targets; actuals booked during DOSING)
         for d in scaled:
-            self.db.vla_doses.insert_one({
+            self.db.dw_doses.insert_one({
                 "batch_id": batch_id,
                 "material_id": d.material_id,
                 "qty_target": d.qty_target,
@@ -358,7 +358,7 @@ class BatchRunner:
     # ------------------------------------------------------------------- doses
 
     def _book_doses(self, batch_id: str, telemetry: Optional[dict]) -> None:
-        doses = self.db.vla_doses.find({"batch_id": batch_id})
+        doses = self.db.dw_doses.find({"batch_id": batch_id})
         actuals = (telemetry or {}).get("dose_actuals", {})
         for line in doses:
             target = float(line["qty_target"])
@@ -380,7 +380,7 @@ class BatchRunner:
                     actual = target + self.rng.uniform(-0.004, 0.004) * target
             actual = round(actual, 4)
             in_tol = float(line["tol_min"]) <= actual <= float(line["tol_max"])
-            self.db.vla_doses.update_one(
+            self.db.dw_doses.update_one(
                 {"batch_id": batch_id, "material_id": line["material_id"]},
                 {"$set": {"qty_actual": actual, "in_tolerance": in_tol,
                           "ts": _iso()}},
@@ -496,7 +496,7 @@ class BatchRunner:
             "unit": unit,
             "ts": _iso(),
         }
-        self.db.vla_samples.insert_one(row)
+        self.db.dw_samples.insert_one(row)
         self._event(batch_id, "sample_taken",
                     {"sample_type": sample_type, "status": status, "value": value})
         # PRIMARY: OPC-UA TakeSample on the factory. Secondary: MQTT Command.
@@ -522,9 +522,9 @@ class BatchRunner:
           anders (pending sample) -> PENDING
         """
         batch = self._raw_batch(batch_id)
-        alarms = self.db.vla_alarms.find({"batch_id": batch_id})
-        samples = self.db.vla_samples.find({"batch_id": batch_id})
-        doses = self.db.vla_doses.find({"batch_id": batch_id})
+        alarms = self.db.dw_alarms.find({"batch_id": batch_id})
+        samples = self.db.dw_samples.find({"batch_id": batch_id})
+        doses = self.db.dw_doses.find({"batch_id": batch_id})
 
         end_visc = batch.get("end_viscosity_cP")
         spec_min = batch.get("spec_min_cP", M.SPEC_MIN_CP)
@@ -558,15 +558,15 @@ class BatchRunner:
     # ------------------------------------------------------------ persistence
 
     def _raw_batch(self, batch_id: str) -> Optional[dict]:
-        return self.db.vla_batches.find_one({"batch_id": batch_id})
+        return self.db.dw_batches.find_one({"batch_id": batch_id})
 
     def get_batch(self, batch_id: str) -> Optional[dict]:
         batch = self._raw_batch(batch_id)
         if batch is None:
             return None
-        doses = self.db.vla_doses.find({"batch_id": batch_id})
-        samples = self.db.vla_samples.find({"batch_id": batch_id})
-        alarms = self.db.vla_alarms.find({"batch_id": batch_id})
+        doses = self.db.dw_doses.find({"batch_id": batch_id})
+        samples = self.db.dw_samples.find({"batch_id": batch_id})
+        alarms = self.db.dw_alarms.find({"batch_id": batch_id})
         return {
             **batch,
             "doses": [{"material_id": d["material_id"],
@@ -582,7 +582,7 @@ class BatchRunner:
 
     def list_batches(self) -> list[dict]:
         out = []
-        for b in self.db.vla_batches.find({}):
+        for b in self.db.dw_batches.find({}):
             out.append({
                 "batch_id": b["batch_id"],
                 "recipe_id": b["recipe_id"],
@@ -596,17 +596,17 @@ class BatchRunner:
 
     def get_samples(self, batch_id: Optional[str] = None) -> list[dict]:
         query = {"batch_id": batch_id} if batch_id else {}
-        return self.db.vla_samples.find(query)
+        return self.db.dw_samples.find(query)
 
     def _update(self, batch_id: str, fields: dict) -> None:
-        self.db.vla_batches.update_one(
+        self.db.dw_batches.update_one(
             {"batch_id": batch_id}, {"$set": fields})
         # mirror line-level Batch/Status to UNS
         if self.bus is not None and "state" in fields:
             self.bus.command("Batch", "state", value=fields["state"])
 
     def _event(self, batch_id: str, event_type: str, payload: dict) -> None:
-        self.db.vla_events.insert_one({
+        self.db.dw_batch_events.insert_one({
             "batch_id": batch_id,
             "event_type": event_type,
             "payload": payload,
@@ -615,7 +615,7 @@ class BatchRunner:
 
     def _alarm(self, batch_id: str, equipment_id: str, alarm_type: str,
                severity: str, message: str, impact: bool, resolved: bool) -> None:
-        self.db.vla_alarms.insert_one({
+        self.db.dw_alarms.insert_one({
             "batch_id": batch_id,
             "equipment_id": equipment_id,
             "alarm_type": alarm_type,
