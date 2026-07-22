@@ -46,11 +46,9 @@ def _iso(dt: Optional[datetime] = None) -> str:
 # Map SetSetpoint dose-target short names -> recipe material ids.
 _DOSE_TARGET = {m: f"dose.{m}" for m in M.DOSE_MATERIALS}
 
-# Sample plan for the demo (phase-anchored QA points).
-_SAMPLE_PLAN = [
-    ("in-process-viscosity", M.COOLING),
-    ("finished-product", M.FILLING),
-]
+# QA sample plan (06-Model: dose_check | cook_temp | hold | viscosity) is booked
+# inline: dose_check at end of DOSING, cook_temp + hold at cook capture,
+# viscosity during COOLING (the Solve input).
 
 
 class BatchRunner:
@@ -330,14 +328,23 @@ class BatchRunner:
                         f"(setpoint {recipe.cook_setpoint_C} C)",
                         impact=True, resolved=False)
 
-        # --- COOLING: viscosity (the Solve) + in-process sample ---
+        # Book cook_temp and hold samples at end of COOKING
+        self._take_sample(batch_id, "cook_temp", M.COOKING,
+                          value=peak_temp, unit="C",
+                          spec_min=recipe.cook_setpoint_C - 5.0,
+                          spec_max=recipe.cook_setpoint_C + 5.0)
+        self._take_sample(batch_id, "hold", M.COOKING,
+                          value=hold_elapsed, unit="s",
+                          spec_min=recipe.hold_sec * 0.95)
+
+        # --- COOLING: viscosity (the Solve) ---
         self._update(batch_id, {"state": M.COOLING})
         if end_visc is None:
             end_visc = M.physics_viscosity(peak_temp, hold_elapsed, recipe.hold_sec)
         end_visc = round(float(end_visc), 1)
         self._update(batch_id, {"end_viscosity_cP": end_visc})
         self._event(batch_id, "viscosity_computed", {"end_viscosity_cP": end_visc})
-        self._take_sample(batch_id, "in-process-viscosity", M.COOLING,
+        self._take_sample(batch_id, "viscosity", M.COOLING,
                           value=end_visc, unit="cP",
                           spec_min=recipe.spec_min_cP, spec_max=recipe.spec_max_cP)
         if end_visc < recipe.spec_min_cP:
@@ -353,8 +360,6 @@ class BatchRunner:
         self._update(batch_id, {"packs_total": packs, "reject_count": rejects})
         self._event(batch_id, "filling_done",
                     {"packs_total": packs, "reject_count": rejects})
-        self._take_sample(batch_id, "finished-product", M.FILLING,
-                          value=None, unit=None)
 
         # --- COMPLETE ---
         self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(_now())})
@@ -412,6 +417,10 @@ class BatchRunner:
                             f"{line['material_id']} dose {actual} kg out of tol "
                             f"({line['tol_min']}-{line['tol_max']})",
                             impact=True, resolved=False)
+        # Book dose_check sample at end of DOSING
+        rows = self.db.dw_doses.find({"batch_id": batch_id})
+        all_in_tol = all(r.get("in_tolerance") is not False for r in rows)
+        self._take_sample(batch_id, "dose_check", M.DOSING, ok=all_in_tol)
 
     # ------------------------------------------------------------------- cook
 
@@ -494,14 +503,17 @@ class BatchRunner:
     def _take_sample(self, batch_id: str, sample_type: str, phase: str,
                      value: Optional[float] = None, unit: Optional[str] = None,
                      spec_min: Optional[float] = None,
-                     spec_max: Optional[float] = None) -> dict:
+                     spec_max: Optional[float] = None,
+                     ok: Optional[bool] = None,
+                     operator_id: Optional[str] = None) -> dict:
         sample_id = f"S-{batch_id}-{uuid.uuid4().hex[:5].upper()}"
         status, result = "completed", "pass"
-        if value is not None and spec_min is not None and spec_max is not None:
-            if spec_min <= value <= spec_max:
-                status, result = "approved", "pass"
-            else:
-                status, result = "failed", "fail"
+        if ok is not None:
+            status, result = ("approved", "pass") if ok else ("failed", "fail")
+        elif value is not None and (spec_min is not None or spec_max is not None):
+            in_spec = ((spec_min is None or value >= spec_min)
+                       and (spec_max is None or value <= spec_max))
+            status, result = ("approved", "pass") if in_spec else ("failed", "fail")
         row = {
             "sample_id": sample_id,
             "batch_id": batch_id,
@@ -511,23 +523,30 @@ class BatchRunner:
             "result": result,
             "value": value,
             "unit": unit,
+            "label_printed": True,
+            "operator_id": operator_id,
             "ts": _iso(),
         }
         self.db.dw_samples.insert_one(row)
         self._event(batch_id, "sample_taken",
                     {"sample_type": sample_type, "status": status, "value": value})
-        # PRIMARY: OPC-UA TakeSample on the factory. Secondary: MQTT Command.
+        self._event(batch_id, "sample_label_printed",
+                    {"sample_id": sample_id, "sample_type": sample_type})
         if self.control is not None:
             self.control.take_sample(sample_type)
         if self.bus is not None:
             self.bus.take_sample(sample_type)
         return row
 
-    def take_sample(self, batch_id: str, sample_type: str) -> dict:
+    def take_sample(self, batch_id: str, sample_type: str,
+                    operator_id: Optional[str] = None) -> dict:
         """Ad-hoc sample requested via POST /samples (contract §REST)."""
+        if sample_type not in M.SAMPLE_TYPES:
+            raise ValueError(f"unknown sample_type {sample_type!r} "
+                             f"(allowed: {', '.join(M.SAMPLE_TYPES)})")
         batch = self._raw_batch(batch_id)
         phase = batch["state"] if batch else M.IDLE
-        return self._take_sample(batch_id, sample_type, phase)
+        return self._take_sample(batch_id, sample_type, phase, operator_id=operator_id)
 
     # ---------------------------------------------------------------- verdict
 

@@ -66,7 +66,8 @@ class CreateBatch(BaseModel):
 
 class TakeSample(BaseModel):
     batch_id: str
-    sample_type: str = "adhoc"
+    sample_type: str = "viscosity"
+    operator_id: str | None = None
 
 
 class AdminCommand(BaseModel):
@@ -168,7 +169,10 @@ def take_sample(body: TakeSample):
     runner = _runner()
     if runner.get_batch(body.batch_id) is None:
         raise HTTPException(404, f"batch {body.batch_id} not found")
-    return runner.take_sample(body.batch_id, body.sample_type)
+    try:
+        return runner.take_sample(body.batch_id, body.sample_type, body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get(f"{API}/report/{{batch_id}}")

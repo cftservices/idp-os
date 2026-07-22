@@ -92,7 +92,7 @@ try:
     state_ok = res["state"] == "COMPLETE"
     visc = res["end_viscosity_cP"]
     check("3. normal run end-to-end -> APPROVED",
-          approved and state_ok and doses_booked and n_samples >= 2
+          approved and state_ok and doses_booked and n_samples == 4
           and res["packs_total"] == 4980 and 150.0 <= visc <= 300.0,
           f"verdict={res['verdict']} state={res['state']} visc={visc} "
           f"packs={res['packs_total']} samples={n_samples} doses_booked={doses_booked}")
@@ -194,7 +194,7 @@ try:
                        connect_timeout_s=0.3, retries=0, backoff_s=0.0)
     r_start = ctl.start_batch("chocolate-vla-1L")
     r_sp = ctl.set_setpoint("cook.setpoint_C", 88.0)
-    r_sample = ctl.take_sample("in-process-viscosity")
+    r_sample = ctl.take_sample("viscosity")
     r_fault = ctl.inject_fault("cook_undertemp", 0.6)
     r_clear = ctl.clear_fault()
     r_stop = ctl.stop()
