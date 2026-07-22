@@ -128,7 +128,7 @@ def _scan_call(fn, *args, **kw):
         return fn(*args, **kw)
     except ScanRejected as e:
         code = 404 if e.reason == "unknown" else 409
-        raise HTTPException(code, {"detail": str(e), "reason": e.reason})
+        raise HTTPException(code, {"message": str(e), "reason": e.reason})
     except ValueError as e:
         raise HTTPException(400, str(e))
 

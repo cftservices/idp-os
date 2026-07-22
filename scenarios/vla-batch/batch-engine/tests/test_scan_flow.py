@@ -63,3 +63,34 @@ def test_whole_bag_material_requires_bag_multiples():
     g = flow.weigh(b["batch_id"], "starch", qty_kg=250.0, lot_no="L-9",
                    operator_id="OP-7")  # 10 bags
     assert g["booked"] == 250.0
+
+
+def test_scan_endpoint_rejection_shape():
+    """Verify scan endpoint rejection produces single-nested {message, reason} shape."""
+    from fastapi.testclient import TestClient
+    import app as appmod
+    from vla.bus import VlaBus
+    from vla.opcua_control import OpcuaControl
+
+    # Manually initialize STATE for this test
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    bus = VlaBus(host="monstermq", port=1883)
+    # Don't actually connect, just create the object
+    control = OpcuaControl()
+    orders = OrderManager(db, bus=None)
+    from vla.batches import BatchRunner
+    runner = BatchRunner(db, bus=None, orders=orders)
+    from vla.scan import ScanFlow
+    scan_flow = ScanFlow(db, runner, orders)
+
+    appmod.STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
+                         "runner": runner, "scan": scan_flow})
+
+    client = TestClient(appmod.app)
+    r = client.post("/api/v1/scan/order", json={"code": "PO-DOES-NOT-EXIST",
+                                                 "operator_id": "OP-7"})
+    assert r.status_code == 404
+    body = r.json()["detail"]
+    assert body["reason"] == "unknown"
+    assert "scan rejected" in body["message"]
