@@ -170,6 +170,10 @@ curl -s -X POST http://vla-batch-engine:8000/api/v1/batches \
 | POST | `/samples/{sample_id}/reprint-label` | reprint a sample label |
 | GET | `/report/{batch_id}` | batch report (`?format=json\|pdf`) |
 | POST | `/admin/command` | route a control action to the factory (OPC-UA primary) |
+| POST | `/hu` | wrap packs into a handling unit (APPROVED-gated) |
+| POST | `/hu/{hu_id}/putaway` | book HU into cold-store |
+| POST | `/hu/{hu_id}/ship` | ship HU to expedition |
+| GET | `/hu` | list handling units (optionally by batch) |
 
 ### Fase 1 (v0.4): orders + scan-driven shop-floor flow
 
@@ -182,6 +186,22 @@ linkage), PR-25 (scan gate + label/weigh guidance), PR-26 (report-scan commit +
 inventory consumption), PR-27 (manual production booking), and PR-34 (stop-rule
 + scan-rejection audit trail). Covered end-to-end by `selftest.py` checks 9-10
 and `tests/test_orders.py`, `tests/test_scan_flow.py`, `tests/test_scan_commit.py`.
+
+### Fase 2 (PR-35): handling-unit flow — pallet → cold-store → ship
+
+Adds a light warehouse layer (`HandlingUnitManager`, `dw_handling_units`) on top
+of the fase-0/1 batch + order flow: filled packs get **wrapped** into a
+handling unit (HU) carrying an 18-digit SSCC-**placeholder** label (`80` +
+date + serial + check digit — never a real GS1 company prefix), booked into
+the **koelmagazijn** (cold-store putaway), then **shipped** to expedition.
+The **APPROVED-gate** is the Solve story extended into logistics: `create_hu`
+refuses to wrap packs from any batch whose verdict isn't `APPROVED` (raises
+`ScanRejected(reason="not_approved")`) — a REJECTED or HOLD batch physically
+cannot enter the warehouse. Handling units are folded into the batch report
+(`handling_units[]`) for full delivery → HU → batch traceability. Deliberately
+**out of scope**: palletizer simulation, a real WMS, and real GS1 SSCC
+registration. Covered end-to-end by `selftest.py` check 11 and
+`tests/test_handling.py`.
 
 ---
 

@@ -11,6 +11,7 @@ Verifies:
   8. OPC-UA control path is offline-safe (no factory -> status, no exception)
   9. orders + scan-flow end-to-end (fase 1: gate/label/weigh/report/close)
   10. stop rule (close w/o production) + scan rejection
+  11. HU flow e2e (fase 2: wrap/putaway/ship, APPROVED-gate, report traceability)
 
 Run: python selftest.py   (exit 0 = all pass)
 """
@@ -288,6 +289,42 @@ except Exception as e:
     import traceback
     check("10. stop rule + rejections", False,
           f"exception: {e}\n{traceback.format_exc()}")
+
+
+# --- 11. HU flow e2e (PR-35): APPROVED-gate + wrap/putaway/ship + traceability ---
+try:
+    from vla.handling import HandlingUnitManager
+
+    db11 = get_db()
+    seed_recipes(db11)
+    runner11 = BatchRunner(db11, bus=None, rng=random.Random(33))
+    b11 = runner11.create_batch("chocolate-vla-1L", planned_L=5000)
+    r11 = runner11.start_batch(b11["batch_id"], telemetry={
+        "peak_cook_temp_C": 88.0, "hold_elapsed_sec": 300.0,
+        "packs_total": 4980, "reject_count": 20,
+        "dose_actuals": {"milk": 5000.0, "sugar": 500.0,
+                         "starch": 250.0, "cocoa": 100.0}})
+    hum11 = HandlingUnitManager(db11)
+    hu11 = hum11.create_hu(b11["batch_id"], 2400, operator_id="OP-7")
+    hum11.putaway(hu11["hu_id"]); hum11.ship(hu11["hu_id"])
+    shipped = db11.dw_handling_units.find_one({"hu_id": hu11["hu_id"]})
+    # gate: a REJECTED batch may not enter the warehouse
+    db11.dw_batches.update_one({"batch_id": b11["batch_id"]},
+                               {"$set": {"verdict": "REJECTED"}})
+    try:
+        from vla.scan import ScanRejected
+        hum11.create_hu(b11["batch_id"], 100)
+        gate_ok = False
+    except ScanRejected as ex:
+        gate_ok = ex.reason == "not_approved"
+    rep11 = render_json(runner11.get_batch(b11["batch_id"]))
+    check("11. HU flow e2e (wrap/putaway/ship + APPROVED-gate + report)",
+          r11["verdict"] == "APPROVED" and shipped["status"] == "shipped"
+          and gate_ok and len(rep11["handling_units"]) == 1,
+          f"hu={hu11['hu_id']} shipped={shipped['status']} gate_ok={gate_ok}")
+except Exception as e:
+    import traceback
+    check("11. HU flow e2e", False, f"exception: {e}\n{traceback.format_exc()}")
 
 
 # --- report ---
