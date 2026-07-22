@@ -481,12 +481,27 @@ async function scanOrder(){
   try{
     const r = await post('/scan/order', {code: $('#scanCode').value.trim(),
                                          operator_id: $('#opId').value});
-    opBatch = r.batch ? r.batch.batch_id
-            : (r.order ? (await j('/orders/'+r.order.order_id)).progress.batch_ids.at(-1) : null);
-    $('#scanGate').textContent = 'gate OK — batch '+(opBatch||'—');
-    $('#scanGate').className = 'pill ok';
-    $('#opPanel').classList.remove('hidden');
-    await refreshWeigh();
+    if(r.batch){
+      opBatch = r.batch.batch_id;
+    } else if(r.order){
+      const ord = await j('/orders/'+r.order.order_id);
+      const ids = ord.progress.batch_ids;
+      opBatch = (ids && ids.length > 0) ? ids.at(-1) : null;
+    } else {
+      opBatch = null;
+    }
+    if(opBatch){
+      $('#scanGate').textContent = 'gate OK — batch '+opBatch;
+      $('#scanGate').className = 'pill ok';
+      $('#opPanel').classList.remove('hidden');
+      await refreshWeigh();
+    } else {
+      const oid = r.order ? r.order.order_id : '?';
+      $('#scanGate').textContent = 'order '+oid+' OK — geen actieve batch; maak eerst een batch aan op de Orders-tab';
+      $('#scanGate').className = 'pill';
+      $('#opPanel').classList.add('hidden');
+      $('#weighCards').innerHTML = '';
+    }
   }catch(e){
     $('#scanGate').textContent = 'REJECTED: '+e.message;
     $('#scanGate').className = 'pill bad';
@@ -494,7 +509,7 @@ async function scanOrder(){
   }
 }
 async function refreshWeigh(){
-  if(!opBatch) return;
+  if(!opBatch){ $('#weighCards').innerHTML = ''; return; }
   const b = await j('/batches/'+opBatch);
   $('#weighCards').innerHTML = b.doses.map(d => {
     const booked = d.qty_actual ?? 0;
