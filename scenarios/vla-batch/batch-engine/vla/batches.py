@@ -612,7 +612,7 @@ class BatchRunner:
         if sample_type not in M.SAMPLE_TYPES:
             raise ValueError(f"unknown sample_type {sample_type!r} "
                              f"(allowed: {', '.join(M.SAMPLE_TYPES)})")
-        batch = self._raw_batch(batch_id)
+        batch = self._guard_bookable(batch_id)
         phase = batch["state"] if batch else M.IDLE
         return self._take_sample(batch_id, sample_type, phase, operator_id=operator_id)
 
@@ -658,6 +658,17 @@ class BatchRunner:
         else:
             verdict = M.APPROVED
         return verdict, crit_during_batch
+
+    # ---------------------------------------------------------- guard: order-lifecycle
+
+    def _guard_bookable(self, batch_id: str) -> dict:
+        """FDS order-lifecycle rule: on a COMPLETE batch nothing may be booked."""
+        batch = self._raw_batch(batch_id)
+        if batch is None:
+            raise ValueError(f"unknown batch {batch_id!r}")
+        if batch["state"] == M.COMPLETE:
+            raise ValueError(f"batch {batch_id} is COMPLETE — no bookings allowed")
+        return batch
 
     # ------------------------------------------------------------ persistence
 
