@@ -47,17 +47,6 @@ app.add_middleware(
 STATE: dict = {"db": None, "bus": None, "control": None, "runner": None}
 API = "/api/v1"
 
-# admin/command -> OPC-UA method mapping (§OPC-UA methods). Setpoint targets are
-# passed through to SetSetpoint as-is when they match the contract target-strings.
-_COMMAND_ALIASES = {
-    "start": "StartBatch", "startbatch": "StartBatch",
-    "stop": "Stop",
-    "sample": "TakeSample", "takesample": "TakeSample",
-    "fault": "InjectFault", "injectfault": "InjectFault",
-    "clear": "ClearFault", "clearfault": "ClearFault",
-    "setsetpoint": "SetSetpoint",
-}
-
 
 class CreateBatch(BaseModel):
     recipe_id: str
@@ -71,9 +60,10 @@ class TakeSample(BaseModel):
 
 
 class AdminCommand(BaseModel):
-    target: str            # "batch" | equipment_id
-    command: str           # StartBatch|Stop|SetSetpoint|InjectFault|ClearFault|TakeSample|<tag>
-    value: float | str | None = None
+    """05-Backend §4.3 contract: {equipment_id, cmd, params}."""
+    equipment_id: str                    # "Batch" | equipment_id
+    cmd: str                             # start|stop|sample|fault|clear|setpoint
+    params: dict | None = None
 
 
 def _runner() -> BatchRunner:
@@ -139,7 +129,9 @@ def create_batch(body: CreateBatch):
         batch = runner.create_batch(body.recipe_id, body.planned_L, auto_start=auto)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"batch_id": batch["batch_id"], "state": batch["state"]}
+    return {"batch_id": batch["batch_id"], "state": batch["state"],
+            "dose_setpoints": {d["material_id"]: d["qty_target"]
+                               for d in batch["doses"]}}
 
 
 @app.get(f"{API}/batches/{{batch_id}}")
@@ -147,6 +139,13 @@ def get_batch(batch_id: str):
     batch = _runner().get_batch(batch_id)
     if batch is None:
         raise HTTPException(404, f"batch {batch_id} not found")
+    batch["telemetry_summary"] = {
+        "peak_cook_temp_C": batch.get("peak_cook_temp_C"),
+        "hold_elapsed_sec": batch.get("hold_elapsed_sec"),
+        "end_viscosity_cP": batch.get("end_viscosity_cP"),
+        "packs_total": batch.get("packs_total", 0),
+        "reject_count": batch.get("reject_count", 0),
+    }
     return batch
 
 
@@ -192,69 +191,67 @@ def get_report(batch_id: str, format: str = Query(default="json")):
 
 @app.post(f"{API}/admin/command")
 def admin_command(body: AdminCommand):
-    """Route a control action to the factory. PRIMARY path = direct OPC-UA
-    method on the Batch object; MQTT Command publish stays as secondary fallback.
-
-    `target` = "batch" | equipment_id. `command` maps to an OPC-UA method:
-      start->StartBatch, stop->Stop, sample->TakeSample, fault->InjectFault,
-      clear->ClearFault. A setpoint target-string (cook.setpoint_C, dose.milk,
-      receiving.fat, ...) or command 'SetSetpoint' -> SetSetpoint(target, value).
-    """
+    """Route a control action to the factory (PRIMARY = direct OPC-UA method;
+    MQTT Command publish secondary). Contract 05-Backend §4.3."""
     control = STATE.get("control")
     bus = STATE.get("bus")
     if control is None:
         raise HTTPException(503, "engine not initialized")
+    p = body.params or {}
+    cmd = body.cmd.lower()
 
-    raw = str(body.command)
-    method = _COMMAND_ALIASES.get(raw.lower(), raw)
-
-    # A raw setpoint target-string (e.g. "cook.setpoint_C", "dose.milk") is a
-    # SetSetpoint shorthand.
-    from vla.opcua_control import SETPOINT_TARGETS
-    setpoint_target = None
-    if method == "SetSetpoint":
-        setpoint_target = str(body.value) if isinstance(body.value, str) else None
-    elif raw in SETPOINT_TARGETS:
-        method, setpoint_target = "SetSetpoint", raw
-
-    if method == "StartBatch":
-        result = control.start_batch(
-            str(body.value or M.RECIPE_CHOCOLATE_VLA_1L.recipe_id))
+    if cmd == "start":
+        recipe_id = str(p.get("recipe_id") or M.RECIPE_CHOCOLATE_VLA_1L.recipe_id)
+        result = control.start_batch(recipe_id)
         if bus is not None:
-            bus.start_batch(str(body.value or M.RECIPE_CHOCOLATE_VLA_1L.recipe_id))
-    elif method == "Stop":
+            bus.start_batch(recipe_id)
+    elif cmd == "stop":
+        runner = _runner()
+        active = next((b for b in runner.list_batches()
+                       if b["state"] in ("DOSING", "COOKING", "COOLING", "FILLING")),
+                      None)
+        if active is not None:
+            booked = runner.db.dw_production.count_documents(
+                {"batch_id": active["batch_id"]})
+            if booked == 0:
+                raise HTTPException(
+                    409, "stop refused: no production booked for active batch "
+                         f"{active['batch_id']} (PR-34 stop rule)")
         result = control.stop()
         if bus is not None:
             bus.stop_batch()
-    elif method == "TakeSample":
-        result = control.take_sample(str(body.value or "adhoc"))
+    elif cmd == "sample":
+        stype = str(p.get("sample_type") or "viscosity")
+        if stype not in M.SAMPLE_TYPES:
+            raise HTTPException(400, f"unknown sample_type {stype!r}")
+        result = control.take_sample(stype)
         if bus is not None:
-            bus.take_sample(str(body.value or "adhoc"))
-    elif method == "InjectFault":
-        result = control.inject_fault(str(body.value or "cook_undertemp"), 0.5)
+            bus.take_sample(stype)
+    elif cmd == "fault":
+        fid = str(p.get("fault_id") or "cook_undertemp")
+        mag = float(p.get("magnitude", 0.5) or 0.5)
+        result = control.inject_fault(fid, mag)
         if bus is not None:
-            bus.inject_fault(str(body.value or "cook_undertemp"), 0.5)
-    elif method == "ClearFault":
+            bus.inject_fault(fid, mag)
+    elif cmd == "clear":
         result = control.clear_fault()
         if bus is not None:
             bus.clear_fault()
-    elif method == "SetSetpoint":
-        if setpoint_target is None:
-            raise HTTPException(400, "SetSetpoint needs a target (e.g. cook.setpoint_C)")
-        # value carries the numeric setpoint; when the target came via `command`,
-        # the numeric value is in body.value.
+    elif cmd == "setpoint":
+        target = p.get("target")
+        from vla.opcua_control import SETPOINT_TARGETS
+        if target not in SETPOINT_TARGETS:
+            raise HTTPException(400, f"unknown setpoint target {target!r}")
         try:
-            sp_value = float(body.value)  # type: ignore[arg-type]
+            value = float(p.get("value"))
         except (TypeError, ValueError):
-            raise HTTPException(400, "SetSetpoint needs a numeric value")
-        result = control.set_setpoint(setpoint_target, sp_value)
+            raise HTTPException(400, "setpoint needs a numeric params.value")
+        result = control.set_setpoint(target, value)
         if bus is not None:
-            bus.set_setpoint(setpoint_target, sp_value)
+            bus.set_setpoint(target, value)
     else:
-        # unknown command: fall back to a raw MQTT Command publish (secondary)
-        sent = bus.command(body.target, raw, value=body.value) if bus else False
-        return {"accepted": True, "sent": bool(sent), "path": "mqtt-fallback",
-                "target": body.target, "command": raw}
+        raise HTTPException(400, f"unknown cmd {body.cmd!r} "
+                                 "(allowed: start|stop|sample|fault|clear|setpoint)")
 
-    return {"accepted": True, "path": "opcua", "target": body.target,
-            "command": method, "opcua": result}
+    return {"accepted": True, "path": "opcua", "equipment_id": body.equipment_id,
+            "cmd": cmd, "opcua": result}

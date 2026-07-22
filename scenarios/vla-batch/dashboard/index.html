@@ -162,9 +162,9 @@
 
     <h2>Batch control</h2>
     <div class="row">
-      <button class="gh" onclick="lineCmd('StartBatch')">Start current</button>
-      <button class="gh" onclick="lineCmd('Stop')">Stop</button>
-      <button class="gh" onclick="lineCmd('TakeSample','viscosity')">Take sample</button>
+      <button class="gh" onclick="lineCmd('start')">Start current</button>
+      <button class="gh" onclick="lineCmd('stop')">Stop</button>
+      <button class="gh" onclick="lineCmd('sample','viscosity')">Take sample</button>
     </div>
 
     <h2>Setpoints</h2>
@@ -362,19 +362,22 @@ async function createBatch(){
   try{ const r=await post('/batches',{recipe_id,planned_L}); msg(r); refreshBatches(); }
   catch(e){ msg({error:e.message}); }
 }
-async function lineCmd(command, value){
-  try{ const r=await post('/admin/command',{target:'batch',command,value}); msg(r); }catch(e){ msg({error:e.message}); }
+async function lineCmd(cmd, sampleType){
+  const params = cmd === 'sample' ? {sample_type: sampleType || 'viscosity'} : {};
+  try{ const r=await post('/admin/command',{equipment_id:'Batch',cmd,params}); msg(r); }catch(e){ msg({error:e.message}); }
 }
 async function setSetpoint(){
-  try{ const r=await post('/admin/command',{target:'batch',command:'SetSetpoint',value:$('#spValue').value,setpoint_target:$('#spTarget').value}); msg(r); }
+  try{ const r=await post('/admin/command',{equipment_id:'Batch',cmd:'setpoint',
+        params:{target:$('#spTarget').value,value:parseFloat($('#spValue').value)}}); msg(r); }
   catch(e){ msg({error:e.message}); }
 }
 async function injectFault(){
-  try{ const r=await post('/admin/command',{target:'batch',command:'InjectFault',value:parseFloat($('#mag').value),fault_id:$('#fault').value}); msg(r); }
+  try{ const r=await post('/admin/command',{equipment_id:'Batch',cmd:'fault',
+        params:{fault_id:$('#fault').value,magnitude:parseFloat($('#mag').value)}}); msg(r); }
   catch(e){ msg({error:e.message}); }
 }
 async function clearFault(){
-  try{ const r=await post('/admin/command',{target:'batch',command:'ClearFault'}); msg(r); }catch(e){ msg({error:e.message}); }
+  try{ const r=await post('/admin/command',{equipment_id:'Batch',cmd:'clear',params:{}}); msg(r); }catch(e){ msg({error:e.message}); }
 }
 function msg(o){ $('#adminMsg').textContent = JSON.stringify(o); }
 
