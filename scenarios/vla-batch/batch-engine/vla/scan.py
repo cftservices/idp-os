@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import model as M
+from . import inventory, model as M
 
 log = logging.getLogger("vla.scan")
 
@@ -126,6 +126,56 @@ class ScanFlow:
                         {"material_id": material_id, "qty_prepared": new_prepared,
                          "qty_target": target, "operator_id": operator_id})
         return self._guidance(batch_id, material_id, lot_no)
+
+    # ------------------------------------------- step 4: report scan = commit
+
+    def scan_report(self, batch_id: str,
+                    operator_id: Optional[str] = None) -> dict:
+        self.runner._guard_bookable(batch_id)
+        rows = self.db.dw_doses.find({"batch_id": batch_id})
+        staged_rows = [r for r in rows
+                       if float(r.get("qty_prepared") or 0.0) > 0
+                       and r.get("qty_actual") is None]
+        if not staged_rows:
+            self._reject(batch_id, batch_id, "nothing_staged", operator_id)
+        booked = []
+        for r in staged_rows:
+            actual = round(float(r["qty_prepared"]), 4)
+            in_tol = float(r["tol_min"]) <= actual <= float(r["tol_max"])
+            last = (r.get("staged") or [{}])[-1]
+            self.db.dw_doses.update_one(
+                {"batch_id": batch_id, "material_id": r["material_id"]},
+                {"$set": {"qty_actual": actual, "in_tolerance": in_tol,
+                          "source_equipment": last.get("source_equipment", "scale-01"),
+                          "operator_id": operator_id or r.get("operator_id"),
+                          "ts": _iso()}})
+            self._event(batch_id, "dose_booked",
+                        {"material_id": r["material_id"], "qty_actual": actual,
+                         "in_tolerance": in_tol, "lot_no": r.get("lot_no"),
+                         "operator_id": operator_id})
+            if not in_tol:
+                self.runner._alarm(batch_id, "process-tank-01",
+                                   "dose_out_of_tolerance", M.MEDIUM,
+                                   f"{r['material_id']} dose {actual} kg out of tol "
+                                   f"({r['tol_min']}-{r['tol_max']})",
+                                   impact=True, resolved=False)
+            inventory.consume(self.db, self._event, r["material_id"],
+                              actual, batch_id)
+            booked.append(r["material_id"])
+        self._event(batch_id, "report_scanned",
+                    {"operator_id": operator_id, "booked_materials": booked})
+        return {"ok": True, "booked_materials": booked}
+
+    # --------------------------------------- step 5: manual production booking
+
+    def book_production(self, batch_id: str, packs: int,
+                        operator_id: Optional[str] = None) -> dict:
+        self.runner._guard_bookable(batch_id)
+        if int(packs) <= 0:
+            self._reject(batch_id, str(packs), "invalid_qty", operator_id)
+        return self.runner._book_production(batch_id, int(packs), 0,
+                                            source="operator_booking",
+                                            operator_id=operator_id)
 
     # ---------------------------------------------------------------- helpers
 

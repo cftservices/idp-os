@@ -102,6 +102,17 @@ class ScanWeigh(BaseModel):
     total: bool = False
 
 
+class ScanReport(BaseModel):
+    batch_id: str
+    operator_id: str | None = None
+
+
+class BookProduction(BaseModel):
+    batch_id: str
+    packs: int
+    operator_id: str | None = None
+
+
 def _runner() -> BatchRunner:
     runner = STATE.get("runner")
     if runner is None:
@@ -295,6 +306,34 @@ def scan_weigh(body: ScanWeigh):
                       qty_kg=body.qty_kg, lot_no=body.lot_no,
                       source_equipment=body.source_equipment,
                       operator_id=body.operator_id, total=body.total)
+
+
+@app.post(f"{API}/scan/report")
+def scan_report(body: ScanReport):
+    return _scan_call(_scan().scan_report, body.batch_id, body.operator_id)
+
+
+@app.post(f"{API}/production")
+def book_production(body: BookProduction):
+    return _scan_call(_scan().book_production, body.batch_id, body.packs,
+                      body.operator_id)
+
+
+@app.post(f"{API}/samples/{{sample_id}}/reprint-label")
+def reprint_sample_label(sample_id: str):
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    row = db.dw_samples.find_one({"sample_id": sample_id})
+    if row is None:
+        raise HTTPException(404, f"sample {sample_id} not found")
+    db.dw_samples.update_one({"sample_id": sample_id},
+                             {"$set": {"label_printed": True}})
+    db.dw_batch_events.insert_one({
+        "batch_id": row["batch_id"], "event_type": "sample_label_printed",
+        "payload": {"sample_id": sample_id, "reprint": True},
+        "ts": row["ts"]})
+    return {"ok": True, "sample_id": sample_id}
 
 
 @app.get(f"{API}/samples")
