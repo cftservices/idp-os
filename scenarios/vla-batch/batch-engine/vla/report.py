@@ -245,7 +245,7 @@ def _reportlab_pdf(report: dict) -> bytes:
         story.append(Paragraph("No alarms during batch.", styles["Normal"]))
 
     # Handling units (PR-35)
-    story.append(Paragraph(f"Handling units (PR-35) ({len(report['handling_units'])})", h2))
+    story.append(Paragraph(f"Handling units ({len(report['handling_units'])})", h2))
     if report["handling_units"]:
         hrows = [["HU (SSCC-placeholder)", "Packs", "Location", "Status"]]
         for h in report["handling_units"]:
