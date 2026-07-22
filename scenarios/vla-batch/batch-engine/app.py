@@ -31,6 +31,9 @@ from vla.equipment import EQUIPMENT_IDS, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
 from vla.orders import OrderManager
+from vla.period_reports import (assemble_equipment_report,
+                                assemble_period_report, render_equipment_pdf,
+                                render_period_pdf)
 from vla.report import render_json, render_pdf
 from vla.scan import ScanFlow, ScanRejected
 
@@ -446,6 +449,47 @@ def ack_alarm(alarm_id: str, body: AckRequest):
         code = 404 if "unknown" in str(e) else 409
         raise HTTPException(code, str(e))
     return alarm
+
+
+@app.get(f"{API}/report/period")
+def get_period_report(days: int = Query(default=7), format: str = Query(default="json")):
+    """PR-22: plant-wide management report over the last `days` days.
+    NOTE: this literal route MUST stay ahead of GET /report/{batch_id}
+    below, otherwise FastAPI matches "period" as a batch_id path param."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    rep = assemble_period_report(db, days)
+    if format == "pdf":
+        pdf = render_period_pdf(rep)
+        media = "application/pdf" if pdf[:4] == b"%PDF" else "text/plain"
+        return Response(content=pdf, media_type=media, headers={
+            "Content-Disposition": 'inline; filename="period-report.pdf"',
+        })
+    return JSONResponse(rep)
+
+
+@app.get(f"{API}/report/equipment/{{equipment_id}}")
+def get_equipment_report(equipment_id: str, days: int = Query(default=30),
+                         format: str = Query(default="json")):
+    """PR-33: per-equipment maintenance report over the last `days` days.
+    NOTE: this literal-prefix route MUST stay ahead of GET /report/{batch_id}
+    below, otherwise FastAPI matches "equipment" as a batch_id path param."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    try:
+        rep = assemble_equipment_report(db, equipment_id, days)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    if format == "pdf":
+        pdf = render_equipment_pdf(rep)
+        media = "application/pdf" if pdf[:4] == b"%PDF" else "text/plain"
+        return Response(content=pdf, media_type=media, headers={
+            "Content-Disposition":
+                f'inline; filename="equipment-report-{equipment_id}.pdf"',
+        })
+    return JSONResponse(rep)
 
 
 @app.get(f"{API}/report/{{batch_id}}")
