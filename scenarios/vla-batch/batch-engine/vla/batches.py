@@ -74,6 +74,12 @@ class BatchRunner:
         if planned_L <= 0:
             raise ValueError("planned_L must be > 0")
 
+        # Release-gate: check recipe status is "released"
+        rec_doc = self.db.dw_recipes.find_one({"recipe_id": recipe_id})
+        status = (rec_doc or {}).get("status", recipe.status)
+        if status != "released":
+            raise ValueError(f"recipe {recipe_id!r} is not released (status={status})")
+
         batch_id = f"B-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         scaled = recipe.scaled_doses(planned_L)
 
@@ -110,8 +116,15 @@ class BatchRunner:
                 "qty_actual": None,
                 "tol_min": d.tol_min,
                 "tol_max": d.tol_max,
+                "tol_pos_pct": d.tol_pos_pct,
+                "tol_neg_pct": d.tol_neg_pct,
                 "uom": d.uom,
                 "in_tolerance": None,
+                "source_equipment": None,
+                "lot_no": None,
+                "operator_id": None,
+                "staged": [],
+                "qty_prepared": 0.0,
             })
 
         self._event(batch_id, "batch_created",
@@ -361,6 +374,9 @@ class BatchRunner:
         doses = self.db.dw_doses.find({"batch_id": batch_id})
         actuals = (telemetry or {}).get("dose_actuals", {})
         for line in doses:
+            # Skip already-booked lines (scan-flow commits set qty_actual earlier)
+            if line.get("qty_actual") is not None:
+                continue
             target = float(line["qty_target"])
             if line["material_id"] in actuals:
                 actual = float(actuals[line["material_id"]])
@@ -383,6 +399,7 @@ class BatchRunner:
             self.db.dw_doses.update_one(
                 {"batch_id": batch_id, "material_id": line["material_id"]},
                 {"$set": {"qty_actual": actual, "in_tolerance": in_tol,
+                          "source_equipment": line.get("source_equipment") or "dosing-unit",
                           "ts": _iso()}},
             )
             self._event(batch_id, "dose_booked", {
@@ -575,7 +592,10 @@ class BatchRunner:
                        "tol_min": d.get("tol_min"),
                        "tol_max": d.get("tol_max"),
                        "in_tolerance": d.get("in_tolerance"),
-                       "uom": d.get("uom", "kg")} for d in doses],
+                       "uom": d.get("uom", "kg"),
+                       "lot_no": d.get("lot_no"),
+                       "source_equipment": d.get("source_equipment"),
+                       "operator_id": d.get("operator_id")} for d in doses],
             "samples": samples,
             "alarms": alarms,
         }

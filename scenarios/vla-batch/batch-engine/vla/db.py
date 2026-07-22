@@ -181,9 +181,17 @@ def seed_recipes(db: Database) -> None:
                 "spec_min_cP": r.spec_min_cP,
                 "spec_max_cP": r.spec_max_cP,
                 "agitator_rpm": r.agitator_rpm,
+                "status": r.status,
             })
     if db.dw_materials.count_documents({}) == 0:
         for mid, m in M.MATERIALS.items():
             db.dw_materials.insert_one({
                 "material_id": m.material_id, "name": m.name, "uom": m.uom,
+                "category": m.category,
+                "tolerance_pos_pct": m.tolerance_pos_pct,
+                "tolerance_neg_pct": m.tolerance_neg_pct,
+                "density_kg_L": m.density_kg_L,
+                "whole_bag": m.whole_bag, "bag_size_kg": m.bag_size_kg,
+                "shelf_life_days": m.shelf_life_days,
+                "stock_qty": m.stock_qty, "reorder_level": m.reorder_level,
             })

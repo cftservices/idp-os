@@ -63,27 +63,41 @@ DOSE_MATERIALS = ["milk", "sugar", "starch", "cocoa"]
 
 @dataclass
 class Material:
+    """Material-master row (06-Model B.1, MES practice pattern 1)."""
     material_id: str
     name: str
     uom: str = "kg"
+    category: str = "DryPowder"          # LiquidBase | DryPowder | FinishedGood
+    tolerance_pos_pct: float = 2.0       # percent, per material
+    tolerance_neg_pct: float = 2.0
+    density_kg_L: Optional[float] = None # liquids only (kg<->L)
+    whole_bag: bool = False              # bagged goods: book n x bag_size_kg
+    bag_size_kg: Optional[float] = None
+    shelf_life_days: Optional[int] = None
+    stock_qty: float = 0.0               # PR-27 inventory
+    reorder_level: float = 0.0
 
 
 @dataclass
 class Dose:
-    """One recipe dose (material + target qty) and its booked actual."""
+    """One recipe dose (target) and its booked actual, tolerances from the master."""
     material_id: str
     qty_target: float
     qty_actual: Optional[float] = None
-    tol_pct: float = 0.02  # +/- 2% tolerance band
+    tol_pos_pct: float = 2.0
+    tol_neg_pct: float = 2.0
     uom: str = "kg"
+    source_equipment: Optional[str] = None
+    lot_no: Optional[str] = None
+    operator_id: Optional[str] = None
 
     @property
     def tol_min(self) -> float:
-        return round(self.qty_target * (1.0 - self.tol_pct), 4)
+        return round(self.qty_target * (1.0 - self.tol_neg_pct / 100.0), 4)
 
     @property
     def tol_max(self) -> float:
-        return round(self.qty_target * (1.0 + self.tol_pct), 4)
+        return round(self.qty_target * (1.0 + self.tol_pos_pct / 100.0), 4)
 
     def in_tolerance(self) -> bool:
         if self.qty_actual is None:
@@ -116,16 +130,19 @@ class Recipe:
     spec_min_cP: float = SPEC_MIN_CP
     spec_max_cP: float = SPEC_MAX_CP
     agitator_rpm: float = 60.0
+    status: str = "released"  # draft|approved|released (pattern 2)
 
     def scaled_doses(self, planned_L: float) -> list[Dose]:
         """Scale the recipe doses to planned_L (linear to basis_L)."""
         scale = float(planned_L) / float(self.basis_L) if self.basis_L else 1.0
         out: list[Dose] = []
         for d in self.doses:
+            mat = MATERIALS.get(d.material_id)
             out.append(Dose(
                 material_id=d.material_id,
                 qty_target=round(d.qty_target * scale, 4),
-                tol_pct=d.tol_pct,
+                tol_pos_pct=mat.tolerance_pos_pct if mat else 2.0,
+                tol_neg_pct=mat.tolerance_neg_pct if mat else 2.0,
                 uom=d.uom,
             ))
         return out
@@ -159,6 +176,29 @@ class Batch:
 
 # --------------------------------------------------------------- recipe seed
 
+FINISHED_GOOD_ID = "vla-1L"
+
+MATERIALS = {
+    "milk":   Material("milk", "Milk", "kg", category="LiquidBase",
+                       tolerance_pos_pct=1.0, tolerance_neg_pct=1.0,
+                       density_kg_L=1.03, stock_qty=20000.0, reorder_level=6000.0),
+    "sugar":  Material("sugar", "Sugar", "kg", category="DryPowder",
+                       tolerance_pos_pct=0.5, tolerance_neg_pct=0.5,
+                       shelf_life_days=365, stock_qty=2000.0, reorder_level=600.0),
+    "starch": Material("starch", "Modified Starch", "kg", category="DryPowder",
+                       tolerance_pos_pct=0.5, tolerance_neg_pct=0.5,
+                       whole_bag=True, bag_size_kg=25.0,
+                       shelf_life_days=365, stock_qty=1000.0, reorder_level=300.0),
+    "cocoa":  Material("cocoa", "Cocoa", "kg", category="DryPowder",
+                       tolerance_pos_pct=1.0, tolerance_neg_pct=1.0,
+                       shelf_life_days=540, stock_qty=400.0, reorder_level=120.0),
+    FINISHED_GOOD_ID: Material(FINISHED_GOOD_ID, "Chocolate Vla 1L", "pack",
+                               category="FinishedGood", shelf_life_days=21,
+                               stock_qty=0.0, reorder_level=0.0),
+}
+
+SAMPLE_TYPES = ["dose_check", "cook_temp", "hold", "viscosity"]  # 06-Model B.1
+
 RECIPE_CHOCOLATE_VLA_1L = Recipe(
     recipe_id="chocolate-vla-1L",
     product_name="Chocolate Vla (1L)",
@@ -176,13 +216,6 @@ RECIPE_CHOCOLATE_VLA_1L = Recipe(
     spec_max_cP=SPEC_MAX_CP,
     agitator_rpm=60.0,
 )
-
-MATERIALS = {
-    "milk": Material("milk", "Milk", "kg"),
-    "sugar": Material("sugar", "Sugar", "kg"),
-    "starch": Material("starch", "Starch", "kg"),
-    "cocoa": Material("cocoa", "Cocoa", "kg"),
-}
 
 RECIPES: dict[str, Recipe] = {
     RECIPE_CHOCOLATE_VLA_1L.recipe_id: RECIPE_CHOCOLATE_VLA_1L,
