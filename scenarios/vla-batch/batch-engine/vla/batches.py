@@ -30,7 +30,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from . import model as M
+from . import inventory, model as M
 
 log = logging.getLogger("vla.batches")
 
@@ -211,6 +211,8 @@ class BatchRunner:
         self._event(batch_id, "production_booked",
                     {"packs": int(packs), "source": source,
                      "packs_total": total})
+        inventory.produce(self.db, self._event, M.FINISHED_GOOD_ID,
+                          int(packs), batch_id)
         return row
 
     def _feed_equipment_state(self, batch_state: str) -> None:
@@ -479,6 +481,7 @@ class BatchRunner:
                 "material_id": line["material_id"], "qty_actual": actual,
                 "in_tolerance": in_tol,
             })
+            inventory.consume(self.db, self._event, line["material_id"], actual, batch_id)
             if not in_tol:
                 self._alarm(batch_id, "process-tank-01", "dose_out_of_tolerance",
                             M.MEDIUM,

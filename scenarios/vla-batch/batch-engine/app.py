@@ -136,6 +136,14 @@ def live_tags():
     return bus.snapshot()
 
 
+@app.get(f"{API}/materials")
+def list_materials():
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    return db.dw_materials.find({})
+
+
 @app.get(f"{API}/batches")
 def list_batches():
     return _runner().list_batches()
