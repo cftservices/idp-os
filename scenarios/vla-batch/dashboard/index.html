@@ -79,6 +79,8 @@
   <nav>
     <button data-tab="sales" class="active">Sales overview</button>
     <button data-tab="batches">Batches</button>
+    <button data-tab="orders">Orders</button>
+    <button data-tab="operator">Operator</button>
     <button data-tab="admin">SCADA / Admin</button>
   </nav>
 </header>
@@ -151,6 +153,54 @@
     </div>
   </section>
 
+  <!-- ORDERS (PR-24) -->
+  <section id="tab-orders" class="hidden">
+    <h2>New production order</h2>
+    <div class="row">
+      <label>Recipe<select id="ordRecipe"><option value="chocolate-vla-1L">chocolate-vla-1L</option></select></label>
+      <label>Target (L)<input id="ordQty" type="number" value="5000" min="500" step="500" style="width:120px"></label>
+      <label>Due date<input id="ordDue" type="date"></label>
+      <button class="act" onclick="createOrder()">Create order</button>
+    </div>
+    <h2>Orders</h2>
+    <table><thead><tr><th>Order</th><th>Recipe</th><th>Target (L)</th><th>Batched (L)</th><th>Produced (packs)</th><th>Status</th><th></th></tr></thead>
+      <tbody id="ordersRows"></tbody></table>
+    <p id="ordersMsg" class="sub"></p>
+  </section>
+
+  <!-- OPERATOR — SCAN & WEIGH (PR-34) -->
+  <section id="tab-operator" class="hidden">
+    <div class="row">
+      <label>Operator ID<input id="opId" value="OP-7" style="width:90px"></label>
+      <label>Scan order / batch<input id="scanCode" placeholder="PO-… of B-…" style="width:220px"></label>
+      <button class="act" onclick="scanOrder()">Scan</button>
+      <span id="scanGate" class="pill bad">no order scanned</span>
+    </div>
+    <div id="opPanel" class="hidden">
+      <h2>Weigh &amp; stage (per material)</h2>
+      <div class="grid" id="weighCards" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="act" onclick="scanReport()">📄 Scan weigh report → book consumption</button>
+      </div>
+      <h2>Yield booking (manual)</h2>
+      <div class="row">
+        <label>Packs<input id="prodPacks" type="number" value="100" min="1" style="width:100px"></label>
+        <button class="gh" onclick="bookProduction()">Book production</button>
+      </div>
+      <h2>Sample</h2>
+      <div class="row">
+        <label>Type<select id="sampleType">
+          <option value="dose_check">dose_check</option>
+          <option value="cook_temp">cook_temp</option>
+          <option value="hold">hold</option>
+          <option value="viscosity">viscosity</option>
+        </select></label>
+        <button class="gh" onclick="takeScanSample()">Take sample + print label</button>
+      </div>
+      <p id="opMsg" class="sub"></p>
+    </div>
+  </section>
+
   <!-- SCADA / ADMIN -->
   <section id="tab-admin" class="hidden">
     <h2>New batch</h2>
@@ -201,7 +251,15 @@
 <script>
 const API = window.VLA_API || "/api/v1";
 const $ = s => document.querySelector(s);
-async function j(path, opts){ const r = await fetch(API+path, opts); if(!r.ok) throw new Error(r.status+" "+path); return r.json(); }
+async function j(path, opts){
+  const r = await fetch(API+path, opts);
+  if(!r.ok){
+    let msg = r.status+" "+path;
+    try{ const body = await r.json(); if(body && body.detail && body.detail.message) msg = body.detail.message; }catch(_){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
 async function post(path, body){
   return j(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
@@ -212,7 +270,7 @@ function fmt(v,u='',d=1){ const n=num(v); return n===null?'—':(d===0?Math.roun
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
-  ['sales','batches','admin'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
+  ['sales','batches','orders','operator','admin'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
 });
 
 // ── UNS tag helpers (contract §ISA-95 tags) ─────────────────────────────────
@@ -381,11 +439,115 @@ async function clearFault(){
 }
 function msg(o){ $('#adminMsg').textContent = JSON.stringify(o); }
 
+// ---- Orders tab (PR-24) ----
+async function createOrder(){
+  try{
+    await post('/orders', {recipe_id: $('#ordRecipe').value,
+      target_qty_L: parseFloat($('#ordQty').value),
+      due_date: $('#ordDue').value || null});
+    await refreshOrders();
+    $('#ordersMsg').textContent = 'order created';
+  }catch(e){ $('#ordersMsg').textContent = 'create failed: '+e.message; }
+}
+async function refreshOrders(){
+  try{
+    const rows = await j('/orders');
+    $('#ordersRows').innerHTML = rows.map(o => `<tr>
+      <td>${o.order_id}</td><td>${o.recipe_id}</td>
+      <td>${o.target_qty_L}</td><td>${o.progress.batched_L}</td>
+      <td>${o.progress.produced_packs}</td>
+      <td><span class="badge" style="background:${
+        o.status==='DONE' ? '#0b4f2a' : o.status==='RUNNING' ? '#1a7f37' : '#57606a'
+      };color:#fff">${o.status}</span></td>
+      <td>${o.status!=='DONE'
+        ? `<button class="gh" onclick="orderBatch('${o.order_id}')">+ batch</button>
+           <button class="gh" onclick="closeOrder('${o.order_id}')">close</button>` : ''}</td>
+    </tr>`).join('');
+  }catch(e){ /* engine offline */ }
+}
+async function orderBatch(oid){
+  try{ await post(`/orders/${oid}/batches`, {operator_id: $('#opId').value});
+       await refreshOrders(); $('#ordersMsg').textContent='batch created on '+oid; }
+  catch(e){ $('#ordersMsg').textContent='batch failed: '+e.message; }
+}
+async function closeOrder(oid){
+  try{ await post(`/orders/${oid}/close`, {}); await refreshOrders(); }
+  catch(e){ $('#ordersMsg').textContent='close refused: '+e.message; }
+}
+
+// ---- Operator scan tab (PR-34) ----
+let opBatch = null;
+async function scanOrder(){
+  try{
+    const r = await post('/scan/order', {code: $('#scanCode').value.trim(),
+                                         operator_id: $('#opId').value});
+    opBatch = r.batch ? r.batch.batch_id
+            : (r.order ? (await j('/orders/'+r.order.order_id)).progress.batch_ids.at(-1) : null);
+    $('#scanGate').textContent = 'gate OK — batch '+(opBatch||'—');
+    $('#scanGate').className = 'pill ok';
+    $('#opPanel').classList.remove('hidden');
+    await refreshWeigh();
+  }catch(e){
+    $('#scanGate').textContent = 'REJECTED: '+e.message;
+    $('#scanGate').className = 'pill bad';
+    $('#opPanel').classList.add('hidden');
+  }
+}
+async function refreshWeigh(){
+  if(!opBatch) return;
+  const b = await j('/batches/'+opBatch);
+  $('#weighCards').innerHTML = b.doses.map(d => {
+    const booked = d.qty_actual ?? 0;
+    const done = d.qty_actual != null;
+    return `<div class="card" style="${done?'border-color:#0b4f2a':''}">
+      <h3>${d.material_id} ${done?'✔':''}</h3>
+      <div class="sub">target ${d.qty_target} kg · band ${d.tol_min}–${d.tol_max}</div>
+      <div class="sub">booked <b>${booked}</b> · rest <b>${done?0:(d.qty_target-booked).toFixed(1)}</b></div>
+      ${done?'' : `<div class="row">
+        <input id="lot-${d.material_id}" placeholder="lot" style="width:80px">
+        <input id="qty-${d.material_id}" type="number" placeholder="kg" style="width:80px">
+        <button class="gh" onclick="weigh('${d.material_id}',false)">Boek</button>
+        <button class="gh" onclick="weigh('${d.material_id}',true)">Totaal</button>
+      </div>`}
+    </div>`; }).join('');
+}
+async function weigh(mid, total){
+  try{
+    const lot = $('#lot-'+mid).value || 'L-0000';
+    await post('/scan/label', {batch_id: opBatch, material_id: mid,
+                               lot_no: lot, operator_id: $('#opId').value});
+    await post('/scan/weigh', {batch_id: opBatch, material_id: mid,
+      qty_kg: total ? null : parseFloat($('#qty-'+mid).value),
+      lot_no: lot, operator_id: $('#opId').value, total});
+    $('#opMsg').textContent = 'staged '+mid;
+  }catch(e){ $('#opMsg').textContent = 'weigh rejected: '+e.message; }
+}
+async function scanReport(){
+  try{ const r = await post('/scan/report', {batch_id: opBatch,
+                                             operator_id: $('#opId').value});
+       $('#opMsg').textContent = 'consumption booked: '+r.booked_materials.join(', ');
+       await refreshWeigh(); }
+  catch(e){ $('#opMsg').textContent = 'report scan rejected: '+e.message; }
+}
+async function bookProduction(){
+  try{ await post('/production', {batch_id: opBatch,
+        packs: parseInt($('#prodPacks').value), operator_id: $('#opId').value});
+       $('#opMsg').textContent = 'production booked'; }
+  catch(e){ $('#opMsg').textContent = 'production rejected: '+e.message; }
+}
+async function takeScanSample(){
+  try{ const s = await post('/samples', {batch_id: opBatch,
+        sample_type: $('#sampleType').value, operator_id: $('#opId').value});
+       $('#opMsg').textContent = 'sample '+s.sample_id+' — label printed'; }
+  catch(e){ $('#opMsg').textContent = 'sample rejected: '+e.message; }
+}
+
 // ── boot + poll (~1-2s) ─────────────────────────────────────────────────────
 renderStepper('IDLE');
-refreshSales(); refreshBatches();
+refreshSales(); refreshBatches(); refreshOrders();
 setInterval(refreshSales, 1500);
 setInterval(refreshBatches, 2500);
+setInterval(refreshOrders, 2500);
 </script>
 </body>
 </html>
