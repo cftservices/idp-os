@@ -41,6 +41,17 @@ BATCH_STATES = [IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE]
 # Alarm severities
 CRITICAL, HIGH, MEDIUM, LOW = "Critical", "High", "Medium", "Low"
 
+# Order lifecycle (PR-24)
+ORDER_OPEN, ORDER_RUNNING, ORDER_DONE = "OPEN", "RUNNING", "DONE"
+
+# ISA-88 operations context layer (PR-23) — derived from the batch FSM.
+OPERATION_OF_STATE = {
+    DOSING: "Preparation",
+    COOKING: "Processing",
+    COOLING: "Processing",
+    FILLING: "Packaging",
+}
+
 
 # ------------------------------------------------------------------ ISA-95 map
 # Area -> Equipment for topic building (§ISA-95 model + equipment + tags).

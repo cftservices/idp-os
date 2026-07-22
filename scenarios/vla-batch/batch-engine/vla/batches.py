@@ -67,16 +67,18 @@ class BatchRunner:
     """Creates and runs Vla batches against the recipe seed + factory model."""
 
     def __init__(self, db, bus=None, control=None,
-                 rng: Optional[random.Random] = None):
+                 rng: Optional[random.Random] = None, orders=None):
         self.db = db
         self.bus = bus            # MQTT: telemetry READ + secondary Command fallback
         self.control = control    # OPC-UA: PRIMARY control (write/command) path
         self.rng = rng or random.Random()
+        self.orders = orders      # OrderManager: PR-24 production orders (optional)
 
     # ------------------------------------------------------------------ create
 
     def create_batch(self, recipe_id: str, planned_L: Optional[float] = None,
-                     auto_start: bool = False) -> dict:
+                     auto_start: bool = False, order_id: Optional[str] = None,
+                     operator_id: Optional[str] = None) -> dict:
         recipe = M.get_recipe(recipe_id)
         if recipe is None:
             raise ValueError(f"unknown recipe_id {recipe_id!r}")
@@ -90,6 +92,21 @@ class BatchRunner:
         if status != "released":
             raise ValueError(f"recipe {recipe_id!r} is not released (status={status})")
 
+        # Production order (PR-24): explicit order_id must exist and be open;
+        # without one, an implicit order is created when a manager is wired.
+        if order_id is not None:
+            if self.orders is None:
+                raise ValueError("order support not wired")
+            order = self.orders.get_order(order_id)
+            if order is None:
+                raise ValueError(f"unknown order {order_id!r}")
+            if order["status"] == M.ORDER_DONE:
+                raise ValueError(f"order {order_id} is DONE — no new batches")
+        elif self.orders is not None:
+            order = self.orders.create_order(recipe_id,
+                                             float(planned_L or recipe.basis_L))
+            order_id = order["order_id"]
+
         batch_id = f"B-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         scaled = recipe.scaled_doses(planned_L)
 
@@ -98,6 +115,8 @@ class BatchRunner:
             "recipe_id": recipe_id,
             "product_name": recipe.product_name,
             "planned_L": planned_L,
+            "order_id": order_id,
+            "created_by": operator_id,
             "state": M.IDLE,
             "verdict": None,
             "peak_cook_temp_C": None,
@@ -244,6 +263,8 @@ class BatchRunner:
         self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started)})
         self._event(batch_id, "batch_started",
                     {"mode": "live" if live else "instant"})
+        if self.orders is not None and batch.get("order_id"):
+            self.orders.mark_running(batch["order_id"])
 
         # PRIMARY: OPC-UA StartBatch on the factory. Secondary: MQTT Command.
         if self.control is not None:
@@ -690,6 +711,10 @@ class BatchRunner:
         # mirror line-level Batch/Status to UNS
         if self.bus is not None and "state" in fields:
             self.bus.command("Batch", "state", value=fields["state"])
+            op = M.OPERATION_OF_STATE.get(fields["state"])
+            if op:
+                self.bus.publish_json("Batch/Status/operation",
+                                      {"value": op, "ts": _iso()})
         # feed equipment state history on batch state change
         if "state" in fields:
             self._feed_equipment_state(fields["state"])

@@ -27,6 +27,7 @@ from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
 from vla.opcua_control import OpcuaControl
+from vla.orders import OrderManager
 from vla.report import render_json, render_pdf
 
 logging.basicConfig(
@@ -44,7 +45,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-STATE: dict = {"db": None, "bus": None, "control": None, "runner": None}
+STATE: dict = {"db": None, "bus": None, "control": None, "orders": None, "runner": None}
 API = "/api/v1"
 
 
@@ -66,11 +67,29 @@ class AdminCommand(BaseModel):
     params: dict | None = None
 
 
+class CreateOrder(BaseModel):
+    recipe_id: str
+    target_qty_L: float
+    due_date: str | None = None
+
+
+class CreateOrderBatch(BaseModel):
+    planned_L: float | None = None
+    operator_id: str | None = None
+
+
 def _runner() -> BatchRunner:
     runner = STATE.get("runner")
     if runner is None:
         raise HTTPException(503, "engine not initialized")
     return runner
+
+
+def _orders() -> "OrderManager":
+    om = STATE.get("orders")
+    if om is None:
+        raise HTTPException(503, "engine not initialized")
+    return om
 
 
 @app.on_event("startup")
@@ -87,8 +106,9 @@ def _startup() -> None:
     # PRIMARY control path: direct OPC-UA to the factory (offline-safe no-op).
     control = OpcuaControl()
     seed_recipes(db)
-    STATE.update({"db": db, "bus": bus, "control": control,
-                  "runner": BatchRunner(db, bus, control=control)})
+    orders = OrderManager(db, bus)
+    STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
+                  "runner": BatchRunner(db, bus, control=control, orders=orders)})
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
@@ -130,6 +150,7 @@ def create_batch(body: CreateBatch):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"batch_id": batch["batch_id"], "state": batch["state"],
+            "order_id": batch.get("order_id"),
             "dose_setpoints": {d["material_id"]: d["qty_target"]
                                for d in batch["doses"]}}
 
@@ -156,6 +177,55 @@ def start_batch(batch_id: str):
         raise HTTPException(404, f"batch {batch_id} not found")
     batch = runner.start_batch(batch_id)
     return {"batch_id": batch_id, "state": batch["state"]}
+
+
+@app.post(f"{API}/orders")
+def create_order(body: CreateOrder):
+    try:
+        return _orders().create_order(body.recipe_id, body.target_qty_L, body.due_date)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get(f"{API}/orders")
+def list_orders():
+    return _orders().list_orders()
+
+
+@app.get(f"{API}/orders/{{order_id}}")
+def get_order(order_id: str):
+    order = _orders().get_order(order_id)
+    if order is None:
+        raise HTTPException(404, f"order {order_id} not found")
+    return {**order, "progress": _orders().order_progress(order_id)}
+
+
+@app.post(f"{API}/orders/{{order_id}}/batches")
+def create_order_batch(order_id: str, body: CreateOrderBatch):
+    runner = _runner()
+    order = _orders().get_order(order_id)
+    if order is None:
+        raise HTTPException(404, f"order {order_id} not found")
+    auto = os.environ.get("AUTO_START", "1") not in ("0", "false", "False")
+    try:
+        batch = runner.create_batch(order["recipe_id"], body.planned_L,
+                                    auto_start=auto, order_id=order_id,
+                                    operator_id=body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"batch_id": batch["batch_id"], "state": batch["state"],
+            "order_id": order_id,
+            "dose_setpoints": {d["material_id"]: d["qty_target"]
+                               for d in batch["doses"]}}
+
+
+@app.post(f"{API}/orders/{{order_id}}/close")
+def close_order(order_id: str):
+    try:
+        return _orders().close_order(order_id)
+    except ValueError as e:
+        code = 404 if "unknown order" in str(e) else 409
+        raise HTTPException(code, str(e))
 
 
 @app.get(f"{API}/samples")

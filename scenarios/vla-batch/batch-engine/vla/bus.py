@@ -150,6 +150,18 @@ class VlaBus:
         log.debug("CMD %s %s=%s (sent=%s)", equipment, cmd, payload, ok)
         return ok
 
+    def publish_json(self, topic_rel: str, payload: dict) -> bool:
+        """Publish a JSON payload on {uns_root}/{topic_rel} (no-op offline)."""
+        if self.client is None or not self.connected:
+            return False
+        topic = f"{self.uns_root}/{topic_rel}"
+        try:
+            self.client.publish(topic, json.dumps(payload), qos=0, retain=True)
+            return True
+        except Exception as e:  # pragma: no cover
+            log.warning("publish_json %s failed: %s", topic, e)
+            return False
+
     def start_batch(self, recipe_id: str) -> bool:
         """Line-level StartBatch(recipeId)."""
         return self.command("Batch", "StartBatch", extra={"recipeId": recipe_id})
