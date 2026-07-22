@@ -1,3 +1,4 @@
+import os
 from fastapi.testclient import TestClient
 
 import app as appmod
@@ -34,3 +35,23 @@ def test_admin_command_new_contract():
         r3 = c.post("/api/v1/admin/command", json={
             "equipment_id": "Batch", "cmd": "unknown-cmd"})
         assert r3.status_code == 400
+
+
+def test_stop_refused_when_active_batch_has_no_production():
+    with client() as c:
+        # AUTO_START=0 so the batch stays bookless and we can control its state
+        original_auto_start = os.environ.get("AUTO_START", "1")
+        os.environ["AUTO_START"] = "0"
+        try:
+            r = c.post("/api/v1/batches",
+                       json={"recipe_id": "chocolate-vla-1L", "planned_L": 5000})
+            bid = r.json()["batch_id"]
+            # force the batch into an active state without booking production
+            appmod.STATE["runner"].db.dw_batches.update_one(
+                {"batch_id": bid}, {"$set": {"state": "COOKING"}})
+            r2 = c.post("/api/v1/admin/command",
+                        json={"equipment_id": "Batch", "cmd": "stop"})
+            assert r2.status_code == 409
+            assert "no production booked" in r2.json()["detail"]
+        finally:
+            os.environ["AUTO_START"] = original_auto_start
