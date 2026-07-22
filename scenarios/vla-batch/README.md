@@ -29,15 +29,15 @@
   └───────┬───────┘                                                            ▼
           │ OPC-UA methods (StartBatch/Stop/SetSetpoint/…)   ┌──────────────────────────────────────┐
           │  ◀── control-pad ───────────────────────────────│ monstermq:1883  (DATA LAYER / UNS bus)│
-          └─────────────────────────────────────────────────│ archive group vla_data (DairyWorks/Vla/#)
+          └─────────────────────────────────────────────────│ archive group dw_uns_archive (DairyWorks/Vla/#)
                                                     ┌────────└───┬───────────────────┬───────────────┘
                        archive → Mongo              │            │                   │
-                       (idp.vla_data)               ▼            ▼                   ▼
+                       (idp.dw_uns_archive)         ▼            ▼                   ▼
                                     ┌──────────────┐   ┌──────────────────┐   ┌───────────────────┐
                                     │    mongo     │   │ vla-tdengine-    │   │  vla-batch-engine │
                                     │ (store)      │   │ bridge (reuse    │   │  FastAPI MES-laag │
                                     │              │   │ tdengine-poc)    │   │  REST /api/v1 +   │
-                                    │ idp.vla_*    │   │  ILP write       │   │  batch report     │
+                                    │ idp.dw_*     │   │  ILP write       │   │  batch report     │
                                     │ domein-      │   │      │           │   │  (Mongo domein-   │
                                     │ collections  │◀──┼──────┼───────────┼──▶│   collections)    │
                                     └──────────────┘   │      ▼           │   └─────────┬─────────┘
@@ -165,7 +165,7 @@ curl -s -X POST http://vla-batch-engine:8000/api/v1/batches \
 | `factory-model/isa95-vla.json` | ISA-95/88 single source of truth — areas, equipment, exact tags, recipe `chocolate-vla-1L`, sample types, methods, UNS convention |
 | `monstermq-init/init-vla-opcua.sh` | one-shot GraphQL `addOpcUaDevice` — registers the factory as MonsterMQ's native OPC-UA ingest (24 Status tags), enables `writeConfig` |
 | `docker-compose.vla.yml` | scenario overlay on `idp-network`; wires the vla services + `vla-opcua-init` + fallback `vla-connector` + grafana override |
-| `../../monstermq/config.yaml` (patch) | added archive group `vla_data` → `DairyWorks/Vla/#`, 30-day retention |
+| `../../monstermq/config.yaml` (patch) | added archive group `dw_uns_archive` → `DairyWorks/Vla/#`, 30-day retention |
 | `.env.example` | DOMAIN, DASHBOARD_AUTH, MONGO_*, TD_* with inline docs |
 | `README.md` | this file |
 

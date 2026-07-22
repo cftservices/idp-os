@@ -44,8 +44,8 @@ Archive:
     # Vla Batch v2 demo — generic anonymized batch-dairy line 'Vla'.
     # vla-factory (OPC-UA) -> vla-connector -> MonsterMQ publishes
     # DairyWorks/Vla/{Area}/{Equipment}/Status/* + Batch state on the same tree;
-    # archived to Mongo collection vla_data and bridged to TDengine.
-    - Name: vla_data
+    # archived to Mongo collection dw_uns_archive and bridged to TDengine.
+    - Name: dw_uns_archive
       Topics:
         - "DairyWorks/Vla/#"
       Enabled: true

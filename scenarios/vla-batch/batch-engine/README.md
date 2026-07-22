@@ -37,8 +37,8 @@ De batch-engine:
 | GET  | `/report/{id}?format=pdf\|json` | BIRT-stijl rapport |
 | POST | `/admin/command` | body `{target:"batch"\|equipment, command, value?}` → MQTT Command |
 
-Domein-collections (Mongo `idp`): `vla_batches, vla_recipes, vla_materials,
-vla_doses, vla_production, vla_samples, vla_events, vla_alarms`.
+Domein-collections (Mongo `idp`): `dw_batches, dw_recipes, dw_materials,
+dw_doses, dw_production, dw_samples, dw_batch_events, dw_alarms, dw_orders, dw_equipment_state`.
 
 ## Verdict-regel (§contract)
 

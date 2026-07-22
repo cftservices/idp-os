@@ -7,7 +7,7 @@
 #      v  MonsterMQ ingest de fabriek NATIVE via zijn OPC-UA-client
 #         (addOpcUaDevice, geregistreerd door de one-shot vla-opcua-init container).
 #      v
-#   monstermq (MQTT broker = data layer / UNS-bus)  --archive group vla_data--> mongo (idp.vla_data)
+#   monstermq (MQTT broker = data layer / UNS-bus)  --archive group dw_uns_archive--> mongo (idp.dw_uns_archive)
 #      |
 #      +-> vla-tdengine-bridge (reuse tdengine-poc/bridge.py) -> vla-tdengine (historian)
 #      +-> vla-batch-engine (FastAPI MES-laag, REST + report) <-> mongo (domein-collections)
