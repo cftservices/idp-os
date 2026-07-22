@@ -126,6 +126,7 @@ class BatchRunner:
             "created_by": operator_id,
             "state": M.IDLE,
             "verdict": None,
+            "verdict_ack": None,
             "peak_cook_temp_C": None,
             "hold_sec": recipe.hold_sec,
             "hold_elapsed_sec": None,
@@ -803,13 +804,48 @@ class BatchRunner:
     def _alarm(self, batch_id: str, equipment_id: str, alarm_type: str,
                severity: str, message: str, impact: bool, resolved: bool) -> None:
         self.db.dw_alarms.insert_one({
+            "alarm_id": f"A-{uuid.uuid4().hex[:8].upper()}",
             "batch_id": batch_id,
             "equipment_id": equipment_id,
             "alarm_type": alarm_type,
             "severity": severity,
             "message": message,
             "acknowledged": False,
+            "ack_by": None,
+            "ack_at": None,
             "impact_on_batch": impact,
             "resolved": resolved,
             "ts": _iso(),
         })
+
+    def ack_alarm(self, alarm_id: str, operator_id: str) -> dict:
+        """Acknowledge an alarm by alarm_id. Returns the acked alarm row."""
+        alarm = self.db.dw_alarms.find_one({"alarm_id": alarm_id})
+        if alarm is None:
+            raise ValueError(f"unknown alarm {alarm_id!r}")
+        now = _iso()
+        self.db.dw_alarms.update_one(
+            {"alarm_id": alarm_id},
+            {"$set": {"acknowledged": True, "ack_by": operator_id, "ack_at": now}})
+        self._event(alarm["batch_id"], "alarm_acknowledged",
+                    {"alarm_id": alarm_id, "operator_id": operator_id})
+        return self.db.dw_alarms.find_one({"alarm_id": alarm_id})
+
+    def ack_verdict(self, batch_id: str, operator_id: str) -> dict:
+        """Acknowledge a batch verdict (idempotent). Batch must be COMPLETE with verdict.
+        Returns the batch with verdict_ack set."""
+        batch = self._raw_batch(batch_id)
+        if batch is None:
+            raise ValueError(f"unknown batch {batch_id!r}")
+        if batch.get("state") != M.COMPLETE or batch.get("verdict") is None:
+            raise ValueError(f"batch {batch_id!r} is not COMPLETE with a verdict")
+
+        # Idempotent: if already acked, return the original ack unchanged
+        if batch.get("verdict_ack") is None:
+            now = _iso()
+            verdict_ack = {"operator_id": operator_id, "ts": now}
+            self._update(batch_id, {"verdict_ack": verdict_ack})
+            self._event(batch_id, "verdict_acknowledged",
+                        {"operator_id": operator_id})
+
+        return self.get_batch(batch_id)

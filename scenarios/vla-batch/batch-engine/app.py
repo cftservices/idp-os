@@ -109,6 +109,10 @@ class HuAction(BaseModel):
     operator_id: str | None = None
 
 
+class AckRequest(BaseModel):
+    operator_id: str | None = None
+
+
 class ScanWeigh(BaseModel):
     batch_id: str
     material_id: str
@@ -290,6 +294,18 @@ def start_batch(batch_id: str):
     return {"batch_id": batch_id, "state": batch["state"]}
 
 
+@app.post(f"{API}/batches/{{batch_id}}/ack-verdict")
+def ack_verdict(batch_id: str, body: AckRequest):
+    """Acknowledge a batch verdict (idempotent). Batch must be COMPLETE with verdict."""
+    runner = _runner()
+    try:
+        batch = runner.ack_verdict(batch_id, operator_id=body.operator_id)
+    except ValueError as e:
+        code = 404 if "unknown" in str(e) else 409
+        raise HTTPException(code, str(e))
+    return batch
+
+
 @app.post(f"{API}/orders")
 def create_order(body: CreateOrder):
     try:
@@ -400,6 +416,18 @@ def take_sample(body: TakeSample):
         return runner.take_sample(body.batch_id, body.sample_type, body.operator_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post(f"{API}/alarms/{{alarm_id}}/ack")
+def ack_alarm(alarm_id: str, body: AckRequest):
+    """Acknowledge an alarm by alarm_id."""
+    runner = _runner()
+    try:
+        alarm = runner.ack_alarm(alarm_id, operator_id=body.operator_id)
+    except ValueError as e:
+        code = 404 if "unknown" in str(e) else 409
+        raise HTTPException(code, str(e))
+    return alarm
 
 
 @app.get(f"{API}/report/{{batch_id}}")
