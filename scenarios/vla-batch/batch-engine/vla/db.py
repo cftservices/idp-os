@@ -6,7 +6,8 @@ with the same minimal API is used so demos and tests run fully offline.
 
 Domain collections (§05-Backend §3):
   dw_batches, dw_recipes, dw_materials, dw_doses, dw_production,
-  dw_samples, dw_batch_events, dw_alarms, dw_orders, dw_equipment_state
+  dw_samples, dw_batch_events, dw_alarms, dw_orders, dw_equipment_state,
+  dw_handling_units
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ COLLECTIONS = [
     "dw_alarms",
     "dw_orders",
     "dw_equipment_state",
+    "dw_handling_units",
 ]
 
 

@@ -44,6 +44,31 @@ CRITICAL, HIGH, MEDIUM, LOW = "Critical", "High", "Medium", "Low"
 # Order lifecycle (PR-24)
 ORDER_OPEN, ORDER_RUNNING, ORDER_DONE = "OPEN", "RUNNING", "DONE"
 
+# HandlingUnit (PR-35, light packaging & expedition)
+HU_WRAPPED, HU_STORED, HU_AWAITING, HU_SHIPPED = (
+    "wrapped", "stored", "awaiting_shipment", "shipped",
+)
+HU_STATUSES = [HU_WRAPPED, HU_STORED, HU_AWAITING, HU_SHIPPED]
+LOC_COLDSTORE, LOC_EXPEDITION = "koelmagazijn", "expeditie"
+
+# SSCC placeholder prefix — NEVER a real GS1 company prefix (anonymization rule).
+SSCC_PREFIX = "80"
+
+
+def sscc_check_digit(d17: str) -> int:
+    """GS1 mod-10 check digit over a 17-digit base (rightmost digit weight 3)."""
+    total = sum(int(c) * (3 if i % 2 == 0 else 1)
+                for i, c in enumerate(reversed(d17)))
+    return (10 - total % 10) % 10
+
+
+def new_hu_id() -> str:
+    """18-digit SSCC-placeholder: '80' + date + random serial + check digit."""
+    import random as _random
+    from datetime import datetime as _dt
+    base = f"{SSCC_PREFIX}{_dt.now().strftime('%y%m%d')}{_random.randint(0, 10**9 - 1):09d}"
+    return base + str(sscc_check_digit(base))
+
 # ISA-88 operations context layer (PR-23) — derived from the batch FSM.
 OPERATION_OF_STATE = {
     DOSING: "Preparation",
