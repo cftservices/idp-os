@@ -95,9 +95,11 @@ class BatchRunner:
             raise ValueError(f"recipe {recipe_id!r} is not released (status={status})")
 
         # CIP gate (PR-29): cook-unit-01 must be clean before a new batch.
+        # NOTE: PR-code intentionally omitted from the message — it is an
+        # internal traceability ref, not customer-facing text.
         if self.equipment is not None and self.equipment.is_dirty("cook-unit-01"):
-            raise ValueError("cook-unit-01 is Dirty — CIP cleaning required "
-                             "before a new batch (PR-29)")
+            raise ValueError(f"cook-unit-01 is Dirty — CIP cleaning required "
+                             f"before a new batch")
 
         # Production order (PR-24): explicit order_id must exist and be open;
         # without one, an implicit order is created when a manager is wired.

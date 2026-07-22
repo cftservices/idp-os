@@ -55,11 +55,20 @@ class EquipmentMonitor:
                 {"equipment_id": equipment_id})
         return meta
 
+    # ------------------------------------------------------------- history
+
+    def _history(self, equipment_id: str) -> list[dict]:
+        """State-history rows for `equipment_id`, sorted by ts. Mongo find()
+        ordering is not contractual, and the interval math below (running
+        hours, availability, latest-state) is order-sensitive."""
+        return sorted(
+            self.db.dw_equipment_state.find({"equipment_id": equipment_id}),
+            key=lambda r: r["ts"])
+
     # ---------------------------------------------------------- running hours
 
     def running_hours(self, equipment_id: str) -> float:
-        rows = [r for r in self.db.dw_equipment_state.find(
-            {"equipment_id": equipment_id})]
+        rows = self._history(equipment_id)
         total = 0.0
         for i, row in enumerate(rows):
             if row.get("state") != "Running":
@@ -88,7 +97,7 @@ class EquipmentMonitor:
         out = []
         for eq in EQUIPMENT_IDS:
             meta = self.ensure_meta(eq)
-            hist = self.db.dw_equipment_state.find({"equipment_id": eq})
+            hist = self._history(eq)
             latest = hist[-1]["state"] if hist else "Idle"
             if meta.get("dirty"):
                 latest = "Dirty"
@@ -191,6 +200,12 @@ class EquipmentMonitor:
         clears Dirty, resolves any open fouling alerts, writes an Idle
         history row, and fires a cip_performed event. Returns fresh meta."""
         self.ensure_meta(equipment_id)
+        hist = self._history(equipment_id)
+        latest_state = hist[-1]["state"] if hist else None
+        if latest_state in ("Running", "Allocated"):
+            raise ValueError(
+                f"{equipment_id} is in use (state {latest_state}) — "
+                f"CIP not allowed during an active batch")
         now = _iso()
         self.db.dw_equipment_meta.update_one(
             {"equipment_id": equipment_id},
@@ -233,8 +248,7 @@ class EquipmentMonitor:
         rows and accumulate the [ts_i, ts_i+1) duration into running_sec
         (state == Running) or down_sec (any other state EXCEPT Idle/Allocated,
         which are neutral and excluded from both buckets)."""
-        rows = [r for r in self.db.dw_equipment_state.find(
-            {"equipment_id": equipment_id})]
+        rows = self._history(equipment_id)
         running_sec = 0.0
         down_sec = 0.0
         for i, row in enumerate(rows):

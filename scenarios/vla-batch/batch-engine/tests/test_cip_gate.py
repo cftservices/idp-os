@@ -38,3 +38,26 @@ def test_allocated_state_written_on_create():
     states = [r["state"] for r in db.dw_equipment_state.find(
         {"equipment_id": "cook-unit-01"})]
     assert "Allocated" in states
+
+
+def test_cip_refused_while_running():
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    mon = EquipmentMonitor(db, bus=None)
+    db.dw_equipment_state.insert_one({
+        "equipment_id": "cook-unit-01", "area": "Process",
+        "state": "Idle", "ts": "2026-01-01T00:00:00+00:00",
+    })
+    db.dw_equipment_state.insert_one({
+        "equipment_id": "cook-unit-01", "area": "Process",
+        "state": "Running", "ts": "2026-01-01T00:05:00+00:00",
+    })
+    with pytest.raises(ValueError, match="in use"):
+        mon.perform_cip("cook-unit-01", operator_id="OP-1")
+
+    db.dw_equipment_state.insert_one({
+        "equipment_id": "cook-unit-01", "area": "Process",
+        "state": "Idle", "ts": "2026-01-01T00:10:00+00:00",
+    })
+    meta = mon.perform_cip("cook-unit-01", operator_id="OP-1")
+    assert meta["dirty"] is False

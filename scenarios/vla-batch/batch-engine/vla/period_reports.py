@@ -71,8 +71,9 @@ def assemble_period_report(db, days: int) -> dict:
     hold_reject = batches_by_verdict["HOLD"] + batches_by_verdict["REJECTED"]
     hold_reject_ratio = round(hold_reject / total, 4) if total > 0 else 0.0
 
+    state_rows = sorted(db.dw_equipment_state.find({}), key=lambda r: r["ts"])
     downtime_events = sum(
-        1 for r in db.dw_equipment_state.find({})
+        1 for r in state_rows
         if r.get("state") in _DOWNTIME_STATES and _in_window(r.get("ts"), cutoff)
     )
     cbm_alerts = [a for a in db.dw_cbm_alerts.find({})
@@ -102,7 +103,8 @@ def assemble_equipment_report(db, equipment_id: str, days: int) -> dict:
     running_hours = mon.running_hours(equipment_id)
 
     state_history = [
-        r for r in db.dw_equipment_state.find({"equipment_id": equipment_id})
+        r for r in sorted(db.dw_equipment_state.find({"equipment_id": equipment_id}),
+                          key=lambda r: r["ts"])
         if _in_window(r.get("ts"), cutoff)
     ][-100:]
 

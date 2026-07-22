@@ -1,4 +1,5 @@
 import random
+from datetime import datetime, timedelta, timezone
 
 from vla.db import get_db, seed_recipes
 from vla.batches import BatchRunner
@@ -36,3 +37,19 @@ def test_running_hours_from_state_history():
     snap = {s["equipment_id"]: s for s in mon.snapshot()}
     assert snap["cook-unit-01"]["state"] == "Idle"
     assert "running_hours" in snap["cook-unit-01"]
+
+
+def test_running_hours_tolerates_out_of_order_history():
+    db, mon, runner = setup()
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    t1 = t0 + timedelta(seconds=60)
+    # Insert OUT of order: Idle (t1) before Running (t0).
+    db.dw_equipment_state.insert_one({
+        "equipment_id": "cook-unit-01", "area": "Process",
+        "state": "Idle", "ts": t1.isoformat(),
+    })
+    db.dw_equipment_state.insert_one({
+        "equipment_id": "cook-unit-01", "area": "Process",
+        "state": "Running", "ts": t0.isoformat(),
+    })
+    assert mon.running_hours("cook-unit-01") == round(60 / 3600, 4)

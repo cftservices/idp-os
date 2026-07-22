@@ -261,7 +261,10 @@ def equipment_cip(equipment_id: str, body: CipRequest):
     eq = STATE.get("equipment")
     if eq is None:
         raise HTTPException(503, "engine not initialized")
-    return eq.perform_cip(equipment_id, operator_id=body.operator_id)
+    try:
+        return eq.perform_cip(equipment_id, operator_id=body.operator_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 @app.get(f"{API}/materials")
