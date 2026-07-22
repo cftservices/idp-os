@@ -67,12 +67,13 @@ class BatchRunner:
     """Creates and runs Vla batches against the recipe seed + factory model."""
 
     def __init__(self, db, bus=None, control=None,
-                 rng: Optional[random.Random] = None, orders=None):
+                 rng: Optional[random.Random] = None, orders=None, equipment=None):
         self.db = db
         self.bus = bus            # MQTT: telemetry READ + secondary Command fallback
         self.control = control    # OPC-UA: PRIMARY control (write/command) path
         self.rng = rng or random.Random()
         self.orders = orders      # OrderManager: PR-24 production orders (optional)
+        self.equipment = equipment  # EquipmentMonitor: PR-17 meta/running-hours (optional)
 
     # ------------------------------------------------------------------ create
 
@@ -218,12 +219,15 @@ class BatchRunner:
     def _feed_equipment_state(self, batch_state: str) -> None:
         running = _RUNNING_IN_STATE.get(batch_state, set())
         for eq in EQUIPMENT_IDS:
+            state = "Running" if eq in running else "Idle"
             self.db.dw_equipment_state.insert_one({
                 "equipment_id": eq,
                 "area": M.area_of(eq),
-                "state": "Running" if eq in running else "Idle",
+                "state": state,
                 "ts": _iso(),
             })
+            if self.equipment is not None:
+                self.equipment.on_state_change(eq, state)
 
     # ------------------------------------------------------------------- start
 

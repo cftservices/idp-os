@@ -27,6 +27,7 @@ from vla import model as M
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
+from vla.equipment import EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
 from vla.orders import OrderManager
@@ -53,7 +54,7 @@ app.add_middleware(
 )
 
 STATE: dict = {"db": None, "bus": None, "control": None, "orders": None, "runner": None,
-               "scan": None, "handling": None}
+               "scan": None, "handling": None, "equipment": None}
 API = "/api/v1"
 
 
@@ -182,10 +183,11 @@ def _startup() -> None:
     control = OpcuaControl()
     seed_recipes(db)
     orders = OrderManager(db, bus)
-    runner = BatchRunner(db, bus, control=control, orders=orders)
+    equipment = EquipmentMonitor(db, bus)
+    runner = BatchRunner(db, bus, control=control, orders=orders, equipment=equipment)
     STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
                   "runner": runner, "scan": ScanFlow(db, runner, orders),
-                  "handling": HandlingUnitManager(db)})
+                  "handling": HandlingUnitManager(db), "equipment": equipment})
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
@@ -211,6 +213,14 @@ def live_tags():
     if bus is None:
         raise HTTPException(503, "engine not initialized")
     return bus.snapshot()
+
+
+@app.get(f"{API}/equipment")
+def equipment_snapshot():
+    eq = STATE.get("equipment")
+    if eq is None:
+        raise HTTPException(503, "engine not initialized")
+    return eq.snapshot()
 
 
 @app.get(f"{API}/materials")

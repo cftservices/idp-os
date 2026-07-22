@@ -4,7 +4,7 @@ from vla.db import get_db, seed_recipes, COLLECTIONS
 EXPECTED = [
     "dw_batches", "dw_recipes", "dw_materials", "dw_doses", "dw_production",
     "dw_samples", "dw_batch_events", "dw_alarms", "dw_orders", "dw_equipment_state",
-    "dw_handling_units",
+    "dw_handling_units", "dw_equipment_meta", "dw_cbm_alerts",
 ]
 
 
