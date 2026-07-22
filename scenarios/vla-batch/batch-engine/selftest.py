@@ -327,6 +327,64 @@ except Exception as e:
     check("11. HU flow e2e", False, f"exception: {e}\n{traceback.format_exc()}")
 
 
+# --- 12. CBM + CIP-gate e2e (fase 3): alert op batch 3, Dirty op 4, CIP herstelt ---
+try:
+    from vla.equipment import EquipmentMonitor, DIRTY_AFTER_BATCHES
+
+    db12 = get_db()
+    seed_recipes(db12)
+    mon12 = EquipmentMonitor(db12, bus=None)
+    runner12 = BatchRunner(db12, bus=None, rng=random.Random(50), equipment=mon12)
+    for _ in range(DIRTY_AFTER_BATCHES):
+        b12 = runner12.create_batch("chocolate-vla-1L", planned_L=5000)
+        runner12.start_batch(b12["batch_id"], telemetry={
+            "peak_cook_temp_C": 88.0, "hold_elapsed_sec": 300.0,
+            "packs_total": 4980, "reject_count": 20})
+    alert_ok = len(mon12.open_alerts("cook-unit-01")) == 1
+    dirty_ok = mon12.is_dirty("cook-unit-01")
+    try:
+        runner12.create_batch("chocolate-vla-1L", planned_L=5000)
+        gate_ok = False
+    except ValueError:
+        gate_ok = True
+    mon12.perform_cip("cook-unit-01", operator_id="OP-7")
+    after = runner12.create_batch("chocolate-vla-1L", planned_L=5000)
+    check("12. CBM alert + Dirty gate + CIP recovery",
+          alert_ok and dirty_ok and gate_ok and after["state"] == "IDLE",
+          f"alert={alert_ok} dirty={dirty_ok} gate={gate_ok}")
+except Exception as e:
+    import traceback
+    check("12. CBM + CIP gate", False, f"exception: {e}\n{traceback.format_exc()}")
+
+
+# --- 13. OEE + EBR + periode-rapport (fase 3) ---
+try:
+    from vla.period_reports import assemble_period_report, render_period_pdf
+
+    # start batch 5 FIRST: CIP cleared the heat-up history, so OEE performance
+    # is only < 1.0 again once this batch's heat-up (base*1.15) is recorded
+    runner12.start_batch(after["batch_id"], telemetry={
+        "peak_cook_temp_C": 88.0, "hold_elapsed_sec": 300.0,
+        "packs_total": 4980, "reject_count": 20})
+    oee_rows = {r["equipment_id"]: r for r in mon12.oee()}
+    cook_perf_ok = oee_rows["cook-unit-01"]["performance"] < 1.0
+    runner12.ack_verdict(after["batch_id"], operator_id="OP-7")
+    from vla.report import render_json
+    ebr = render_json(runner12.get_batch(after["batch_id"]))
+    ebr_ok = (ebr["report_type"].startswith("Electronic Batch Record")
+              and ebr["verdict_ack"]["operator_id"] == "OP-7")
+    prep = assemble_period_report(db12, days=7)
+    pdf_ok = render_period_pdf(prep)[:4] == b"%PDF"
+    check("13. OEE performance-drop + EBR + periode-rapport",
+          cook_perf_ok and ebr_ok and prep["batches_total"] == 5 and pdf_ok,
+          f"perf={oee_rows['cook-unit-01']['performance']} ebr={ebr_ok} "
+          f"batches={prep['batches_total']}")
+except Exception as e:
+    import traceback
+    check("13. OEE + EBR + periode-rapport", False,
+          f"exception: {e}\n{traceback.format_exc()}")
+
+
 # --- report ---
 print("\n=== batch-engine selftest ===")
 all_pass = True

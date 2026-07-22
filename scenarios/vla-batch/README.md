@@ -174,6 +174,14 @@ curl -s -X POST http://vla-batch-engine:8000/api/v1/batches \
 | POST | `/hu/{hu_id}/putaway` | book HU into cold-store |
 | POST | `/hu/{hu_id}/ship` | ship HU to expedition |
 | GET | `/hu` | list handling units (optionally by batch) |
+| GET | `/equipment` | equipment snapshot (state, running hours, dirty flag) |
+| GET | `/equipment/health` | snapshot extended with heat-up trend + open CBM alerts |
+| POST | `/equipment/{equipment_id}/cip` | perform CIP cleaning — resets fouling counter, clears Dirty |
+| GET | `/oee` | per-equipment OEE-light (availability × performance × quality) |
+| POST | `/alarms/{alarm_id}/ack` | acknowledge an alarm |
+| POST | `/batches/{batch_id}/ack-verdict` | acknowledge a batch verdict (idempotent) |
+| GET | `/report/period` | plant-wide management report over the last `days` days (`?format=json\|pdf`) |
+| GET | `/report/equipment/{equipment_id}` | per-equipment maintenance report over the last `days` days (`?format=json\|pdf`) |
 
 ### Fase 1 (v0.4): orders + scan-driven shop-floor flow
 
@@ -202,6 +210,40 @@ cannot enter the warehouse. Handling units are folded into the batch report
 **out of scope**: palletizer simulation, a real WMS, and real GS1 SSCC
 registration. Covered end-to-end by `selftest.py` check 11 and
 `tests/test_handling.py`.
+
+### Fase 3: condition-based maintenance, OEE and the Electronic Batch Record
+
+Adds a maintenance/KPI cluster (`EquipmentMonitor`, `dw_equipment_meta` /
+`dw_equipment_state` / `dw_cbm_alerts`) on top of the fase-0/1/2 batch, order
+and handling-unit flow. The **CBM fouling model lives in the MES layer as a
+documented substitution**: the factory sim itself is untouched — cook-unit
+heat-up time per batch is trended (`heatup_history`, last 20 batches) and, once
+it crosses `BASE_HEATUP_SEC × 1.35`, raises a fouling alert ("plan CIP
+cleaning") *before* the equipment is forced Dirty. Only after
+`DIRTY_AFTER_BATCHES` (4) batches without a CIP does the unit flip to `Dirty`
+and `create_batch` refuses new work on it — **alert-before-Dirty** is the
+predictive half of the Solve story, complementing the reactive
+under-cook/viscosity Solve from fase 0. A `POST /equipment/{id}/cip` clears the
+counter, the Dirty flag and any open alerts, and the line is available again.
+
+**OEE-light** (`GET /oee`) is the classic one-liner — `OEE = Availability ×
+Performance × Quality` — computed per equipment from the state-history
+durations (availability), the cook-unit heat-up trend vs its clean baseline
+(performance, 1.0 elsewhere), and the plant-wide approved-vs-total pack ratio
+(quality, same for every row).
+
+The batch report is now explicitly an **Electronic Batch Record (EBR)**:
+order/lot genealogy, doses, process events, alarms and the **verdict
+acknowledgement** (`POST /batches/{id}/ack-verdict`, operator sign-off,
+idempotent) are all part of the one report artifact
+(`report_type: "Electronic Batch Record (BIRT-style)"`). Two new report
+endpoints sit alongside it for the maintenance/management side: `GET
+/report/period` (plant-wide KPI roll-up over N days) and `GET
+/report/equipment/{id}` (per-equipment maintenance report — CIP history,
+alerts, OEE trend), both `?format=json|pdf`. Covered end-to-end by
+`selftest.py` checks 12-13 and `tests/test_equipment_monitor.py`,
+`tests/test_cbm.py`, `tests/test_cip_gate.py`, `tests/test_oee_health.py`,
+`tests/test_ack.py`, `tests/test_ebr.py`, `tests/test_period_reports.py`.
 
 ---
 

@@ -118,7 +118,7 @@ def _reportlab_pdf(report: dict) -> bytes:
         buf, pagesize=A4,
         leftMargin=18 * mm, rightMargin=18 * mm,
         topMargin=16 * mm, bottomMargin=16 * mm,
-        title=f"Batch Report {report['header'].get('batch_id')}",
+        title=f"Electronic Batch Record {report['header'].get('batch_id')}",
     )
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=16, spaceAfter=2)
@@ -361,7 +361,7 @@ def _fmt(v) -> str:
 def _text_fallback(report: dict) -> str:
     h = report["header"]
     lines = [
-        "BATCH PRODUCTION REPORT (BIRT-style)",
+        "ELECTRONIC BATCH RECORD (BIRT-style)",
         f"{report['site']} / {report['line']}",
         f"Batch:   {h.get('batch_id')}",
         f"Product: {h.get('product_name')} ({h.get('recipe_id')})",

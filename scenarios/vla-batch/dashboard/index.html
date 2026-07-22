@@ -82,6 +82,7 @@
     <button data-tab="orders">Orders</button>
     <button data-tab="operator">Operator</button>
     <button data-tab="admin">SCADA / Admin</button>
+    <button data-tab="equipment">Equipment</button>
   </nav>
 </header>
 <main>
@@ -146,6 +147,9 @@
       <h2>Samples</h2>
       <table><thead><tr><th>Type</th><th>Value</th><th>Time</th></tr></thead>
         <tbody id="detailSamples"></tbody></table>
+      <h2>Alarms</h2>
+      <table><thead><tr><th>Equipment</th><th>Type</th><th>Severity</th><th>Message</th><th>Ack</th></tr></thead>
+        <tbody id="detailAlarms"></tbody></table>
       <div class="row" style="margin-top:14px">
         <a id="reportBtn" class="act" style="text-decoration:none" target="_blank">Report (PDF) ↗</a>
         <a id="reportJson" class="gh" style="text-decoration:none" target="_blank">JSON</a>
@@ -261,6 +265,22 @@
     </div>
     <p id="adminMsg" class="sub"></p>
   </section>
+
+  <!-- EQUIPMENT — CBM health + OEE (fase 3) -->
+  <section id="tab-equipment" class="hidden">
+    <h2>Equipment health</h2>
+    <table><thead><tr>
+        <th>Equipment</th><th>Area</th><th>State</th><th>Running hours</th>
+        <th>Batches since CIP</th><th>Heat-up trend</th><th>Open alerts</th><th></th>
+      </tr></thead>
+      <tbody id="eqHealth"></tbody></table>
+
+    <h2>OEE</h2>
+    <table><thead><tr>
+        <th>Equipment</th><th>Availability</th><th>Performance</th><th>Quality</th><th>OEE</th>
+      </tr></thead>
+      <tbody id="eqOee"></tbody></table>
+  </section>
 </main>
 <script>
 const API = window.VLA_API || "/api/v1";
@@ -284,7 +304,7 @@ function fmt(v,u='',d=1){ const n=num(v); return n===null?'—':(d===0?Math.roun
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
-  ['sales','batches','orders','operator','admin'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
+  ['sales','batches','orders','operator','admin','equipment'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
 });
 
 // ── UNS tag helpers (contract §ISA-95 tags) ─────────────────────────────────
@@ -393,8 +413,10 @@ async function refreshBatches(){
   }).join('') || '<tr><td colspan="5" class="sub">No batches yet — create one in the SCADA / Admin tab.</td></tr>';
 }
 
+let currentDetailId = null;
 async function openDetail(id){
   let b; try{ b = await j('/batches/'+encodeURIComponent(id)); }catch(e){ alert('Load failed: '+e.message); return; }
+  currentDetailId = id;
   $('#batchesList').classList.add('hidden');
   $('#batchDetail').classList.remove('hidden');
   $('#detailTitle').textContent = `Batch ${b.batch_id||id} — ${b.product_name||b.recipe_id||''}`;
@@ -419,13 +441,28 @@ async function openDetail(id){
     `<tr><td>${s.sample_type||s.type||''}</td><td>${s.value!=null?s.value:(s.result||'')}</td><td>${(s.ts||s.taken_at||'').toString().replace('T',' ').slice(0,19)}</td></tr>`
   ).join('') || '<tr><td colspan="3" class="sub">No samples.</td></tr>';
 
+  const alarms=b.alarms||[];
+  $('#detailAlarms').innerHTML = alarms.map(a=>{
+    const ack = a.acknowledged
+      ? `<span class="sub">ack'd${a.ack_by?' by '+a.ack_by:''}</span>`
+      : `<button class="gh" onclick="ackAlarm('${a.alarm_id}')">Ack</button>`;
+    return `<tr><td>${a.equipment_id||''}</td><td>${a.alarm_type||''}</td>
+      <td>${a.severity||''}</td><td>${a.message||''}</td><td>${ack}</td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="sub">No alarms.</td></tr>';
+
   $('#reportBtn').href  = `${API}/report/${encodeURIComponent(id)}?format=pdf`;
   $('#reportJson').href = `${API}/report/${encodeURIComponent(id)}?format=json`;
 }
 function closeDetail(){
   $('#batchDetail').classList.add('hidden');
   $('#batchesList').classList.remove('hidden');
+  currentDetailId = null;
   refreshBatches();
+}
+async function ackAlarm(alarmId){
+  try{ await post('/alarms/'+encodeURIComponent(alarmId)+'/ack', {operator_id: $('#opId').value});
+       if(currentDetailId) await openDetail(currentDetailId); }
+  catch(e){ alert('Ack failed: '+e.message); }
 }
 
 // ── SCADA / admin actions (contract §batch-engine REST) ─────────────────────
@@ -605,12 +642,58 @@ async function huAction(huId, action){
   catch(e){ $('#huInfo').textContent = action+' rejected: '+e.message; }
 }
 
+// ---- Equipment tab — CBM health + OEE (fase 3) ----
+function eqStateColor(state){
+  if(state==='Dirty') return '#bf3d00';
+  if(state==='Running') return '#1a7f37';
+  if(state==='Allocated') return '#8250df';
+  return '#57606a';
+}
+function pct(v){ const n=num(v); return n===null?'—':(Math.round(n*1000)/10)+'%'; }
+async function refreshEquipment(){
+  let health, oee;
+  try{ [health, oee] = await Promise.all([j('/equipment/health'), j('/oee')]); }
+  catch(e){ return; }
+
+  $('#eqHealth').innerHTML = health.map(eq=>{
+    const trend = (eq.heatup_trend||[]).map(t=>Math.round(t.heatup_sec)).join(' → ');
+    const alerts = eq.open_cbm_alerts||[];
+    const alertTxt = alerts.length ? `${alerts.length} — ${alerts[0].message}` : '0';
+    return `<tr>
+      <td>${eq.equipment_id}</td><td>${eq.area}</td>
+      <td><span class="badge" style="background:${eqStateColor(eq.state)};color:#fff">${eq.state}</span></td>
+      <td>${fmt(eq.running_hours,'h',2)}</td>
+      <td>${eq.batches_since_cip}</td>
+      <td>${trend ? trend+' s' : '—'}</td>
+      <td style="color:${alerts.length?'var(--red)':'var(--mut)'}">${alertTxt}</td>
+      <td><button class="gh" onclick="doCip('${eq.equipment_id}')">CIP</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="sub">No equipment data.</td></tr>';
+
+  $('#eqOee').innerHTML = oee.map(r=>{
+    const amber = num(r.oee) !== null && r.oee < 0.75;
+    return `<tr>
+      <td>${r.equipment_id}</td>
+      <td>${pct(r.availability)}</td>
+      <td>${pct(r.performance)}</td>
+      <td>${pct(r.quality)}</td>
+      <td style="${amber?'color:var(--yellow);font-weight:700':''}">${pct(r.oee)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="sub">No OEE data.</td></tr>';
+}
+async function doCip(eqId){
+  try{ await post(`/equipment/${eqId}/cip`, {operator_id: $('#opId').value});
+       await refreshEquipment(); }
+  catch(e){ alert('CIP failed: '+e.message); }
+}
+
 // ── boot + poll (~1-2s) ─────────────────────────────────────────────────────
 renderStepper('IDLE');
-refreshSales(); refreshBatches(); refreshOrders();
+refreshSales(); refreshBatches(); refreshOrders(); refreshEquipment();
 setInterval(refreshSales, 1500);
 setInterval(refreshBatches, 2500);
 setInterval(refreshOrders, 2500);
+setInterval(refreshEquipment, 2500);
 </script>
 </body>
 </html>
