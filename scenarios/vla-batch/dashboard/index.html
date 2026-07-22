@@ -199,6 +199,19 @@
       </div>
       <p id="opMsg" class="sub"></p>
     </div>
+
+    <h2>Packaging &amp; shipping (PR-35)</h2>
+    <div class="row">
+      <label>Batch<input id="huBatch" placeholder="B-…" style="width:220px"></label>
+      <button class="gh" onclick="loadHus()">Load HUs</button>
+      <span id="huInfo" class="sub"></span>
+    </div>
+    <div class="row">
+      <label>Packs on pallet<input id="huPacks" type="number" value="1200" min="1" style="width:110px"></label>
+      <button class="act" onclick="createHu()">Wrap pallet + print HU label</button>
+    </div>
+    <table><thead><tr><th>HU (SSCC-placeholder)</th><th>Packs</th><th>Status</th><th>Location</th><th></th></tr></thead>
+      <tbody id="huRows"></tbody></table>
   </section>
 
   <!-- SCADA / ADMIN -->
@@ -555,6 +568,40 @@ async function takeScanSample(){
         sample_type: $('#sampleType').value, operator_id: $('#opId').value});
        $('#opMsg').textContent = 'sample '+s.sample_id+' — label printed'; }
   catch(e){ $('#opMsg').textContent = 'sample rejected: '+e.message; }
+}
+
+// ---- Packaging & shipping (PR-35) ----
+async function loadHus(){
+  const bid = $('#huBatch').value.trim() || opBatch;
+  if(!bid){ $('#huInfo').textContent = 'enter a batch id'; return; }
+  $('#huBatch').value = bid;
+  try{
+    const [b, hus] = [await j('/batches/'+bid), await j('/hu?batch_id='+bid)];
+    const inHu = hus.reduce((s,h)=>s+h.packs_count,0);
+    $('#huInfo').textContent = `${b.verdict||'—'} · ${b.packs_total} packs · in HUs: ${inHu}`;
+    $('#huRows').innerHTML = hus.map(h => `<tr>
+      <td>${h.hu_id}</td><td>${h.packs_count}</td>
+      <td><span class="badge" style="background:${
+        h.status==='shipped' ? '#0b4f2a' : h.status==='awaiting_shipment' ? '#1a7f37' : '#57606a'
+      };color:#fff">${h.status}</span></td>
+      <td>${h.location||'—'}</td>
+      <td>${h.status==='wrapped' ? `<button class="gh" onclick="huAction('${h.hu_id}','putaway')">Putaway</button>`
+          : h.status==='awaiting_shipment' ? `<button class="gh" onclick="huAction('${h.hu_id}','ship')">Ship</button>` : ''}</td>
+    </tr>`).join('');
+  }catch(e){ $('#huInfo').textContent = 'load failed: '+e.message; }
+}
+async function createHu(){
+  const bid = $('#huBatch').value.trim() || opBatch;
+  if(!bid){ $('#huInfo').textContent = 'enter a batch id'; return; }
+  try{ await post('/hu', {batch_id: bid, packs_count: parseInt($('#huPacks').value),
+                          operator_id: $('#opId').value});
+       await loadHus(); }
+  catch(e){ $('#huInfo').textContent = 'HU rejected: '+e.message; }
+}
+async function huAction(huId, action){
+  try{ await post(`/hu/${huId}/${action}`, {operator_id: $('#opId').value});
+       await loadHus(); }
+  catch(e){ $('#huInfo').textContent = action+' rejected: '+e.message; }
 }
 
 // ── boot + poll (~1-2s) ─────────────────────────────────────────────────────
