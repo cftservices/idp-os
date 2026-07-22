@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -53,6 +54,10 @@ class VlaBus:
         self.uns_root = uns_root
         self.connected = False
         self._tags: dict[str, Any] = {}
+        # freshness stamps (time.monotonic) — set only for LIVE deliveries;
+        # retained replays at (re)subscribe get no stamp, so age-gated reads
+        # treat them as stale (E4 finding: dead ingest -> retained-only cache)
+        self._rx: dict[str, float] = {}
         self._lock = threading.Lock()
         self.client = None
         self._connected_evt: Optional[threading.Event] = None
@@ -118,6 +123,8 @@ class VlaBus:
             payload = ""
         with self._lock:
             self._tags[msg.topic] = payload
+            if not getattr(msg, "retain", False):
+                self._rx[msg.topic] = time.monotonic()
 
     # ---------------------------------------------------------------- publish
 
@@ -191,9 +198,20 @@ class VlaBus:
         with self._lock:
             return self._tags.get(topic)
 
-    def latest_value(self, equipment: str, tag: str) -> Any:
-        """Return the scalar `value` from a Status topic's JSON payload."""
-        raw = self.latest_raw(M.status_topic(equipment, tag))
+    def latest_value(self, equipment: str, tag: str,
+                     max_age_s: Optional[float] = None) -> Any:
+        """Return the scalar `value` from a Status topic's JSON payload.
+
+        With `max_age_s`, only values received LIVE within that window count;
+        retained replays (no freshness stamp) and older values return None so
+        fallback paths fabricate instead of booking a stale snapshot."""
+        topic = M.status_topic(equipment, tag)
+        if max_age_s is not None:
+            with self._lock:
+                rx = self._rx.get(topic)
+            if rx is None or (time.monotonic() - rx) > max_age_s:
+                return None
+        raw = self.latest_raw(topic)
         if raw is None:
             return None
         try:

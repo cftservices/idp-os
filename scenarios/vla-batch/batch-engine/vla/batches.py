@@ -521,7 +521,8 @@ class BatchRunner:
                     actual = None
                     if self.bus is not None:
                         raw = self.bus.latest_value(
-                            "process-tank-01", f"dose_{line['material_id']}_actual_kg")
+                            "process-tank-01", f"dose_{line['material_id']}_actual_kg",
+                            max_age_s=30.0)
                         if raw is not None:
                             try:
                                 actual = float(raw)
@@ -573,7 +574,7 @@ class BatchRunner:
             # try bus, else fabricate a healthy peak near setpoint
             peak = None
             if self.bus is not None:
-                raw = self.bus.latest_value("cook-unit-01", "temp_C")
+                raw = self.bus.latest_value("cook-unit-01", "temp_C", max_age_s=30.0)
                 if raw is not None:
                     try:
                         peak = float(raw)
@@ -587,7 +588,7 @@ class BatchRunner:
         else:
             hold_elapsed = None
             if self.bus is not None:
-                raw = self.bus.latest_value("cook-unit-01", "hold_elapsed_sec")
+                raw = self.bus.latest_value("cook-unit-01", "hold_elapsed_sec", max_age_s=30.0)
                 if raw is not None:
                     try:
                         hold_elapsed = float(raw)
@@ -611,13 +612,13 @@ class BatchRunner:
         packs = None
         rejects = 0
         if self.bus is not None:
-            raw = self.bus.latest_value("filler-01", "packs_total")
+            raw = self.bus.latest_value("filler-01", "packs_total", max_age_s=30.0)
             if raw is not None:
                 try:
                     packs = int(float(raw))
                 except (TypeError, ValueError):
                     packs = None
-            rj = self.bus.latest_value("filler-01", "reject_count")
+            rj = self.bus.latest_value("filler-01", "reject_count", max_age_s=30.0)
             if rj is not None:
                 try:
                     rejects = int(float(rj))
