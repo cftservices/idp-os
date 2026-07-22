@@ -29,6 +29,7 @@ from vla.db import get_db, seed_recipes
 from vla.opcua_control import OpcuaControl
 from vla.orders import OrderManager
 from vla.report import render_json, render_pdf
+from vla.scan import ScanFlow, ScanRejected
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -45,7 +46,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-STATE: dict = {"db": None, "bus": None, "control": None, "orders": None, "runner": None}
+STATE: dict = {"db": None, "bus": None, "control": None, "orders": None, "runner": None,
+               "scan": None}
 API = "/api/v1"
 
 
@@ -78,6 +80,28 @@ class CreateOrderBatch(BaseModel):
     operator_id: str | None = None
 
 
+class ScanOrder(BaseModel):
+    code: str
+    operator_id: str | None = None
+
+
+class ScanLabel(BaseModel):
+    batch_id: str
+    material_id: str
+    lot_no: str
+    operator_id: str | None = None
+
+
+class ScanWeigh(BaseModel):
+    batch_id: str
+    material_id: str
+    qty_kg: float | None = None
+    lot_no: str | None = None
+    source_equipment: str = "scale-01"
+    operator_id: str | None = None
+    total: bool = False
+
+
 def _runner() -> BatchRunner:
     runner = STATE.get("runner")
     if runner is None:
@@ -90,6 +114,23 @@ def _orders() -> "OrderManager":
     if om is None:
         raise HTTPException(503, "engine not initialized")
     return om
+
+
+def _scan() -> "ScanFlow":
+    s = STATE.get("scan")
+    if s is None:
+        raise HTTPException(503, "engine not initialized")
+    return s
+
+
+def _scan_call(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except ScanRejected as e:
+        code = 404 if e.reason == "unknown" else 409
+        raise HTTPException(code, {"detail": str(e), "reason": e.reason})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.on_event("startup")
@@ -107,8 +148,9 @@ def _startup() -> None:
     control = OpcuaControl()
     seed_recipes(db)
     orders = OrderManager(db, bus)
+    runner = BatchRunner(db, bus, control=control, orders=orders)
     STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
-                  "runner": BatchRunner(db, bus, control=control, orders=orders)})
+                  "runner": runner, "scan": ScanFlow(db, runner, orders)})
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
@@ -234,6 +276,25 @@ def close_order(order_id: str):
     except ValueError as e:
         code = 404 if "unknown order" in str(e) else 409
         raise HTTPException(code, str(e))
+
+
+@app.post(f"{API}/scan/order")
+def scan_order(body: ScanOrder):
+    return _scan_call(_scan().scan_order, body.code, body.operator_id)
+
+
+@app.post(f"{API}/scan/label")
+def scan_label(body: ScanLabel):
+    return _scan_call(_scan().scan_label, body.batch_id, body.material_id,
+                      body.lot_no, body.operator_id)
+
+
+@app.post(f"{API}/scan/weigh")
+def scan_weigh(body: ScanWeigh):
+    return _scan_call(_scan().weigh, body.batch_id, body.material_id,
+                      qty_kg=body.qty_kg, lot_no=body.lot_no,
+                      source_equipment=body.source_equipment,
+                      operator_id=body.operator_id, total=body.total)
 
 
 @app.get(f"{API}/samples")
