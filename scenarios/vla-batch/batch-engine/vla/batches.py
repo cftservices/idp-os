@@ -453,28 +453,40 @@ class BatchRunner:
             if line.get("qty_actual") is not None:
                 continue
             target = float(line["qty_target"])
+            source_equipment = line.get("source_equipment") or "dosing-unit"
             if line["material_id"] in actuals:
+                # explicit telemetry override always wins (test-forcing mechanism)
                 actual = float(actuals[line["material_id"]])
             else:
-                # try bus tag: process-tank-01 dose_<m>_actual_kg
-                actual = None
-                if self.bus is not None:
-                    raw = self.bus.latest_value(
-                        "process-tank-01", f"dose_{line['material_id']}_actual_kg")
-                    if raw is not None:
-                        try:
-                            actual = float(raw)
-                        except (TypeError, ValueError):
-                            actual = None
-                if actual is None:
-                    # fabricate: small variance around target
-                    actual = target + self.rng.uniform(-0.004, 0.004) * target
+                staged_qty = float(line.get("qty_prepared") or 0.0)
+                if staged_qty > 0:
+                    # staged via the scan-flow (weigh) but never report-scanned:
+                    # honor the recorded scale weight instead of fabricating a
+                    # fresh actual near target, which would contradict the
+                    # staged trail already on the row
+                    actual = staged_qty
+                    last_staged = (line.get("staged") or [{}])[-1]
+                    source_equipment = last_staged.get("source_equipment", "scale-01")
+                else:
+                    # try bus tag: process-tank-01 dose_<m>_actual_kg
+                    actual = None
+                    if self.bus is not None:
+                        raw = self.bus.latest_value(
+                            "process-tank-01", f"dose_{line['material_id']}_actual_kg")
+                        if raw is not None:
+                            try:
+                                actual = float(raw)
+                            except (TypeError, ValueError):
+                                actual = None
+                    if actual is None:
+                        # fabricate: small variance around target
+                        actual = target + self.rng.uniform(-0.004, 0.004) * target
             actual = round(actual, 4)
             in_tol = float(line["tol_min"]) <= actual <= float(line["tol_max"])
             self.db.dw_doses.update_one(
                 {"batch_id": batch_id, "material_id": line["material_id"]},
                 {"$set": {"qty_actual": actual, "in_tolerance": in_tol,
-                          "source_equipment": line.get("source_equipment") or "dosing-unit",
+                          "source_equipment": source_equipment,
                           "ts": _iso()}},
             )
             self._event(batch_id, "dose_booked", {

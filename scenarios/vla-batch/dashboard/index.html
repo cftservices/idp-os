@@ -172,7 +172,7 @@
   <section id="tab-operator" class="hidden">
     <div class="row">
       <label>Operator ID<input id="opId" value="OP-7" style="width:90px"></label>
-      <label>Scan order / batch<input id="scanCode" placeholder="PO-… of B-…" style="width:220px"></label>
+      <label>Scan order / batch<input id="scanCode" placeholder="PO-… or B-…" style="width:220px"></label>
       <button class="act" onclick="scanOrder()">Scan</button>
       <span id="scanGate" class="pill bad">no order scanned</span>
     </div>
@@ -521,8 +521,8 @@ async function refreshWeigh(){
       ${done?'' : `<div class="row">
         <input id="lot-${d.material_id}" placeholder="lot" style="width:80px">
         <input id="qty-${d.material_id}" type="number" placeholder="kg" style="width:80px">
-        <button class="gh" onclick="weigh('${d.material_id}',false)">Boek</button>
-        <button class="gh" onclick="weigh('${d.material_id}',true)">Totaal</button>
+        <button class="gh" onclick="weigh('${d.material_id}',false)">Book</button>
+        <button class="gh" onclick="weigh('${d.material_id}',true)">Total</button>
       </div>`}
     </div>`; }).join('');
 }

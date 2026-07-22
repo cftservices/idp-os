@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,6 +38,10 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("vla.app")
+
+
+def _iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 app = FastAPI(title="DairyWorks Vla Batch Engine", version="1.0.0")
 app.add_middleware(
@@ -332,7 +337,7 @@ def reprint_sample_label(sample_id: str):
     db.dw_batch_events.insert_one({
         "batch_id": row["batch_id"], "event_type": "sample_label_printed",
         "payload": {"sample_id": sample_id, "reprint": True},
-        "ts": row["ts"]})
+        "ts": _iso()})
     return {"ok": True, "sample_id": sample_id}
 
 
