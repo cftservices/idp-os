@@ -1,7 +1,9 @@
 """BIRT-stand-in batch report — JSON + PDF (reportlab).
 
-assemble_report() builds a per-batch dict:
-  header + doses + peak_temp/hold/viscosity + packs + verdict + samples + alarms.
+assemble_report() builds a per-batch Electronic Batch Record dict:
+  header + doses + peak_temp/hold/viscosity + packs + verdict + samples +
+  alarms + handling_units + order context + production bookings + events +
+  verdict acknowledgment.
 render_pdf() renders it to a PDF via reportlab (BIRT stand-in). render_json()
 returns the dict as-is. Both are offline (no external service).
 
@@ -30,8 +32,9 @@ _VERDICT_COLOR = {
 
 def assemble_report(batch: dict) -> dict:
     """Assemble the BIRT-style report dict from a BatchRunner.get_batch() bundle."""
+    order = batch.get("order")
     return {
-        "report_type": "Batch Production Report (BIRT-style)",
+        "report_type": "Electronic Batch Record (BIRT-style)",
         "site": SITE,
         "line": LINE,
         "header": {
@@ -70,6 +73,20 @@ def assemble_report(batch: dict) -> dict:
         ],
         "verdict": batch.get("verdict") or "PENDING",
         "critical_alarm_during_batch": batch.get("critical_alarm_during_batch", False),
+        "order": ({"order_id": order.get("order_id"),
+                    "target_qty_L": order.get("target_qty_L"),
+                    "due_date": order.get("due_date"),
+                    "status": order.get("status")} if order else None),
+        "production": [
+            {"packs": p.get("packs"), "source": p.get("source"),
+             "operator_id": p.get("operator_id"), "ts": p.get("ts")}
+            for p in batch.get("production_bookings", [])
+        ],
+        "events": [
+            {"event_type": e.get("event_type"), "ts": e.get("ts")}
+            for e in batch.get("events", [])
+        ],
+        "verdict_ack": batch.get("verdict_ack"),
     }
 
 
@@ -112,7 +129,7 @@ def _reportlab_pdf(report: dict) -> bytes:
     story = []
 
     hdr = report["header"]
-    story.append(Paragraph("Batch Production Report", h1))
+    story.append(Paragraph("Electronic Batch Record", h1))
     story.append(Paragraph(
         f"{report['site']} &middot; {report['line']} &middot; BIRT-style", sub))
 
@@ -263,6 +280,70 @@ def _reportlab_pdf(report: dict) -> bytes:
         story.append(ht)
     else:
         story.append(Paragraph("No handling units.", styles["Normal"]))
+
+    # Order context
+    story.append(Paragraph("Order context", h2))
+    order = report.get("order")
+    if order:
+        story.append(kv_table([
+            ["Order", str(order.get("order_id"))],
+            ["Target qty", f"{order.get('target_qty_L')} L"],
+            ["Due date", str(order.get("due_date") or "-")],
+            ["Status", str(order.get("status"))],
+        ]))
+    else:
+        story.append(Paragraph("No order linked to this batch.", styles["Normal"]))
+
+    # Production bookings
+    production = report.get("production", [])
+    story.append(Paragraph(f"Production bookings ({len(production)})", h2))
+    if production:
+        prows = [["Packs", "Source", "Operator", "Timestamp"]]
+        for p in production:
+            prows.append([
+                str(p.get("packs")), str(p.get("source")),
+                str(p.get("operator_id") or "-"), str(p.get("ts")),
+            ])
+        pt = Table(prows, colWidths=[25 * mm, 40 * mm, 35 * mm, 65 * mm])
+        pt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f6f8fa")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d0d7de")),
+        ]))
+        story.append(pt)
+    else:
+        story.append(Paragraph("No production bookings.", styles["Normal"]))
+
+    # Events (audit trail, capped at the most recent 30)
+    events = report.get("events", [])
+    events_shown = events[-30:]
+    story.append(Paragraph(f"Events ({len(events)})", h2))
+    if events_shown:
+        erows = [["Event type", "Timestamp"]]
+        for e in events_shown:
+            erows.append([str(e.get("event_type")), str(e.get("ts"))])
+        et = Table(erows, colWidths=[60 * mm, 105 * mm])
+        et.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f6f8fa")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d0d7de")),
+        ]))
+        story.append(et)
+    else:
+        story.append(Paragraph("No events recorded.", styles["Normal"]))
+
+    # Verdict acknowledgment
+    story.append(Paragraph("Verdict acknowledgment", h2))
+    ack = report.get("verdict_ack")
+    if ack:
+        story.append(kv_table([
+            ["Acknowledged by", str(ack.get("operator_id"))],
+            ["Acknowledged at", str(ack.get("ts"))],
+        ]))
+    else:
+        story.append(Paragraph("Verdict not yet acknowledged.", styles["Normal"]))
 
     doc.build(story)
     return buf.getvalue()

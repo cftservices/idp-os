@@ -759,6 +759,10 @@ class BatchRunner:
             "samples": samples,
             "alarms": alarms,
             "handling_units": self.db.dw_handling_units.find({"batch_id": batch_id}),
+            "events": self.db.dw_batch_events.find({"batch_id": batch_id}),
+            "production_bookings": self.db.dw_production.find({"batch_id": batch_id}),
+            "order": (self.db.dw_orders.find_one({"order_id": batch["order_id"]})
+                      if batch.get("order_id") else None),
         }
 
     def list_batches(self) -> list[dict]:
