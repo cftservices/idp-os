@@ -8,6 +8,9 @@ Verifies:
   5. JSON report assembles (header + doses + peak_temp/hold/viscosity + packs + verdict)
   6. PDF report renders to %PDF bytes
   7. `import app` succeeds without a broker + verdict-rule assertion
+  8. OPC-UA control path is offline-safe (no factory -> status, no exception)
+  9. orders + scan-flow end-to-end (fase 1: gate/label/weigh/report/close)
+  10. stop rule (close w/o production) + scan rejection
 
 Run: python selftest.py   (exit 0 = all pass)
 """
@@ -221,6 +224,69 @@ try:
 except Exception as e:
     import traceback
     check("8. OPC-UA control offline-safe", False,
+          f"exception: {e}\n{traceback.format_exc()}")
+
+
+# --- 9. orders + scan-flow end-to-end (fase 1) ---
+try:
+    from vla.orders import OrderManager
+    from vla.scan import ScanFlow, ScanRejected
+
+    db9 = get_db()
+    seed_recipes(db9)
+    orders9 = OrderManager(db9, bus=None)
+    runner9 = BatchRunner(db9, bus=None, rng=random.Random(21), orders=orders9)
+    flow9 = ScanFlow(db9, runner9, orders9)
+
+    o9 = orders9.create_order("chocolate-vla-1L", target_qty_L=5000)
+    b9 = runner9.create_batch("chocolate-vla-1L", planned_L=5000,
+                              order_id=o9["order_id"])
+    gate = flow9.scan_order(o9["order_id"], operator_id="OP-7")
+    flow9.scan_label(b9["batch_id"], "cocoa", lot_no="L-1", operator_id="OP-7")
+    flow9.weigh(b9["batch_id"], "cocoa", total=True, lot_no="L-1",
+                operator_id="OP-7")
+    flow9.scan_report(b9["batch_id"], operator_id="OP-7")
+    runner9.start_batch(b9["batch_id"], telemetry={
+        "peak_cook_temp_C": 88.0, "hold_elapsed_sec": 300.0,
+        "packs_total": 4980, "reject_count": 20,
+        "dose_actuals": {"milk": 5000.0, "sugar": 500.0, "starch": 250.0}})
+    closed = orders9.close_order(o9["order_id"])
+    dose9 = db9.dw_doses.find_one({"batch_id": b9["batch_id"],
+                                   "material_id": "cocoa"})
+    check("9. orders + scan-flow e2e (gate/label/weigh/report/close)",
+          gate["ok"] and closed["status"] == "DONE"
+          and dose9["qty_actual"] == 100.0 and dose9["operator_id"] == "OP-7",
+          f"order={closed['status']} cocoa_actual={dose9['qty_actual']}")
+except Exception as e:
+    import traceback
+    check("9. orders + scan-flow e2e", False,
+          f"exception: {e}\n{traceback.format_exc()}")
+
+
+# --- 10. stop rule + scan rejections ---
+try:
+    db10 = get_db()
+    seed_recipes(db10)
+    orders10 = OrderManager(db10, bus=None)
+    runner10 = BatchRunner(db10, bus=None, rng=random.Random(22), orders=orders10)
+    flow10 = ScanFlow(db10, runner10, orders10)
+    o10 = orders10.create_order("chocolate-vla-1L", target_qty_L=5000)
+    try:
+        orders10.close_order(o10["order_id"])
+        stop_rule_ok = False
+    except ValueError:
+        stop_rule_ok = True
+    try:
+        flow10.scan_order("PO-NOPE", operator_id="OP-7")
+        reject_ok = False
+    except ScanRejected as ex:
+        reject_ok = ex.reason == "unknown"
+    check("10. stop rule (close w/o production) + scan rejection",
+          stop_rule_ok and reject_ok,
+          f"stop_rule={stop_rule_ok} reject={reject_ok}")
+except Exception as e:
+    import traceback
+    check("10. stop rule + rejections", False,
           f"exception: {e}\n{traceback.format_exc()}")
 
 

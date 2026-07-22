@@ -144,6 +144,47 @@ curl -s -X POST http://vla-batch-engine:8000/api/v1/batches \
 
 ---
 
+## API (`vla-batch-engine`, `/api/v1`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/health` | liveness |
+| GET | `/tags` | latest UNS snapshot (dashboard) |
+| GET | `/materials` | master-data materials |
+| GET | `/batches` | list batches |
+| POST | `/batches` | create + (default) auto-start a batch |
+| GET | `/batches/{batch_id}` | batch detail + telemetry summary |
+| POST | `/batches/{batch_id}/start` | start an existing batch |
+| POST | `/orders` | create a production order |
+| GET | `/orders` | list orders (+ progress) |
+| GET | `/orders/{order_id}` | order detail + progress |
+| POST | `/orders/{order_id}/batches` | create a batch against an order |
+| POST | `/orders/{order_id}/close` | close an order (stop-rule guarded, PR-34) |
+| POST | `/scan/order` | shop-floor gate scan (order/batch code) |
+| POST | `/scan/label` | scan a material label against the recipe |
+| POST | `/scan/weigh` | stage a weighed/dosed quantity |
+| POST | `/scan/report` | commit staged doses (report scan) |
+| POST | `/production` | manual finished-goods booking |
+| GET | `/samples` | list samples (optionally by batch) |
+| POST | `/samples` | take a sample |
+| POST | `/samples/{sample_id}/reprint-label` | reprint a sample label |
+| GET | `/report/{batch_id}` | batch report (`?format=json\|pdf`) |
+| POST | `/admin/command` | route a control action to the factory (OPC-UA primary) |
+
+### Fase 1 (v0.4): orders + scan-driven shop-floor flow
+
+Adds production orders (`OrderManager`, `dw_orders`) and a scan-driven shop-floor
+flow (`ScanFlow`, `dw_batch_events` scan_rejected trail) on top of the fase-0
+batch engine: gate scan → label scan → weigh → report scan (commit) → production
+booking, plus the order stop-rule (`close_order` refuses without booked
+production). Implements PR-23 (orders model), PR-24 (order lifecycle + batch
+linkage), PR-25 (scan gate + label/weigh guidance), PR-26 (report-scan commit +
+inventory consumption), PR-27 (manual production booking), and PR-34 (stop-rule
++ scan-rejection audit trail). Covered end-to-end by `selftest.py` checks 9-10
+and `tests/test_orders.py`, `tests/test_scan_flow.py`, `tests/test_scan_commit.py`.
+
+---
+
 ## Component map
 
 | Service | Owner submap | Build context | Web-facing | Role |

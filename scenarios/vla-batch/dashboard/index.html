@@ -497,7 +497,7 @@ async function scanOrder(){
       await refreshWeigh();
     } else {
       const oid = r.order ? r.order.order_id : '?';
-      $('#scanGate').textContent = 'order '+oid+' OK — geen actieve batch; maak eerst een batch aan op de Orders-tab';
+      $('#scanGate').textContent = 'order '+oid+' OK — no active batch yet; create one on the Orders tab first';
       $('#scanGate').className = 'pill';
       $('#opPanel').classList.add('hidden');
       $('#weighCards').innerHTML = '';
