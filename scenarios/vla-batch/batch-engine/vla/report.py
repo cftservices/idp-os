@@ -62,6 +62,12 @@ def assemble_report(batch: dict) -> dict:
         },
         "samples": batch.get("samples", []),
         "alarms": batch.get("alarms", []),
+        "handling_units": [
+            {"hu_id": h.get("hu_id"), "packs_count": h.get("packs_count"),
+             "location": h.get("location"), "status": h.get("status"),
+             "ts": h.get("ts")}
+            for h in batch.get("handling_units", [])
+        ],
         "verdict": batch.get("verdict") or "PENDING",
         "critical_alarm_during_batch": batch.get("critical_alarm_during_batch", False),
     }
@@ -237,6 +243,26 @@ def _reportlab_pdf(report: dict) -> bytes:
         story.append(at)
     else:
         story.append(Paragraph("No alarms during batch.", styles["Normal"]))
+
+    # Handling units (PR-35)
+    story.append(Paragraph(f"Handling units (PR-35) ({len(report['handling_units'])})", h2))
+    if report["handling_units"]:
+        hrows = [["HU (SSCC-placeholder)", "Packs", "Location", "Status"]]
+        for h in report["handling_units"]:
+            hrows.append([
+                str(h.get("hu_id")), str(h.get("packs_count")),
+                str(h.get("location") or "-"), str(h.get("status")),
+            ])
+        ht = Table(hrows, colWidths=[50 * mm, 25 * mm, 40 * mm, 50 * mm])
+        ht.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f6f8fa")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d0d7de")),
+        ]))
+        story.append(ht)
+    else:
+        story.append(Paragraph("No handling units.", styles["Normal"]))
 
     doc.build(story)
     return buf.getvalue()

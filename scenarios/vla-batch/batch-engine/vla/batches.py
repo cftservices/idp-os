@@ -711,6 +711,7 @@ class BatchRunner:
                        "operator_id": d.get("operator_id")} for d in doses],
             "samples": samples,
             "alarms": alarms,
+            "handling_units": self.db.dw_handling_units.find({"batch_id": batch_id}),
         }
 
     def list_batches(self) -> list[dict]:
