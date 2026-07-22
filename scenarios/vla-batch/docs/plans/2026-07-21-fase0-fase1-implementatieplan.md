@@ -39,7 +39,7 @@
 
 **Interfaces:**
 - Produces: `Database` attribute access `db.dw_batches`, `db.dw_recipes`, `db.dw_materials`, `db.dw_doses`, `db.dw_production`, `db.dw_samples`, `db.dw_batch_events`, `db.dw_alarms`, `db.dw_orders`, `db.dw_equipment_state`. Later tasks use exactly these names.
-- Note: `dw_batch_events` (renamed, 05-Backend name), `dw_production` (renamed). `dw_orders` + `dw_equipment_state` are new (empty until Tasks 4/7).
+- Note: `vla_events` → `dw_batch_events` (05-Backend name), `vla_production` → `dw_production`. `dw_orders` + `dw_equipment_state` are new (empty until Tasks 4/7).
 
 - [ ] **Step 1: Create dev requirements + test package**
 
@@ -105,11 +105,12 @@ COLLECTIONS = [
     "dw_equipment_state",
 ]
 ```
-Update the module docstring collection list the same way. In `seed_recipes()` replace `db.dw_recipes` (2×) and `db.dw_materials` (2×) — these should already be renamed by Tasks 1–5.
+Update the module docstring collection list the same way. In `seed_recipes()` replace `db.vla_recipes` → `db.dw_recipes` (2×) and `db.vla_materials` → `db.dw_materials` (2×).
 
 - [ ] **Step 5: Rename all references in batches.py**
 
-Mechanical replace in `vla/batches.py` (only these five names should occur as `self.db.dw_batches`, `self.db.dw_doses`, `self.db.dw_samples`, `self.db.dw_alarms`, `self.db.dw_batch_events` — already renamed by Tasks 1–5).
+Mechanical replace in `vla/batches.py` (only these five names occur):
+`self.db.vla_batches` → `self.db.dw_batches` · `self.db.vla_doses` → `self.db.dw_doses` · `self.db.vla_samples` → `self.db.dw_samples` · `self.db.vla_alarms` → `self.db.dw_alarms` · `self.db.vla_events` → `self.db.dw_batch_events`.
 Also update the docstring bullet mentioning collection names.
 
 - [ ] **Step 6: Run tests + selftest**
@@ -864,24 +865,47 @@ git -C c:\tools\techflow-os\sub-os\idp-os commit -m "feat(vla): 05-Backend API c
 
 ---
 
-### Task 6: Archive group rename + config/docs sync (closes Fase 0) — ✅ COMPLETED
+### Task 6: Archive group rename + config/docs sync (closes Fase 0)
 
-**Files modified:**
-- `c:\tools\techflow-os\sub-os\idp-os\monstermq\config.yaml` (archive group renamed)
-- `scenarios/vla-batch/docker-compose.vla.yml` (comment line 10)
-- `scenarios/vla-batch/.env.example` (collections comment)
-- `scenarios/vla-batch/README.md` (archive references + collection list)
-- `scenarios/vla-batch/batch-engine/README.md` (collection reference)
+**Files:**
+- Modify: `c:\tools\techflow-os\sub-os\idp-os\monstermq\config.yaml` (archive group `vla_data` → `dw_uns_archive`)
+- Modify: `scenarios/vla-batch/docker-compose.vla.yml` (comment line 10)
+- Modify: `scenarios/vla-batch/.env.example` (collections comment)
+- Modify: `scenarios/vla-batch/README.md` (archive references + collection list)
 
 **Interfaces:**
-- Produces: MonsterMQ archives `DairyWorks/Vla/#` into Mongo collection `dw_uns_archive` (05-Backend §3). ⚠ On the VPS this is a clean-start change: old demo data will be dropped at deploy.
+- Produces: MonsterMQ archives `DairyWorks/Vla/#` into Mongo collection `dw_uns_archive` (05-Backend §3). ⚠ On the VPS this is a clean-start change: the old `vla_data` collection stays behind as dead data until dropped at deploy (per design: old demo data may go).
 
-**Completion status:**
-- [x] Archive group name synced across config.yaml + docker-compose overlay + .env.example + docs
-- [x] All references to domain collections updated to new `dw_*` naming throughout README.md + batch-engine/README.md
-- [x] Verification grep confirms zero stragglers in *.py, *.yml, *.yaml, *.sh, *.md, *.html files
-- [x] Test suite: `python -m pytest tests -q` + `python selftest.py` both PASS
-- [x] Committed to repo with trailers
+- [ ] **Step 1: Patch the archive group**
+
+In `sub-os/idp-os/monstermq/config.yaml` find the group (line ~47):
+```yaml
+    # archived to Mongo collection vla_data and bridged to TDengine.
+    - Name: vla_data
+```
+Replace with:
+```yaml
+    # archived to Mongo collection dw_uns_archive and bridged to TDengine.
+    - Name: dw_uns_archive
+```
+(Only the group name + comment; topic filter `DairyWorks/Vla/#` and retention stay.)
+
+- [ ] **Step 2: Sync comments/docs**
+
+- `docker-compose.vla.yml` line 10: `--archive group vla_data--> mongo (idp.vla_data)` → `--archive group dw_uns_archive--> mongo (idp.dw_uns_archive)`.
+- `.env.example` line ~29: replace the collection enumeration with `#  dw_batches, dw_recipes, dw_materials, dw_doses, dw_production, dw_samples, dw_batch_events, dw_alarms, dw_orders, dw_equipment_state) + archive collection dw_uns_archive.`
+- `README.md`: update the two `vla_data` architecture-diagram mentions and the config table row (line ~168) to `dw_uns_archive`; update any `vla_*` collection lists to the new names.
+
+- [ ] **Step 3: Verify no stragglers**
+
+Run from `scenarios/vla-batch`: `Get-ChildItem -Recurse -Include *.py,*.yml,*.yaml,*.sh,*.md,*.html | Select-String -Pattern 'vla_data|vla_batches|vla_doses|vla_samples|vla_events|vla_alarms|vla_production|vla_recipes|vla_materials'` → only hits allowed: none. Then `python -m pytest tests -q` + `python selftest.py` → PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git -C c:\tools\techflow-os\sub-os\idp-os add monstermq/config.yaml scenarios/vla-batch
+git -C c:\tools\techflow-os\sub-os\idp-os commit -m "refactor(vla): archive group vla_data -> dw_uns_archive + docs sync (fase 0.1 afgerond)"
+```
 
 ---
 
