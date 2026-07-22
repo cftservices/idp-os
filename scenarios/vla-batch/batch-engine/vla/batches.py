@@ -46,6 +46,18 @@ def _iso(dt: Optional[datetime] = None) -> str:
 # Map SetSetpoint dose-target short names -> recipe material ids.
 _DOSE_TARGET = {m: f"dose.{m}" for m in M.DOSE_MATERIALS}
 
+# Equipment covered by the state feed (06-Model EquipmentState).
+EQUIPMENT_IDS = ["receiving-tank-01", "process-tank-01", "cook-unit-01",
+                 "cooler-01", "filler-01"]
+
+# Which equipment is Running in which batch state.
+_RUNNING_IN_STATE = {
+    M.DOSING: {"receiving-tank-01", "process-tank-01"},
+    M.COOKING: {"cook-unit-01"},
+    M.COOLING: {"cooler-01"},
+    M.FILLING: {"filler-01"},
+}
+
 # QA sample plan (06-Model: dose_check | cook_temp | hold | viscosity) is booked
 # inline: dose_check at end of DOSING, cook_temp + hold at cook capture,
 # viscosity during COOLING (the Solve input).
@@ -157,6 +169,40 @@ class BatchRunner:
             "hold_sec": recipe.hold_sec,
             "cool_target_C": recipe.cool_target_C,
         })
+
+    # --------------------------------------------------------------- production
+
+    def _book_production(self, batch_id: str, packs: int, rejects: int,
+                         source: str, operator_id: Optional[str] = None) -> dict:
+        """Book produced finished goods (06-Model Production; source =
+        filler_counter | operator_booking)."""
+        row = {
+            "batch_id": batch_id,
+            "packs": int(packs),
+            "reject_count": int(rejects),
+            "pack_size_L": 1,
+            "source": source,
+            "operator_id": operator_id,
+            "ts": _iso(),
+        }
+        self.db.dw_production.insert_one(row)
+        total = sum(p["packs"] for p in
+                    self.db.dw_production.find({"batch_id": batch_id}))
+        self._update(batch_id, {"packs_total": total})
+        self._event(batch_id, "production_booked",
+                    {"packs": int(packs), "source": source,
+                     "packs_total": total})
+        return row
+
+    def _feed_equipment_state(self, batch_state: str) -> None:
+        running = _RUNNING_IN_STATE.get(batch_state, set())
+        for eq in EQUIPMENT_IDS:
+            self.db.dw_equipment_state.insert_one({
+                "equipment_id": eq,
+                "area": M.area_of(eq),
+                "state": "Running" if eq in running else "Idle",
+                "ts": _iso(),
+            })
 
     # ------------------------------------------------------------------- start
 
@@ -357,7 +403,8 @@ class BatchRunner:
 
         # --- FILLING: packs ---
         self._update(batch_id, {"state": M.FILLING})
-        self._update(batch_id, {"packs_total": packs, "reject_count": rejects})
+        self._update(batch_id, {"reject_count": rejects})
+        self._book_production(batch_id, packs, rejects, source="filler_counter")
         self._event(batch_id, "filling_done",
                     {"packs_total": packs, "reject_count": rejects})
 
@@ -643,6 +690,9 @@ class BatchRunner:
         # mirror line-level Batch/Status to UNS
         if self.bus is not None and "state" in fields:
             self.bus.command("Batch", "state", value=fields["state"])
+        # feed equipment state history on batch state change
+        if "state" in fields:
+            self._feed_equipment_state(fields["state"])
 
     def _event(self, batch_id: str, event_type: str, payload: dict) -> None:
         self.db.dw_batch_events.insert_one({
