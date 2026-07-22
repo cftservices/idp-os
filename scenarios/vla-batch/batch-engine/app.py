@@ -27,6 +27,7 @@ from vla import model as M
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
+from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
 from vla.orders import OrderManager
 from vla.report import render_json, render_pdf
@@ -52,7 +53,7 @@ app.add_middleware(
 )
 
 STATE: dict = {"db": None, "bus": None, "control": None, "orders": None, "runner": None,
-               "scan": None}
+               "scan": None, "handling": None}
 API = "/api/v1"
 
 
@@ -94,6 +95,16 @@ class ScanLabel(BaseModel):
     batch_id: str
     material_id: str
     lot_no: str
+    operator_id: str | None = None
+
+
+class CreateHu(BaseModel):
+    batch_id: str
+    packs_count: int
+    operator_id: str | None = None
+
+
+class HuAction(BaseModel):
     operator_id: str | None = None
 
 
@@ -139,6 +150,13 @@ def _scan() -> "ScanFlow":
     return s
 
 
+def _handling() -> "HandlingUnitManager":
+    h = STATE.get("handling")
+    if h is None:
+        raise HTTPException(503, "engine not initialized")
+    return h
+
+
 def _scan_call(fn, *args, **kw):
     try:
         return fn(*args, **kw)
@@ -166,7 +184,8 @@ def _startup() -> None:
     orders = OrderManager(db, bus)
     runner = BatchRunner(db, bus, control=control, orders=orders)
     STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
-                  "runner": runner, "scan": ScanFlow(db, runner, orders)})
+                  "runner": runner, "scan": ScanFlow(db, runner, orders),
+                  "handling": HandlingUnitManager(db)})
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
@@ -438,3 +457,24 @@ def admin_command(body: AdminCommand):
 
     return {"accepted": True, "path": "opcua", "equipment_id": body.equipment_id,
             "cmd": cmd, "opcua": result}
+
+
+@app.post(f"{API}/hu")
+def create_hu(body: CreateHu):
+    return _scan_call(_handling().create_hu, body.batch_id, body.packs_count,
+                      body.operator_id)
+
+
+@app.post(f"{API}/hu/{{hu_id}}/putaway")
+def putaway_hu(hu_id: str, body: HuAction):
+    return _scan_call(_handling().putaway, hu_id, body.operator_id)
+
+
+@app.post(f"{API}/hu/{{hu_id}}/ship")
+def ship_hu(hu_id: str, body: HuAction):
+    return _scan_call(_handling().ship, hu_id, body.operator_id)
+
+
+@app.get(f"{API}/hu")
+def list_hus(batch_id: str | None = Query(default=None)):
+    return _handling().list_hus(batch_id)
