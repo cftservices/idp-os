@@ -231,6 +231,24 @@ def equipment_snapshot():
     return eq.snapshot()
 
 
+@app.get(f"{API}/oee")
+def equipment_oee():
+    """PR-21: per-equipment OEE-light (availability x performance x quality)."""
+    eq = STATE.get("equipment")
+    if eq is None:
+        raise HTTPException(503, "engine not initialized")
+    return eq.oee()
+
+
+@app.get(f"{API}/equipment/health")
+def equipment_health():
+    """PR-32: equipment snapshot extended with heat-up trend + open CBM alerts."""
+    eq = STATE.get("equipment")
+    if eq is None:
+        raise HTTPException(503, "engine not initialized")
+    return eq.health()
+
+
 @app.post(f"{API}/equipment/{{equipment_id}}/cip")
 def equipment_cip(equipment_id: str, body: CipRequest):
     """PR-29: CIP cleaning action — resets fouling counter, clears Dirty,

@@ -225,3 +225,88 @@ class EquipmentMonitor:
         if equipment_id is not None:
             query["equipment_id"] = equipment_id
         return list(self.db.dw_cbm_alerts.find(query))
+
+    # -------------------------------------------------------------- OEE-light
+
+    def _running_and_down_seconds(self, equipment_id: str) -> tuple[float, float]:
+        """Same interval technique as `running_hours`: walk the state-history
+        rows and accumulate the [ts_i, ts_i+1) duration into running_sec
+        (state == Running) or down_sec (any other state EXCEPT Idle/Allocated,
+        which are neutral and excluded from both buckets)."""
+        rows = [r for r in self.db.dw_equipment_state.find(
+            {"equipment_id": equipment_id})]
+        running_sec = 0.0
+        down_sec = 0.0
+        for i, row in enumerate(rows):
+            start = _parse(row["ts"])
+            end = _parse(rows[i + 1]["ts"]) if i + 1 < len(rows) \
+                else datetime.now(timezone.utc)
+            dur = max(0.0, (end - start).total_seconds())
+            state = row.get("state")
+            if state == "Running":
+                running_sec += dur
+            elif state in ("Idle", "Allocated"):
+                continue
+            else:
+                # Down / Error / Dirty (and any other non-neutral state)
+                down_sec += dur
+        return running_sec, down_sec
+
+    def _quality(self) -> float:
+        """PR-21: plant-wide quality = Sigma packs_total of APPROVED batches /
+        Sigma packs_total of COMPLETE batches (1.0 when no COMPLETE batches)."""
+        complete = list(self.db.dw_batches.find({"state": M.COMPLETE}))
+        total = sum(b.get("packs_total", 0) for b in complete)
+        if total == 0:
+            return 1.0
+        approved = sum(b.get("packs_total", 0) for b in complete
+                       if b.get("verdict") == M.APPROVED)
+        return approved / total
+
+    def oee(self) -> list[dict]:
+        """PR-21: per-equipment OEE-light — availability from state-history
+        durations, performance (cook-unit-01 only, heat-up trend vs baseline,
+        1.0 elsewhere / when no history), quality (plant-wide, same for every
+        row). All four numbers rounded to 4 decimals."""
+        quality = round(self._quality(), 4)
+        out = []
+        for eq in EQUIPMENT_IDS:
+            running_sec, down_sec = self._running_and_down_seconds(eq)
+            denom = running_sec + down_sec
+            availability = round(running_sec / denom, 4) if denom > 0 else 1.0
+
+            if eq == "cook-unit-01":
+                hist = self.ensure_meta(eq).get("heatup_history") or []
+                if hist:
+                    avg = sum(h["heatup_sec"] for h in hist) / len(hist)
+                    performance = round(min(1.0, BASE_HEATUP_SEC / avg), 4)
+                else:
+                    performance = 1.0
+            else:
+                performance = 1.0
+
+            oee = round(availability * performance * quality, 4)
+            out.append({
+                "equipment_id": eq,
+                "availability": availability,
+                "performance": performance,
+                "quality": quality,
+                "oee": oee,
+            })
+        return out
+
+    # -------------------------------------------------------------- health
+
+    def health(self) -> list[dict]:
+        """PR-32: snapshot() extended per equipment with the cook heat-up
+        trend (raw heatup_history) and the equipment's own open CBM alerts."""
+        out = []
+        for row in self.snapshot():
+            eq = row["equipment_id"]
+            meta = self.ensure_meta(eq)
+            out.append({
+                **row,
+                "heatup_trend": list(meta.get("heatup_history") or []),
+                "open_cbm_alerts": self.open_alerts(eq),
+            })
+        return out
