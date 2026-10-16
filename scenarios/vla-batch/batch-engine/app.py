@@ -10,6 +10,10 @@ Env:
   MQTT_PORT   default 1883
   MQTT_WAIT_S default 3.0
   AUTO_START  default 1 -> POST /batches auto-starts the batch
+  DEMO_AUTOPILOT default 0 -> 1 keeps batches flowing unattended
+                 (see vla/autopilot.py for its DEMO_AUTOPILOT_* settings;
+                 DEMO_AUTOPILOT_WAREHOUSE=0 switches off the pallet flow
+                 of vla/warehouse.py)
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from vla import alarms as A, inventory, kpi as K, line as L, model as M
+from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
@@ -37,6 +42,7 @@ from vla.period_reports import (assemble_equipment_report,
                                 render_period_pdf)
 from vla.report import render_json, render_pdf
 from vla.scan import ScanFlow, ScanRejected
+from vla.warehouse import WarehouseSim
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -230,12 +236,31 @@ def _startup() -> None:
                   "orders": orders,
                   "runner": runner, "scan": ScanFlow(db, runner, orders),
                   "handling": HandlingUnitManager(db), "equipment": equipment})
+    if os.environ.get("DEMO_AUTOPILOT", "0").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            warehouse = None
+            if os.environ.get("DEMO_AUTOPILOT_WAREHOUSE", "1").strip().lower() \
+                    in ("1", "true", "yes", "on"):
+                warehouse = WarehouseSim(db, STATE["handling"], AUTOPILOT_OPERATOR)
+            pilot = Autopilot(
+                db, runner, equipment=equipment, orders=orders, bus=bus,
+                recipe_id=os.environ.get("DEMO_AUTOPILOT_RECIPE", "chocolate-vla-1L"),
+                gap_s=float(os.environ.get("DEMO_AUTOPILOT_GAP_S", "10")),
+                keep_hours=float(os.environ.get("DEMO_AUTOPILOT_KEEP_HOURS", "24")),
+                warehouse=warehouse)
+            pilot.start()
+            STATE["autopilot"] = pilot
+        except ValueError as e:
+            log.error("autopilot not started: %s", e)
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
 
 @app.on_event("shutdown")
 def _shutdown() -> None:
+    pilot = STATE.get("autopilot")
+    if pilot is not None:
+        pilot.stop()
     bus = STATE.get("bus")
     if bus is not None:
         bus.stop()
@@ -246,6 +271,13 @@ def _shutdown() -> None:
 @app.get(f"{API}/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get(f"{API}/autopilot")
+def autopilot_status():
+    """Demo-autopilot status: off, or what it last did."""
+    pilot = STATE.get("autopilot")
+    return dict(pilot.status) if pilot is not None else {"enabled": False}
 
 
 @app.get(f"{API}/tags")

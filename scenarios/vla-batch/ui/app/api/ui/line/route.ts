@@ -126,15 +126,33 @@ export async function GET() {
     tags?.[statusTopic(area, eq, tag)] ?? null;
 
   /**
-   * Verouderd volgens drie onafhankelijke signalen. Een waarde hoeft er maar
-   * een te raken: quality die niet GOOD is, een leeftijd boven de drempel, of
-   * alleen ooit een retained bericht gezien (dan is er nooit iets live geweest).
+   * De jongste leeftijd over alle tags van een unit: de hartslag van de bron.
+   *
+   * De bus publiceert alleen bij verandering. De leeftijd van een losse tag zegt
+   * dus hoe lang de WAARDE niet veranderde, niet of de BRON nog leeft. Een vol
+   * tankniveau tijdens het koken of een vast setpoint werd daardoor na 90 s
+   * "verouderd" terwijl dezelfde unit elke seconde state en draaiuren stuurde.
    */
-  function isStale(r: Reading | null): boolean {
+  const heartbeat = new Map<string, number>();
+  for (const [topic, r] of Object.entries(tags ?? {})) {
+    if (r.retained || r.age_s === null) continue;
+    const unit = topic.split("/Status/")[0];
+    heartbeat.set(unit, Math.min(heartbeat.get(unit) ?? Infinity, r.age_s));
+  }
+
+  /**
+   * Verouderd volgens drie onafhankelijke signalen. Een waarde hoeft er maar
+   * een te raken: quality die niet GOOD is, alleen ooit een retained bericht
+   * gezien (dan is er nooit iets live geweest), of een unit die als geheel
+   * langer dan de drempel zwijgt.
+   */
+  function isStale(r: Reading | null, area: string, eq: string): boolean {
     if (!r) return false;
     if (r.retained) return true;
     if (r.quality && r.quality !== "GOOD" && r.quality !== "UNKNOWN") return true;
-    return r.age_s !== null && r.age_s > staleAfter;
+    if (r.age_s === null || r.age_s <= staleAfter) return false;
+    const unitAge = heartbeat.get(statusTopic(area, eq, "").split("/Status/")[0]);
+    return unitAge === undefined || unitAge > staleAfter;
   }
 
   const steps = STEPS.map((s) => {
@@ -148,13 +166,13 @@ export async function GET() {
         value: live ?? config,
         // Configuratie is niet verouderd: hij hoort niet te veranderen. Hem als
         // stale tonen zou een storing suggereren die er niet is.
-        stale: config !== null ? false : isStale(reading(s.area, s.equipment, t.tag)),
+        stale: config !== null ? false : isStale(reading(s.area, s.equipment, t.tag), s.area, s.equipment),
         /** true als deze waarde uit het recept komt en niet van de bus. */
         from_config: config !== null,
       };
     });
 
-    const stale = isStale(primary) || secondary.some((x) => x.stale);
+    const stale = isStale(primary, s.area, s.equipment) || secondary.some((x) => x.stale);
     const value = toNumber(primary?.value);
 
     // Alleen de kookstap heeft een tweezijdige specificatie. De rest toont een

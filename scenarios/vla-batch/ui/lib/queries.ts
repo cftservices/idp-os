@@ -179,3 +179,12 @@ export function useHandlingUnits<T = unknown[]>(batchId: string | null, extra?: 
     { enabled: Boolean(batchId), ...extra },
   );
 }
+
+/**
+ * Alle HU's over alle batches: zonder batch_id geeft de engine de hele lijst.
+ * Eigen key ("*"), zodat hij nooit botst met een batch die toevallig zo heet
+ * of met de uitgeschakelde "geen"-query hierboven.
+ */
+export function useAllHandlingUnits<T = unknown[]>(extra?: Extra<T>) {
+  return usePolled<T>(keys.hu("*"), "/hu", POLL.lists, extra);
+}

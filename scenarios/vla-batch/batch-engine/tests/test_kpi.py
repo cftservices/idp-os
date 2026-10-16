@@ -395,3 +395,15 @@ def test_dirty_counts_as_productive_not_downtime():
     value, _ = kpi._utilization_efficiency(db, *kpi.window_bounds("week"))
     assert value is not None
     assert value > 50.0, f"benutting {value} is onwaarschijnlijk laag voor een draaiende lijn"
+
+def test_naive_due_date_counts_as_utc_and_does_not_crash_otif():
+    """Een order met een kale datum (zonder offset) legde /kpi/summary plat met
+    een TypeError in _within; hij telt nu als UTC."""
+    start = datetime(2026, 10, 6, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    assert kpi._within("2026-10-06T12:00:00", start, end)
+    assert not kpi._within("2026-10-07", start, end)
+    db = get_db()
+    db.dw_orders.insert_one({"order_id": "PO-NAIVE", "due_date": "2026-10-06",
+                             "status": "OPEN"})
+    kpi._otif(db, start, end)

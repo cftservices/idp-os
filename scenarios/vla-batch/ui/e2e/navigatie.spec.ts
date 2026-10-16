@@ -15,6 +15,7 @@ import { test, expect } from "@playwright/test";
 const SCHERMEN = [
   { pad: "/", naam: "Plant" },
   { pad: "/management", naam: "Management" },
+  { pad: "/site", naam: "3D Site" },
   { pad: "/orders", naam: "Orders" },
   { pad: "/batches", naam: "Batches" },
   { pad: "/equipment", naam: "Equipment" },

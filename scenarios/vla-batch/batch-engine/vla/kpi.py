@@ -84,12 +84,16 @@ def _iso(dt: datetime) -> str:
 
 
 def _parse(ts) -> Optional[datetime]:
+    """ISO string to an aware datetime. A value without offset (a bare date
+    from an older client, say) counts as UTC: comparing it with the aware
+    window bounds would otherwise raise and take the whole summary down."""
     if not ts:
         return None
     try:
-        return datetime.fromisoformat(ts)
+        dt = datetime.fromisoformat(ts)
     except (TypeError, ValueError):
         return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _within(ts, start: datetime, end: datetime) -> bool:

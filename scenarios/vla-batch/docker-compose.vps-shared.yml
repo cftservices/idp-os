@@ -42,6 +42,24 @@ services:
     ports:
       - "127.0.0.1:3001:3000"
 
+  # Onbemande demo: de engine start zelf de volgende batch, zodat elke batch
+  # ook in de MES-laag landt (record, doseringen, verdict, EBR). Zonder dit
+  # ketent alleen de fabriek, en blijven de schermen op de laatste handmatige
+  # batch staan (op 06-10-2026: nog steeds die van 4 augustus).
+  # De fabriek wacht 30 s na COMPLETE voor hij zelf ketent, zodat de autopilot
+  # (10 s pauze) wint; ligt de engine eruit, dan blijft de fabriek produceren.
+  # Lokaal staat dit bewust uit: handmatig testen botst anders met de autopilot.
+  vla-factory:
+    environment:
+      AUTOSTART_DELAY_S: "30"
+
+  vla-batch-engine:
+    environment:
+      DEMO_AUTOPILOT: "1"
+      DEMO_AUTOPILOT_RECIPE: chocolate-vla-1L
+      DEMO_AUTOPILOT_GAP_S: "10"
+      DEMO_AUTOPILOT_KEEP_HOURS: "24"
+
   # taos-explorer web-UI (poort 6060) alleen op loopback — host-nginx proxiet
   # tdengine.<domain> hiernaartoe (TLS + TDengine-eigen login root/taosdata).
   # REST-API (6041) blijft volledig intern.

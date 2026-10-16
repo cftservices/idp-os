@@ -36,6 +36,7 @@ const OPS: Item[] = [
 const MGMT: Item[] = [
   { href: "/", label: "Plant", hint: "Ligt de dienst op plan" },
   { href: "/management", label: "Management", hint: "KPI's en verliesblok" },
+  { href: "/site", label: "3D Site", hint: "Hele site in één beeld, klik voor status" },
   { href: "/orders", label: "Orders", hint: "Aanmaken, batchen, sluiten" },
   { href: "/batches", label: "Batches", hint: "Verloop en verdict" },
   { href: "/equipment", label: "Equipment", hint: "CIP, draaiuren, OEE" },
