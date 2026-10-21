@@ -14,7 +14,9 @@ const STATE_WORDS = /stil|draait|aandacht|alarm|storing|verouderd|geen data|verv
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/site");
-  await page.waitForLoadState("networkidle").catch(() => {});
+  // Geen networkidle: de twin pollt doorlopend, dus die toestand komt niet,
+  // en zonder eigen timeout vreet het wachten de hele testtijd op.
+  await expect(page.locator("[data-twin-hud]")).toBeVisible({ timeout: 30_000 });
 });
 
 test("de scène tekent een canvas en de lijn staat in de objectlijst", async ({ page }) => {
@@ -41,7 +43,8 @@ test("een object kiezen opent het paneel, Escape sluit het", async ({ page }) =>
 test("het paneel linkt door naar het bestaande scherm", async ({ page }) => {
   await page.locator('[data-twin-object="equipment:cook-unit-01"]').click();
   await page.locator("[data-twin-panel]").getByRole("link", { name: /Equipment-overzicht/ }).click();
-  await expect(page).toHaveURL(/\/equipment$/);
+  // Ruim: met software-WebGL kost het afbreken van de scène zelf al seconden.
+  await expect(page).toHaveURL(/\/equipment$/, { timeout: 20_000 });
 });
 
 test("een KPI zonder waarde toont een streepje, nooit een nul", async ({ page }) => {
@@ -54,15 +57,37 @@ test("een KPI zonder waarde toont een streepje, nooit een nul", async ({ page })
 });
 
 test("op een telefoon blijven scène en paneel binnen het scherm", async ({ page }) => {
+  // Laadt de scène twee keer (goto + reload); met software-WebGL krap binnen 60 s.
+  test.setTimeout(120_000);
   // scrollWidth zag dit niet: de stage stak uit, maar de pagina verbreedde niet.
   await page.setViewportSize({ width: 375, height: 812 });
   await page.reload();
+  await page.getByRole("button", { name: "Objecten" }).click();
   await page.locator('[data-twin-object="equipment:cook-unit-01"]').click();
   for (const sel of [".twin-stage", "[data-twin-panel]"]) {
     const box = await page.locator(sel).boundingBox();
     expect(box, sel).not.toBeNull();
     expect(box!.x + box!.width, `${sel} steekt rechts uit`).toBeLessThanOrEqual(375);
   }
+});
+
+test("zoeken met / vindt een object en opent de detailkaart", async ({ page }) => {
+  await page.keyboard.press("/");
+  const search = page.getByRole("combobox", { name: /Zoek een object/ });
+  await expect(search).toBeFocused();
+  await search.fill("cook");
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await search.press("Enter");
+  await expect(page.locator("[data-twin-panel]")).toHaveAttribute("data-twin-panel", /^equipment:/);
+});
+
+test("tabbladen tonen aantallen en wisselen de lijst", async ({ page }) => {
+  const tab = page.getByRole("tab", { name: /Grondstoffen/ });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(LINE_OBJECTS)).toHaveCount(0);
+  await page.getByRole("tab", { name: /Lijn/ }).click();
+  await expect(page.locator(LINE_OBJECTS)).toHaveCount(5);
 });
 
 /*
@@ -81,6 +106,7 @@ test("HU's die op verzending wachten, zetten een truck aan een dock", async ({ p
     }),
   );
   await page.reload();
+  await page.getByRole("tab", { name: /Magazijn/ }).click();
   const dock = page.locator('[data-twin-object="dock:B-TEST-1"]');
   await expect(dock).toBeVisible();
   await dock.click();

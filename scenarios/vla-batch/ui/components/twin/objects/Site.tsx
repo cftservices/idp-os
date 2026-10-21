@@ -94,7 +94,13 @@ export function SiteGround() {
         <planeGeometry args={[140, 90]} />
         <meshStandardMaterial color={palette.ground} />
       </mesh>
-      <gridHelper args={[120, 60, palette["ground-line"], palette["ground-line"]]} position={[0, 0.01, 0]} />
+      {/* stoeprand langs de weg: witte band zoals in de WareTrack-look */}
+      {[-1.1, 3.9].map((dz) => (
+        <mesh key={dz} position={[(ROAD_X[0] + ROAD_X[1]) / 2, 0.06, ROAD_Z + dz]} receiveShadow>
+          <boxGeometry args={[roadLen, 0.12, 0.25]} />
+          <meshStandardMaterial color={palette["roof-edge"]} roughness={0.8} />
+        </mesh>
+      ))}
 
       {/* weg met middenstreep */}
       <mesh position={[(ROAD_X[0] + ROAD_X[1]) / 2, 0.02, ROAD_Z + 1.4]} receiveShadow>
@@ -170,7 +176,7 @@ export function SiteGround() {
       ))}
       <mesh position={[(x0 + x1) / 2, HALL.wall * 1.65, z0 + 0.3]}>
         <boxGeometry args={[x1 - x0 + 0.4, 0.2, 0.8]} />
-        <meshStandardMaterial color={palette["hall-roof"]} />
+        <meshStandardMaterial color={palette["roof-edge"]} roughness={0.7} />
       </mesh>
       {/* looplijn op de vloer */}
       <mesh position={[(x0 + x1) / 2, 0.11, 2.4]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -181,12 +187,17 @@ export function SiteGround() {
       {trees.map(([x, z, s], i) => (
         <group key={i} position={[x, 0, z]} scale={s}>
           <mesh position={[0, 0.5, 0]} castShadow>
-            <cylinderGeometry args={[0.15, 0.2, 1, 6]} />
-            <meshStandardMaterial color={palette.pallet} />
+            <cylinderGeometry args={[0.13, 0.17, 1, 8]} />
+            <meshStandardMaterial color={palette["tree-trunk"]} roughness={0.9} />
           </mesh>
-          <mesh position={[0, 1.8, 0]} castShadow>
-            <coneGeometry args={[0.9, 2.2, 7]} />
-            <meshStandardMaterial color={palette.tree} flatShading />
+          {/* ronde speelgoedboom: twee bollen, zacht belicht */}
+          <mesh position={[0, 1.65, 0]} castShadow>
+            <sphereGeometry args={[0.85, 18, 14]} />
+            <meshStandardMaterial color={palette.tree} roughness={0.75} />
+          </mesh>
+          <mesh position={[0.35, 2.15, 0.2]} castShadow>
+            <sphereGeometry args={[0.55, 16, 12]} />
+            <meshStandardMaterial color={palette.tree} roughness={0.75} />
           </mesh>
         </group>
       ))}

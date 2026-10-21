@@ -129,6 +129,21 @@ Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
   elke putaway en laadactie na met twee heftrucks. `RACK_SLOTS` staat in
   `warehouse.py` én in `ui/lib/twin/layout.ts` en moet gelijk blijven.
   Status: `warehouse_last` in `GET /api/v1/autopilot`.
+- **Logistiek-simulatie** (`vla/logistics_sim.py`, `DEMO_AUTOPILOT_LOGISTICS`,
+  standaard `1`): voegt aan elke zending een fictieve klant, bestemming en ETA
+  toe, en daarnaast accu en ritten per heftruck en per grondstof een
+  leverancier: een RVS-tankwagen voor melk, een bulkwagen voor suiker en
+  zetmeel, en een palletwagen voor cacao. Zakt een silo onder 50% van zijn
+  capaciteit (4× de bestelgrens), dan wordt er besteld; tijdens het lossen
+  boekt de leverancier in delen echte goederenontvangsten (`inventory.receive`),
+  begrensd op de capaciteit. Elke grondstof heeft een eigen losplaats
+  (`INBOUND_BAYS` in `ui/lib/twin/flow.ts`). Uitgaande trailers aan het dock
+  zijn doorzichtig en tonen de geladen pallets.
+  De ritten staan in geheugen en beginnen na een herstart opnieuw. De twin leest
+  ze via `GET /api/v1/logistics` (`shipments`, `forklifts`, `inbounds`,
+  `inbound` = alleen melk, voor oude clients, en `source`).
+  De sparklines in de overlay vullen zich in de browser; daar is geen
+  historie-endpoint voor.
 - Een batch die liep tijdens een engine-herstart heeft geen follow-thread meer.
   Hij blijft in zijn fase staan, maar blokkeert de autopilot niet.
 

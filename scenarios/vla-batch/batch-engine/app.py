@@ -13,6 +13,8 @@ Env:
   DEMO_AUTOPILOT default 0 -> 1 keeps batches flowing unattended
                  (see vla/autopilot.py for its DEMO_AUTOPILOT_* settings;
                  DEMO_AUTOPILOT_WAREHOUSE=0 switches off the pallet flow
+                 DEMO_AUTOPILOT_LOGISTICS=0 switches off the simulated
+                 shipments/forklifts/tanker (GET /api/v1/logistics)
                  of vla/warehouse.py)
 """
 
@@ -43,6 +45,7 @@ from vla.period_reports import (assemble_equipment_report,
 from vla.report import render_json, render_pdf
 from vla.scan import ScanFlow, ScanRejected
 from vla.warehouse import WarehouseSim
+from vla.logistics_sim import LogisticsSim
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -242,6 +245,11 @@ def _startup() -> None:
             if os.environ.get("DEMO_AUTOPILOT_WAREHOUSE", "1").strip().lower() \
                     in ("1", "true", "yes", "on"):
                 warehouse = WarehouseSim(db, STATE["handling"], AUTOPILOT_OPERATOR)
+                if os.environ.get("DEMO_AUTOPILOT_LOGISTICS", "1").strip().lower() \
+                        in ("1", "true", "yes", "on"):
+                    warehouse.logistics = LogisticsSim(db, AUTOPILOT_OPERATOR,
+                                                       events=runner._event)
+                    STATE["logistics"] = warehouse.logistics
             pilot = Autopilot(
                 db, runner, equipment=equipment, orders=orders, bus=bus,
                 recipe_id=os.environ.get("DEMO_AUTOPILOT_RECIPE", "chocolate-vla-1L"),
@@ -278,6 +286,18 @@ def autopilot_status():
     """Demo-autopilot status: off, or what it last did."""
     pilot = STATE.get("autopilot")
     return dict(pilot.status) if pilot is not None else {"enabled": False}
+
+
+@app.get(f"{API}/logistics")
+def logistics_overview():
+    """Shipments, forklifts and inbound milk for the 3D twin (source: demo-sim).
+
+    Only with the autopilot warehouse flow on; otherwise an empty, labelled
+    answer so the twin can say "no logistics data" instead of failing."""
+    sim = STATE.get("logistics")
+    if sim is None:
+        return {"source": None, "shipments": [], "forklifts": [], "inbound": None}
+    return sim.snapshot()
 
 
 @app.get(f"{API}/tags")

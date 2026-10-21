@@ -10,7 +10,9 @@ import {
   useEquipmentHealth,
   useInventory,
   useKpiSummary,
+  useLogistics,
 } from "@/lib/queries";
+import { asSimLogistics, type SimLogistics } from "./flow";
 import type { KpiValue } from "@/lib/types";
 import {
   deriveLogistics,
@@ -60,6 +62,10 @@ export type TwinModel = {
   logistics: Logistics;
   logisticsVisual: ReturnType<typeof logisticsVisuals>;
   husAvailable: boolean;
+  /** Ruwe HU-lijst, voor de batchtijdlijn na COMPLETE. */
+  hus: Hu[];
+  /** Demo-logistiek van de engine (zendingen, heftrucks, tankwagen); null als die uit staat. */
+  sim: SimLogistics | null;
   kpis: KpiValue[];
   kpiWindow: string;
   alarmsOpen: AlarmLike[];
@@ -91,6 +97,7 @@ export function useTwinData(): TwinModel {
   const hus = useAllHandlingUnits<Hu[]>();
   const kpiWindow = "day";
   const kpi = useKpiSummary(kpiWindow, false);
+  const sim = useLogistics<unknown>();
   const now = useNow(1000);
 
   return useMemo(() => {
@@ -133,6 +140,8 @@ export function useTwinData(): TwinModel {
       logistics,
       logisticsVisual: logisticsVisuals(logistics, husAvailable, engineReachable),
       husAvailable,
+      hus: husAvailable ? (hus.data as Hu[]) : [],
+      sim: asSimLogistics(sim.data),
       kpis: kpi.data?.kpis ?? [],
       kpiWindow,
       alarmsOpen: openAlarms,
@@ -142,5 +151,5 @@ export function useTwinData(): TwinModel {
       },
       now,
     };
-  }, [line.data, line.isError, health.data, alarms.data, inventory.data, hus.data, kpi.data, now]);
+  }, [line.data, line.isError, health.data, alarms.data, inventory.data, hus.data, kpi.data, sim.data, now]);
 }

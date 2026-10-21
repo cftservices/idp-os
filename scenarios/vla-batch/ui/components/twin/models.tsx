@@ -6,7 +6,7 @@
  */
 import { Suspense, useMemo } from "react";
 import { Clone, useGLTF } from "@react-three/drei";
-import { Box3, Vector3 } from "three";
+import { Box3, Vector3, type BufferGeometry, type Material, type Matrix4, type Mesh } from "three";
 
 export type PropName = "blusser" | "doos" | "gereedschapkar" | "kist" | "krat" | "schakelkast" | "vat";
 const NAMES: PropName[] = ["blusser", "doos", "gereedschapkar", "kist", "krat", "schakelkast", "vat"];
@@ -44,4 +44,54 @@ export function Prop({
 
 export function preloadProps() {
   NAMES.forEach((n) => useGLTF.preload(path(n)));
+  OIP_FILES.forEach((n) => useGLTF.preload(oipPath(n)));
+}
+
+/**
+ * Modellen uit Open Industry Project (MIT, zie public/models/oip/CREDITS.md).
+ * Die worden niet als geheel geplaatst maar per onderdeel: een robotarm en een
+ * dockleveller hebben scharnieren, en die bouwen we met eigen groepen. De
+ * knoop zelf verplaatsen we nooit, want meshopt heeft de dequantisatie in de
+ * knooptransformatie gebakken; we nemen hem over als vaste matrix.
+ */
+export type OipFile = "robot" | "dockdeur" | "leveller" | "trailer";
+const OIP_FILES: OipFile[] = ["robot", "dockdeur", "leveller", "trailer"];
+const oipPath = (n: OipFile) => `/models/oip/${n}.glb`;
+
+export type OipPart = { geometry: BufferGeometry; material: Material; matrix: Matrix4 };
+
+/** Per glTF-knoop de meshes; een knoop met meerdere primitieven levert er meer dan één. */
+export function useOipParts(file: OipFile): Record<string, OipPart[]> {
+  const { scene } = useGLTF(oipPath(file));
+  return useMemo(() => {
+    scene.updateMatrixWorld(true);
+    const parts: Record<string, OipPart[]> = {};
+    scene.traverse((o) => {
+      const m = o as Mesh;
+      if (!m.isMesh) return;
+      const name = m.parent && m.parent !== scene ? m.parent.name : m.name;
+      (parts[name] ??= []).push({ geometry: m.geometry, material: m.material as Material, matrix: m.matrixWorld.clone() });
+    });
+    return parts;
+  }, [scene]);
+}
+
+/** Eén knoop als losse meshes met de gebakken matrix, onder een eigen groep die mag bewegen. */
+export function OipMesh({ parts, shadow = true }: { parts?: OipPart[]; shadow?: boolean }) {
+  if (!parts) return null;
+  return (
+    <>
+      {parts.map((p, i) => (
+        <mesh
+          key={i}
+          geometry={p.geometry}
+          material={p.material}
+          matrix={p.matrix}
+          matrixAutoUpdate={false}
+          castShadow={shadow}
+          receiveShadow
+        />
+      ))}
+    </>
+  );
 }

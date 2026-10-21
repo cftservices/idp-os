@@ -49,6 +49,7 @@ export const keys = {
   alarms: (filter: string) => ["alarms", filter] as const,
   kpi: (window: string, compare: boolean) => ["kpi", window, compare] as const,
   model: ["ui", "model"] as const,
+  logistics: ["logistics"] as const,
 };
 
 type Extra<T> = Omit<UseQueryOptions<T, Refusal, T>, "queryKey" | "queryFn">;
@@ -187,4 +188,9 @@ export function useHandlingUnits<T = unknown[]>(batchId: string | null, extra?: 
  */
 export function useAllHandlingUnits<T = unknown[]>(extra?: Extra<T>) {
   return usePolled<T>(keys.hu("*"), "/hu", POLL.lists, extra);
+}
+
+/** Demo-logistiek (zendingen, heftrucks, tankwagen): `source: "demo-sim"`, geen transportsysteem. */
+export function useLogistics<T = Record<string, unknown>>(extra?: Extra<T>) {
+  return usePolled<T>(keys.logistics, "/logistics", POLL.lists, extra);
 }

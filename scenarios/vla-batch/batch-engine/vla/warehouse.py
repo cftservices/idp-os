@@ -55,11 +55,12 @@ def _parse(iso: Optional[str]) -> Optional[datetime]:
 
 class WarehouseSim:
     def __init__(self, db, handling, operator_id: str,
-                 rng: Optional[random.Random] = None):
+                 rng: Optional[random.Random] = None, logistics=None):
         self.db = db
         self.handling = handling
         self.operator_id = operator_id
         self.rng = rng or random.Random()
+        self.logistics = logistics
         self._last: dict[str, datetime] = {}
 
     def _due(self, stage: str, now: datetime, every_s: float) -> bool:
@@ -81,6 +82,8 @@ class WarehouseSim:
                 hus = [h for h in self.db.dw_handling_units.find({})
                        if h.get("operator_id") == self.operator_id]
         self._drop_shipped(hus, now)
+        if self.logistics is not None:
+            self.logistics.record(done, now)
         return done
 
     # ---------------------------------------------------------------- stages

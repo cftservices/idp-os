@@ -11,6 +11,10 @@ export type TwinCtx = {
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
   reducedMotion: boolean;
+  /** Objecten die nu een zwevend label krijgen (labelBudget). */
+  labelled: Set<string>;
+  /** Procesregel per object-id, bv. "92,4 °C". */
+  meta: Record<string, string>;
 };
 
 export const TwinContext = createContext<TwinCtx | null>(null);

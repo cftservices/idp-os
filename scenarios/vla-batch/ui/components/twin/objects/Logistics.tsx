@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { CanvasTexture, RepeatWrapping, SRGBColorSpace, type Group } from "three";
+import { Box3, CanvasTexture, Matrix4, Quaternion, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type Group, type Texture } from "three";
 import {
   COLDSTORE,
   MAIN_AISLE_Z,
@@ -37,9 +37,23 @@ import {
   type Pose,
   type Route,
 } from "@/lib/twin/forklift";
+import {
+  departPose,
+  forkliftVisual,
+  inboundName,
+  inboundVisual,
+  needsPin,
+  shipmentVisual,
+  tankerPose,
+  type SimForklift,
+  type SimInbound,
+  type SimShipment,
+} from "@/lib/twin/flow";
 import type { TwinSilo } from "@/lib/twin/useTwinData";
-import { useTwin } from "../context";
-import { Pickable } from "./Pickable";
+import { statusColor, useTwin } from "../context";
+import { FloatLabel, Pickable, Pin, usePick } from "./Pickable";
+import { Robot } from "./Robot";
+import { OipMesh, useOipParts, type OipPart } from "../models";
 
 export function Silo({ silo }: { silo: TwinSilo }) {
   const { palette } = useTwin();
@@ -143,9 +157,9 @@ const MAX_LAYERS = 6;
 
 /** Zijaanzicht van één laag: trays van karton met de kartons erop, als herhalende textuur. */
 const layerTextures = new Map<string, CanvasTexture>();
-function layerTexture(milk: string, vla: string, tray: string, layers: number): CanvasTexture | null {
+function layerTexture(milk: string, vla: string, tray: string, seam: string, layers: number): CanvasTexture | null {
   if (typeof document === "undefined") return null;
-  const key = `${milk}|${vla}|${tray}|${layers}`;
+  const key = `${milk}|${vla}|${tray}|${seam}|${layers}`;
   const hit = layerTextures.get(key);
   if (hit) return hit;
   const c = document.createElement("canvas");
@@ -156,12 +170,16 @@ function layerTexture(milk: string, vla: string, tray: string, layers: number): 
   g.fillRect(0, 0, 64, 32);
   g.fillStyle = vla; // bedrukte band op de kartons
   g.fillRect(0, 6, 64, 7);
-  g.fillStyle = "rgba(0,0,0,0.18)"; // naden tussen de kartons
+  g.fillStyle = seam; // naden tussen de kartons
+  g.globalAlpha = 0.18;
   for (let x = 0; x < 64; x += 8) g.fillRect(x, 0, 1, 24);
+  g.globalAlpha = 1;
   g.fillStyle = tray;
   g.fillRect(0, 22, 64, 10);
-  g.fillStyle = "rgba(0,0,0,0.25)";
+  g.fillStyle = seam;
+  g.globalAlpha = 0.25;
   g.fillRect(0, 22, 64, 1);
+  g.globalAlpha = 1;
   const tex = new CanvasTexture(c);
   tex.wrapS = tex.wrapT = RepeatWrapping;
   tex.repeat.set(3, layers);
@@ -170,34 +188,51 @@ function layerTexture(milk: string, vla: string, tray: string, layers: number): 
   return tex;
 }
 
-export function PalletModel({ packs = 1, wrapped = false }: { packs?: number; wrapped?: boolean }) {
+export /** Houttextuur van de europallet (Open Industry Project), één keer geladen en gedeeld door alle pallets. */
+let woodCache: { map: Texture; normalMap: Texture; roughnessMap: Texture } | null = null;
+function palletWood() {
+  if (woodCache || typeof window === "undefined") return woodCache;
+  const loader = new TextureLoader();
+  const load = (name: string, srgb = false) => {
+    const t = loader.load(`/models/oip/tex/pallet-${name}.webp`);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    if (srgb) t.colorSpace = SRGBColorSpace;
+    return t;
+  };
+  woodCache = { map: load("kleur", true), normalMap: load("normaal"), roughnessMap: load("ruwheid") };
+  return woodCache;
+}
+
+function PalletModel({ packs = 1, wrapped = false }: { packs?: number; wrapped?: boolean }) {
   const { palette } = useTwin();
   const n = Math.max(1, Number(packs) || 1);
   const full = Math.min(MAX_LAYERS, Math.floor(n / PACKS_PER_LAYER));
   const rest = full < MAX_LAYERS ? (n % PACKS_PER_LAYER) / PACKS_PER_LAYER : 0;
-  const tex = layerTexture(palette.milk, palette.vla, palette.pallet, Math.max(1, full));
+  const tex = layerTexture(palette.milk, palette.vla, palette.pallet, palette.seam, Math.max(1, full));
   const loadH = full * LAYER_H + (rest > 0 ? LAYER_H : 0);
+  const wood = palletWood();
+  const woodColor = wood ? palette.white : palette.pallet;
   return (
     <group>
       {/* europallet: drie onderlatten, klossen als één blok, dekplanken */}
       {[-0.45, 0, 0.45].map((z) => (
         <mesh key={z} position={[0, 0.011, z]} receiveShadow>
           <boxGeometry args={[1.2, 0.022, 0.1]} />
-          <meshStandardMaterial color={palette.pallet} roughness={0.95} />
+          <meshStandardMaterial color={woodColor} {...wood} roughness={0.95} />
         </mesh>
       ))}
       <mesh position={[0, 0.06, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.16, 0.076, 0.96]} />
-        <meshStandardMaterial color={palette.pallet} roughness={0.95} />
+        <meshStandardMaterial color={woodColor} {...wood} roughness={0.95} />
       </mesh>
       <mesh position={[0, 0.11, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.2, 0.024, 1]} />
-        <meshStandardMaterial color={palette.pallet} roughness={0.9} />
+        <meshStandardMaterial color={woodColor} {...wood} roughness={0.9} />
       </mesh>
       {full > 0 && (
         <mesh position={[0, 0.122 + (full * LAYER_H) / 2, 0]} castShadow receiveShadow>
           <boxGeometry args={[1.16, full * LAYER_H, 0.96]} />
-          <meshStandardMaterial map={tex ?? undefined} color={tex ? "#ffffff" : palette.pack} roughness={0.8} />
+          <meshStandardMaterial map={tex ?? undefined} color={tex ? palette.white : palette.pack} roughness={0.8} />
         </mesh>
       )}
       {rest > 0 && (
@@ -210,7 +245,7 @@ export function PalletModel({ packs = 1, wrapped = false }: { packs?: number; wr
         /* krimpfolie: glanzend en doorschijnend, net iets groter dan de lading */
         <mesh position={[0, 0.122 + loadH / 2, 0]}>
           <boxGeometry args={[1.19, loadH + 0.02, 0.99]} />
-          <meshStandardMaterial color="#e8f4ff" transparent opacity={0.22} roughness={0.05} metalness={0.1} depthWrite={false} />
+          <meshStandardMaterial color={palette.film} transparent opacity={0.22} roughness={0.05} metalness={0.1} depthWrite={false} />
         </mesh>
       ) : null}
     </group>
@@ -218,32 +253,17 @@ export function PalletModel({ packs = 1, wrapped = false }: { packs?: number; wr
 }
 
 export function Palletiser({ logistics, visual }: { logistics: Logistics; visual: Visual }) {
-  const { palette, reducedMotion } = useTwin();
-  const arm = useRef<Group>(null);
+  const { palette } = useTwin();
   const busy = logistics.palletiser.length > 0;
-  useFrame((_, dt) => {
-    if (arm.current && busy && !reducedMotion) arm.current.rotation.y += dt * 2.2;
-  });
   return (
     <Pickable id="palletiser" name="Palletiser" visual={visual} position={PALLETISER} radius={1.4} labelHeight={4}>
       <mesh position={[0, 0.08, 0]} receiveShadow>
         <cylinderGeometry args={[1.1, 1.1, 0.16, 24]} />
         <meshStandardMaterial color={palette["steel-dark"]} />
       </mesh>
-      <mesh position={[-1.1, 1.5, 0]} castShadow>
-        <boxGeometry args={[0.25, 3, 0.25]} />
-        <meshStandardMaterial color={palette.dock} />
-      </mesh>
-      <group ref={arm} position={[0, 2.8, 0]}>
-        <mesh position={[0.5, 0, 0]}>
-          <boxGeometry args={[1.2, 0.12, 0.12]} />
-          <meshStandardMaterial color={palette.dock} />
-        </mesh>
-        <mesh position={[1, -0.8, 0]}>
-          <cylinderGeometry args={[0.08, 0.08, 1.4, 8]} />
-          <meshStandardMaterial color={palette.glow} emissive={palette.glow} emissiveIntensity={0.6} />
-        </mesh>
-      </group>
+      <Suspense fallback={null}>
+        <Robot busy={busy} position={[-1.4, 0, 0]} />
+      </Suspense>
       {busy && (
         <group position={[0, 0.16, 0]}>
           <PalletModel packs={logistics.palletiser[0].packs_count} wrapped />
@@ -364,7 +384,7 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
       {/* strokengordijn in de deuropening */}
       <mesh position={[x0, doorH / 2, (door0 + door1) / 2]}>
         <boxGeometry args={[0.04, doorH, door1 - door0]} />
-        <meshStandardMaterial color="#cfe8ff" transparent opacity={0.18} depthWrite={false} />
+        <meshStandardMaterial color={palette.curtain} transparent opacity={0.18} depthWrite={false} />
       </mesh>
       <mesh position={[cx, h + 0.1, z0 + 0.2]}>
         <boxGeometry args={[w + 0.4, 0.2, 0.6]} />
@@ -394,125 +414,291 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
   );
 }
 
-function TruckModel({ load = 0 }: { load?: number }) {
-  const { palette } = useTwin();
+/** Schaal van de OIP-trailer: een 40ft-chassis ingekort tot een 20ft-container, zodat hij tussen dock en weg past. */
+const TRAILER_SCALE: Vec3 = [0.9, 0.85, 0.45];
+
+/** Laadruimte van de trailer in truckassen, gemeten uit het OIP-interieur (vloerhoogte, breedte, kop en achterkant). */
+function useTrailerHold() {
+  const p = useOipParts("trailer");
+  return useMemo(() => {
+    const box = new Box3();
+    for (const part of p.Interior ?? []) {
+      if (!part.geometry.boundingBox) part.geometry.computeBoundingBox();
+      box.union(part.geometry.boundingBox!.clone().applyMatrix4(part.matrix));
+    }
+    if (box.isEmpty()) return { floor: 1.1, width: 2.0, front: 2.5, back: -2.5 };
+    const [sx, sy, sz] = TRAILER_SCALE;
+    return { floor: box.min.y * sy, width: (box.max.x - box.min.x) * sx, front: box.max.z * sz, back: box.min.z * sz };
+  }, [p.Interior]);
+}
+
+/**
+ * De geladen HU als ingepakte pallets in de trailer, twee naast elkaar en vanaf de kop
+ * naar de deuren gevuld, zoals een heftruck een trailer werkelijk laadt.
+ */
+function TrailerCargo({ hus }: { hus: Hu[] }) {
+  const hold = useTrailerHold();
+  const rows = Math.max(1, Math.floor((hold.front - hold.back - 0.1) / 1.22));
+  const across = hold.width >= 2.0 ? 2 : 1;
+  const shown = hus.slice(0, rows * across);
   return (
     <group>
-      {/* trailer (achterkant aan -z, cabine aan +z) */}
-      <mesh position={[0, 1.55, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.2, 2.3, 5.4]} />
-        <meshStandardMaterial color={palette["truck-box"]} />
-      </mesh>
-      {/* laadstreep op de zijkant: hoe vol de truck is */}
-      <mesh position={[1.12, 0.65, -2.6 + (5.2 * load) / 2]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[Math.max(0.01, 5.2 * load), 0.22]} />
-        <meshBasicMaterial color={palette.accent} />
-      </mesh>
-      <mesh position={[0, 1.15, 3.35]} castShadow>
-        <boxGeometry args={[2.1, 1.7, 1.3]} />
-        <meshStandardMaterial color={palette["truck-cab"]} metalness={0.3} roughness={0.4} />
-      </mesh>
-      <mesh position={[0, 1.55, 4.01]}>
-        <planeGeometry args={[1.7, 0.6]} />
-        <meshStandardMaterial color={palette.sky} metalness={0.8} roughness={0.1} />
-      </mesh>
-      {/* koelunit voorop de trailer, ribben, achterdeuren, chassis */}
-      <mesh position={[0, 2.1, 2.78]} castShadow>
-        <boxGeometry args={[1.6, 0.9, 0.22]} />
-        <meshStandardMaterial color={palette.steel} metalness={0.4} roughness={0.5} />
-      </mesh>
-      {Array.from({ length: 9 }, (_, i) =>
-        [-1, 1].map((s) => (
-          <mesh key={`r${i}${s}`} position={[s * 1.11, 1.55, -2.4 + i * 0.6]}>
-            <boxGeometry args={[0.02, 2.3, 0.05]} />
-            <meshStandardMaterial color={palette["truck-box"]} metalness={0.2} roughness={0.5} />
-          </mesh>
-        )),
-      )}
-      <mesh position={[0, 1.55, -2.71]}>
-        <boxGeometry args={[0.03, 2.2, 0.02]} />
-        <meshStandardMaterial color={palette["steel-dark"]} />
-      </mesh>
-      {[-0.5, 0.5].map((x) =>
-        [0.8, 2.3].map((y) => (
-          <mesh key={`h${x}${y}`} position={[x, y, -2.72]}>
-            <boxGeometry args={[0.04, 0.04, 0.03]} />
-            <meshStandardMaterial color={palette.steel} metalness={0.8} roughness={0.3} />
-          </mesh>
-        )),
-      )}
-      {[-0.95, 0.95].map((x) => (
-        <mesh key={`l${x}`} position={[x, 0.55, -2.71]}>
-          <boxGeometry args={[0.18, 0.08, 0.02]} />
-          <meshStandardMaterial color={palette["status-alarm"]} emissive={palette["status-alarm"]} emissiveIntensity={0.5} />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.42, 0.3]}>
-        <boxGeometry args={[1.4, 0.18, 6.6]} />
-        <meshStandardMaterial color={palette.road} metalness={0.4} roughness={0.6} />
-      </mesh>
-      {/* grille, bumper, koplampen, spiegels, dakspoiler */}
-      <mesh position={[0, 0.85, 4.01]}>
-        <planeGeometry args={[1.3, 0.5]} />
-        <meshStandardMaterial color={palette["steel-dark"]} metalness={0.6} roughness={0.4} />
-      </mesh>
-      <mesh position={[0, 0.42, 4.05]}>
-        <boxGeometry args={[2.1, 0.25, 0.12]} />
-        <meshStandardMaterial color={palette.road} roughness={0.6} />
-      </mesh>
-      {[-0.82, 0.82].map((x) => (
-        <mesh key={`k${x}`} position={[x, 0.75, 4.02]}>
-          <boxGeometry args={[0.3, 0.14, 0.02]} />
-          <meshStandardMaterial color={palette.glow} emissive={palette.glow} emissiveIntensity={0.6} />
-        </mesh>
-      ))}
-      {[-1, 1].map((s) => (
-        <mesh key={`m${s}`} position={[s * 1.2, 1.6, 3.85]}>
-          <boxGeometry args={[0.05, 0.35, 0.12]} />
-          <meshStandardMaterial color={palette.road} />
-        </mesh>
-      ))}
-      <mesh position={[0, 2.2, 3.45]} rotation={[0.35, 0, 0]}>
-        <boxGeometry args={[2.0, 0.08, 1.0]} />
-        <meshStandardMaterial color={palette["truck-cab"]} metalness={0.3} roughness={0.4} />
-      </mesh>
-      {[-1.8, 0.6, 3.3].map((z) =>
-        [-1, 1].map((s) => (
-          <group key={`${z}${s}`} position={[s * 1.05, 0.38, z]} rotation={[0, 0, Math.PI / 2]}>
-            <mesh castShadow>
-              <cylinderGeometry args={[0.38, 0.38, 0.3, 20]} />
-              <meshStandardMaterial color={palette.road} roughness={0.85} />
-            </mesh>
-            <mesh position={[0, s * 0.155, 0]}>
-              <cylinderGeometry args={[0.22, 0.22, 0.02, 16]} />
-              <meshStandardMaterial color={palette.steel} metalness={0.8} roughness={0.3} />
-            </mesh>
+      {shown.map((h, i) => {
+        const row = Math.floor(i / across);
+        const x = across === 2 ? (i % 2 === 0 ? -0.51 : 0.51) : 0;
+        const z = hold.front - 0.05 - 0.61 - row * 1.22;
+        return (
+          <group key={h.hu_id ?? i} position={[x, hold.floor + 0.01, z]} rotation={[0, Math.PI / 2, 0]}>
+            <PalletModel packs={Number(h.packs_count) || 1} wrapped />
           </group>
-        )),
+        );
+      })}
+    </group>
+  );
+}
+
+/** Container-trailer uit Open Industry Project; de achterdeuren klappen open zodra hij aan een dock staat. */
+function OipTrailer({ doorsOpen, xray = false }: { doorsOpen: boolean; xray?: boolean }) {
+  const p = useOipParts("trailer");
+  // doorkijk aan het dock: dezelfde container met een glazige kopie van zijn materiaal, zodat de lading zichtbaar is
+  const glass = useMemo(
+    () =>
+      p.Container?.map((part) => {
+        const m = (Array.isArray(part.material) ? part.material[0] : part.material).clone();
+        m.transparent = true;
+        m.opacity = 0.22;
+        m.depthWrite = false;
+        return { ...part, material: m };
+      }),
+    [p.Container],
+  );
+  // gesloten liggen beide deuren dwars (π), open klappen ze tegen de zijwand
+  const left = doorsOpen ? -Math.PI / 2 : Math.PI;
+  const right = doorsOpen ? Math.PI / 2 : Math.PI;
+  const hinge = (parts: OipPart[] | undefined) => parts?.[0]?.matrix.elements;
+  const hl = hinge(p.Door_Left);
+  const hr = hinge(p.Door_Right);
+  return (
+    <group scale={TRAILER_SCALE}>
+      <OipMesh parts={xray ? glass : p.Container} shadow={!xray} />
+      <OipMesh parts={p.Interior} shadow={false} />
+      <OipMesh parts={p.Chassis} />
+      {hl && (
+        <group position={[hl[12], hl[13], hl[14]]} rotation={[0, left, 0]}>
+          <OipDoor parts={p.Door_Left} />
+        </group>
+      )}
+      {hr && (
+        <group position={[hr[12], hr[13], hr[14]]} rotation={[0, right, 0]}>
+          <OipDoor parts={p.Door_Right} />
+        </group>
       )}
     </group>
   );
 }
 
-export function DockTruck({ slot, visual }: { slot: DockSlot; visual: Visual }) {
+/** Een deur zonder zijn eigen scharnierstand: positie en draaiing uit het model eruit, de rest (meshopt-schaal) erin. */
+function OipDoor({ parts }: { parts?: OipPart[] }) {
+  const stripped = useMemo(
+    () =>
+      parts?.map((d) => {
+        const pos = new Vector3();
+        const rot = new Quaternion();
+        const scl = new Vector3();
+        d.matrix.decompose(pos, rot, scl);
+        return { ...d, matrix: new Matrix4().compose(new Vector3(), new Quaternion(), scl) };
+      }),
+    [parts],
+  );
+  return <OipMesh parts={stripped} />;
+}
+
+/** Procedurele trailer, als terugval zolang het model laadt. */
+function BoxTrailer() {
   const { palette } = useTwin();
+  return (
+    <mesh position={[0, 1.55, 0]} castShadow receiveShadow>
+      <boxGeometry args={[2.2, 2.3, 5.4]} />
+      <meshStandardMaterial color={palette["truck-box"]} />
+    </mesh>
+  );
+}
+
+function TruckModel({ load = 0, docked = false, cargo }: { load?: number; docked?: boolean; cargo?: Hu[] }) {
+  const { palette } = useTwin();
+  return (
+    <group>
+      {/* trailer (achterkant aan -z, cabine aan +z) */}
+      <Suspense fallback={<BoxTrailer />}>
+        <OipTrailer doorsOpen={docked} xray={cargo !== undefined} />
+        {cargo && <TrailerCargo hus={cargo} />}
+      </Suspense>
+      {/* laadstreep op de zijkant: hoe vol de truck is */}
+      <mesh position={[1.12, 1.45, -2.6 + (5.2 * load) / 2]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[Math.max(0.01, 5.2 * load), 0.22]} />
+        <meshBasicMaterial color={palette.accent} />
+      </mesh>
+      {/* trekker: cabine iets hoger geschaald, zodat hij bij de container past */}
+      <mesh position={[0, 0.42, 3.4]}>
+        <boxGeometry args={[1.4, 0.18, 1.8]} />
+        <meshStandardMaterial color={palette.road} metalness={0.4} roughness={0.6} />
+      </mesh>
+      <group scale={[1, 1.45, 1]}>
+        <mesh position={[0, 1.15, 3.4]} castShadow>
+          <boxGeometry args={[2.1, 1.7, 1.3]} />
+          <meshStandardMaterial color={palette["truck-cab"]} metalness={0.3} roughness={0.4} />
+        </mesh>
+        <mesh position={[0, 1.55, 4.06]}>
+          <planeGeometry args={[1.7, 0.6]} />
+          <meshStandardMaterial color={palette.sky} metalness={0.8} roughness={0.1} />
+        </mesh>
+        {/* grille, koplampen, spiegels, dakspoiler */}
+        <mesh position={[0, 0.85, 4.06]}>
+          <planeGeometry args={[1.3, 0.5]} />
+          <meshStandardMaterial color={palette["steel-dark"]} metalness={0.6} roughness={0.4} />
+        </mesh>
+        {[-0.82, 0.82].map((x) => (
+          <mesh key={`k${x}`} position={[x, 0.6, 4.07]}>
+            <boxGeometry args={[0.3, 0.1, 0.02]} />
+            <meshStandardMaterial color={palette.glow} emissive={palette.glow} emissiveIntensity={0.6} />
+          </mesh>
+        ))}
+        {[-1, 1].map((s) => (
+          <mesh key={`m${s}`} position={[s * 1.2, 1.6, 3.9]}>
+            <boxGeometry args={[0.05, 0.35, 0.12]} />
+            <meshStandardMaterial color={palette.road} />
+          </mesh>
+        ))}
+        <mesh position={[0, 2.15, 3.45]} rotation={[0.25, 0, 0]}>
+          <boxGeometry args={[2.0, 0.08, 1.1]} />
+          <meshStandardMaterial color={palette["truck-cab"]} metalness={0.3} roughness={0.4} />
+        </mesh>
+      </group>
+      <mesh position={[0, 0.42, 4.12]}>
+        <boxGeometry args={[2.1, 0.25, 0.12]} />
+        <meshStandardMaterial color={palette.road} roughness={0.6} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * 1.05, 0.38, 3.5]} rotation={[0, 0, Math.PI / 2]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.38, 0.38, 0.3, 20]} />
+            <meshStandardMaterial color={palette.road} roughness={0.85} />
+          </mesh>
+          <mesh position={[0, s * 0.155, 0]}>
+            <cylinderGeometry args={[0.22, 0.22, 0.02, 16]} />
+            <meshStandardMaterial color={palette.steel} metalness={0.8} roughness={0.3} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** OIP-docks zijn ontworpen op 3,5 m; onze docks staan 3,4 m uit elkaar. */
+const DOCK_SCALE = 0.85;
+/** Scharnier van de leveller (aan de binnenkant), en hoe ver lip en plaat draaien. */
+const LEVELER_HINGE_Z = 2.4;
+const LIP_STOWED = -85 * (Math.PI / 180);
+const MAIN_DEPLOYED = 3 * (Math.PI / 180);
+const DOOR_H = 3.11;
+
+/**
+ * Eén dock: roldeur en dockleveller uit Open Industry Project. Het model is in
+ * OIP-assen gebouwd (buitengevel op z=0, gebouw aan +z), dus de groep draait
+ * een halve slag: binnen is bij ons -z. Met een truck ervoor rolt de deur op
+ * en gaat de leveller omhoog met de lip uitgeklapt.
+ */
+function DockBay({ index, occupied }: { index: number; occupied: boolean }) {
+  const p = useOipParts("leveller");
+  const d = useOipParts("dockdeur");
+  const { palette, reducedMotion } = useTwin();
+  const door = useRef<Group>(null);
+  const main = useRef<Group>(null);
+  const lip = useRef<Group>(null);
+  const [x, , z] = dockPosition(index);
+  const shift = useMemo(() => new Matrix4().makeTranslation(0, 0, -LEVELER_HINGE_Z), []);
+  const mainParts = useMemo(
+    () => p.Lift_Main?.map((m) => ({ ...m, matrix: shift.clone().multiply(m.matrix) })),
+    [p.Lift_Main, shift],
+  );
+  const bollards = useMemo(
+    () =>
+      [-1, 1].map((sx) =>
+        p.Bollard?.map((m) => ({ ...m, matrix: new Matrix4().makeTranslation(sx * 1.75, 0, 0.25).multiply(m.matrix) })),
+      ),
+    [p.Bollard],
+  );
+  useFrame((_, dt) => {
+    const k = reducedMotion ? 1 : Math.min(1, dt * 3);
+    const open = occupied ? 1 : 0;
+    if (door.current) {
+      // roldeur: het paneel rolt op tot een smalle band onder de trommel
+      const s = door.current.scale.y + ((occupied ? 0.05 : 1) - door.current.scale.y) * k;
+      door.current.scale.y = s;
+      door.current.position.y = DOOR_H * (1 - s);
+    }
+    if (main.current) main.current.rotation.x += (MAIN_DEPLOYED * open - main.current.rotation.x) * k;
+    if (lip.current) lip.current.rotation.x += (LIP_STOWED * (1 - open) - lip.current.rotation.x) * k;
+  });
+  return (
+    <group position={[x, 0.1, z]} rotation={[0, Math.PI, 0]} scale={DOCK_SCALE}>
+      <OipMesh parts={p.Surrounds} />
+      {bollards.map((b, i) => (
+        <OipMesh key={i} parts={b} />
+      ))}
+      <group ref={main} position={[0, 0, LEVELER_HINGE_Z]}>
+        <OipMesh parts={mainParts} />
+        <group ref={lip} position={[0, 0, -LEVELER_HINGE_Z]} rotation={[occupied ? 0 : LIP_STOWED, 0, 0]}>
+          <OipMesh parts={p.Lift_Lip} />
+        </group>
+      </group>
+      <group ref={door} scale={[1, occupied ? 0.05 : 1, 1]} position={[0, occupied ? DOOR_H * 0.95 : 0, 0]}>
+        <OipMesh parts={d.Door} />
+      </group>
+      {/* trommelkast boven de deur en de stijlen waar het paneel in loopt */}
+      <mesh position={[0, DOOR_H + 0.18, 0.15]} castShadow>
+        <boxGeometry args={[3.4, 0.36, 0.4]} />
+        <meshStandardMaterial color={palette.dock} metalness={0.3} roughness={0.6} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 1.62, DOOR_H / 2, 0.15]} castShadow>
+          <boxGeometry args={[0.14, DOOR_H, 0.3]} />
+          <meshStandardMaterial color={palette.dock} metalness={0.3} roughness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Terugval zolang de OIP-modellen laden: het oude dockblok. */
+function DockBlock({ index }: { index: number }) {
+  const { palette } = useTwin();
+  const [x, , z] = dockPosition(index);
+  return (
+    <mesh position={[x, 0.6, z + 0.25]} receiveShadow>
+      <boxGeometry args={[2.8, 1.2, 0.5]} />
+      <meshStandardMaterial color={palette.dock} />
+    </mesh>
+  );
+}
+
+export function DockTruck({ slot, visual }: { slot: DockSlot; visual: Visual }) {
   const [x, , z] = dockPosition(slot.dock);
   return (
     <group>
-      <mesh position={[x, 0.6, z + 0.25]} receiveShadow>
-        <boxGeometry args={[2.8, 1.2, 0.5]} />
-        <meshStandardMaterial color={palette.dock} />
-      </mesh>
+      <Suspense fallback={<DockBlock index={slot.dock} />}>
+        <DockBay index={slot.dock} occupied />
+      </Suspense>
       <Pickable
         id={`dock:${slot.batch_id}`}
         name={`Dock ${slot.dock + 1}`}
         visual={visual}
         position={[x, 0, z + 3.6]}
         radius={0.01}
-        labelHeight={4}
+        labelHeight={4.6}
       >
-        <TruckModel load={slot.progress} />
-        <Html position={[0, 3.1, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+        <TruckModel load={slot.progress} docked cargo={slot.loaded} />
+        <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
           <div className="twin-chip" data-twin-dock={slot.dock + 1}>
             {slot.loaded.length}/{slot.loaded.length + slot.waiting.length} HU
           </div>
@@ -527,10 +713,9 @@ export function EmptyDock({ index }: { index: number }) {
   const [x, , z] = dockPosition(index);
   return (
     <group>
-      <mesh position={[x, 0.6, z + 0.25]} receiveShadow>
-        <boxGeometry args={[2.8, 1.2, 0.5]} />
-        <meshStandardMaterial color={palette.dock} />
-      </mesh>
+      <Suspense fallback={<DockBlock index={index} />}>
+        <DockBay index={index} occupied={false} />
+      </Suspense>
       {[-1, 1].map((s) => (
         <mesh key={s} position={[x + s * 1.3, 0.02, z + 3.5]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[0.12, 6]} />
@@ -540,7 +725,6 @@ export function EmptyDock({ index }: { index: number }) {
     </group>
   );
 }
-
 /** Vertrekkende truck: rijdt in het vertrekvenster van de expeditie naar de rand van de kaart. */
 export function DepartingTruck({ dep, index, visual }: { dep: Departure; index: number; visual: Visual }) {
   const startX = 24;
@@ -559,6 +743,158 @@ export function DepartingTruck({ dep, index, visual }: { dep: Departure; index: 
     >
       <TruckModel load={1} />
     </Pickable>
+  );
+}
+
+/** Rijdend object: pose per frame uit een pure functie, label en ring rijden mee. */
+function Driving({
+  id,
+  name,
+  visual,
+  pose,
+  labelHeight,
+  children,
+}: {
+  id: string;
+  name: string;
+  visual: Visual;
+  pose: (now: number) => { x: number; z: number; rot: number; visible: boolean };
+  labelHeight: number;
+  children: ReactNode;
+}) {
+  const { palette, selected, hovered, reducedMotion } = useTwin();
+  const g = useRef<Group>(null);
+  const body = useRef<Group>(null);
+  const handlers = usePick(id);
+  const on = selected === id || hovered === id;
+  useFrame(() => {
+    if (!g.current) return;
+    const p = pose(Date.now());
+    g.current.visible = p.visible;
+    g.current.position.set(p.x, 0, p.z);
+    if (body.current) body.current.rotation.y = p.rot;
+  });
+  const first = pose(Date.now());
+  return (
+    <group ref={g} position={[first.x, 0, first.z]} visible={first.visible} {...handlers}>
+      <group ref={body} rotation={[0, first.rot, 0]}>
+        {children}
+      </group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <ringGeometry args={[3.4, on ? 3.75 : 3.55, 48]} />
+        <meshBasicMaterial color={on ? palette.glow : statusColor(palette, visual.state)} transparent opacity={on ? 0.95 : 0.55} />
+      </mesh>
+      {needsPin(visual) && selected !== id && !reducedMotion && <Pin visual={visual} height={labelHeight + 1.1} />}
+      <FloatLabel id={id} name={name} visual={visual} height={labelHeight} />
+    </group>
+  );
+}
+
+/** Vertrekkende zending uit de demo-simulatie: rijdt het eerste stuk van de rit in beeld weg. */
+export function SimDepartingTruck({ s, lane }: { s: SimShipment; lane: number }) {
+  const pose = useCallback((now: number) => departPose(s, now, lane, ROAD_Z), [s, lane]);
+  return (
+    <Driving id={`shipment:${s.shipment_id}`} name={`${s.truck_id} · ${s.customer}`} visual={shipmentVisual(s)} pose={pose} labelHeight={4.2}>
+      <TruckModel load={1} />
+    </Driving>
+  );
+}
+
+/** Tankwagen; `bulk` maakt er een gelakte poederbulkwagen van (suiker, zetmeel) in plaats van RVS voor melk. */
+function TankerModel({ bulk = false }: { bulk?: boolean }) {
+  const { palette } = useTwin();
+  return (
+    <group>
+      {/* tank op een chassis, cabine aan +z (zelfde conventie als TruckModel) */}
+      <mesh position={[0, 1.75, -0.3]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[1.05, 4.0, 8, 24]} />
+        <meshStandardMaterial
+          color={bulk ? palette.silo : palette.steel}
+          metalness={bulk ? 0.35 : 0.85}
+          roughness={bulk ? 0.45 : 0.22}
+        />
+      </mesh>
+      {bulk &&
+        [-1.2, 0.6].map((z) => (
+          // losconussen onder de bulktank
+          <mesh key={`c${z}`} position={[0, 0.78, -0.3 + z]} rotation={[Math.PI, 0, 0]}>
+            <coneGeometry args={[0.45, 0.5, 16]} />
+            <meshStandardMaterial color={palette["steel-dark"]} metalness={0.6} roughness={0.4} />
+          </mesh>
+        ))}
+      {[-1.6, 0, 1.6].map((z) => (
+        <mesh key={z} position={[0, 1.75, -0.3 + z]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[1.07, 0.04, 8, 32]} />
+          <meshStandardMaterial color={palette["steel-dark"]} metalness={0.7} roughness={0.35} />
+        </mesh>
+      ))}
+      <mesh position={[0, 2.85, -0.3]}>
+        <boxGeometry args={[0.5, 0.12, 3.6]} />
+        <meshStandardMaterial color={palette["steel-dark"]} metalness={0.6} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 1.75, -2.95]}>
+        <circleGeometry args={[0.32, 20]} />
+        <meshStandardMaterial color={palette.accent} />
+      </mesh>
+      <mesh position={[0, 1.15, 3.35]} castShadow>
+        <boxGeometry args={[2.1, 1.7, 1.3]} />
+        <meshStandardMaterial color={palette["truck-cab"]} metalness={0.3} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 1.55, 4.01]}>
+        <planeGeometry args={[1.7, 0.6]} />
+        <meshStandardMaterial color={palette.sky} metalness={0.8} roughness={0.1} />
+      </mesh>
+      {[-0.82, 0.82].map((x) => (
+        <mesh key={`k${x}`} position={[x, 0.75, 4.02]}>
+          <boxGeometry args={[0.3, 0.14, 0.02]} />
+          <meshStandardMaterial color={palette.glow} emissive={palette.glow} emissiveIntensity={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.42, 0.3]}>
+        <boxGeometry args={[1.4, 0.18, 6.6]} />
+        <meshStandardMaterial color={palette.road} metalness={0.4} roughness={0.6} />
+      </mesh>
+      {[-2.0, -0.8, 3.3].map((z) =>
+        [-1, 1].map((sd) => (
+          <mesh key={`${z}${sd}`} position={[sd * 1.05, 0.38, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.38, 0.38, 0.3, 20]} />
+            <meshStandardMaterial color={palette.road} roughness={0.85} />
+          </mesh>
+        )),
+      )}
+    </group>
+  );
+}
+
+const INBOUND_PALLETS = 12;
+
+/**
+ * Leverancier van één grondstof: komt aanrijden, lost op zijn eigen plaats bij de silo's, en rijdt weer weg.
+ * Melk komt per RVS-tankwagen, suiker en zetmeel per bulkwagen, cacao in zakken op pallets.
+ */
+export function Tanker({ inbound }: { inbound: SimInbound }) {
+  const pose = useCallback((now: number) => tankerPose(inbound, now), [inbound]);
+  const vehicle = inbound.vehicle ?? "tanker";
+  // de palletwagen loopt zichtbaar leeg naarmate er gelost wordt
+  const left = inbound.stage === "gone" ? 0 : Math.round(INBOUND_PALLETS * (1 - (inbound.unloaded_pct || 0) / 100));
+  const cargo = useMemo(
+    () => Array.from({ length: left }, (_, k) => ({ hu_id: `${inbound.id}-${k}`, packs_count: 4 }) as unknown as Hu),
+    [inbound.id, left],
+  );
+  return (
+    <Driving
+      id={`inbound:${inbound.material_id ?? "milk"}`}
+      name={inboundName(inbound)}
+      visual={inboundVisual(inbound)}
+      pose={pose}
+      labelHeight={4.2}
+    >
+      {vehicle === "pallet" ? (
+        <TruckModel load={left / INBOUND_PALLETS} docked={inbound.stage === "unloading"} cargo={cargo} />
+      ) : (
+        <TankerModel bulk={vehicle === "bulk"} />
+      )}
+    </Driving>
   );
 }
 
@@ -581,11 +917,12 @@ function applyPose(rig: Rig, p: Pose) {
   if (rig.load.current) rig.load.current.visible = p.carrying;
 }
 
-function ForkliftModel({ rig, color, packs }: { rig: Rig; color: string; packs: number }) {
+function ForkliftModel({ rig, color, packs, children }: { rig: Rig; color: string; packs: number; children?: ReactNode }) {
   const { palette } = useTwin();
   const steel = palette["steel-dark"];
   return (
     <group ref={rig.root}>
+      {children}
       {/* chassis en contragewicht; de vorken wijzen naar lokaal +z */}
       <mesh position={[0, 0.42, -0.1]} castShadow>
         <boxGeometry args={[1.0, 0.55, 1.4]} />
@@ -690,6 +1027,24 @@ function ForkliftModel({ rig, color, packs }: { rig: Rig; color: string; packs: 
   );
 }
 
+function PickableForklift({ rig, color, packs, pick }: { rig: Rig; color: string; packs: number; pick: { id: string; name: string; visual: Visual } }) {
+  const { palette, selected, hovered } = useTwin();
+  const handlers = usePick(pick.id);
+  const on = selected === pick.id || hovered === pick.id;
+  return (
+    <group {...handlers}>
+      <ForkliftModel rig={rig} color={color} packs={packs}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+          <ringGeometry args={[1.25, on ? 1.5 : 1.38, 40]} />
+          <meshBasicMaterial color={on ? palette.glow : statusColor(palette, pick.visual.state)} transparent opacity={on ? 0.95 : 0.6} />
+        </mesh>
+        {needsPin(pick.visual) && selected !== pick.id && <Pin visual={pick.visual} height={3.3} />}
+        <FloatLabel id={pick.id} name={pick.name} visual={pick.visual} height={2.9} />
+      </ForkliftModel>
+    </group>
+  );
+}
+
 type Active = { route: Route; move: Move; t0: number };
 
 /**
@@ -708,7 +1063,10 @@ function RouteForklift({
   hideUntilDrop,
   pickup,
   name,
+  pick,
 }: {
+  /** Selecteerbaar als heftruck uit de demo-simulatie; zonder sim alleen decor. */
+  pick?: { id: string; name: string; visual: Visual } | null;
   move: Move | null;
   park: Pose;
   plan: (from: Pose, m: Move) => Route;
@@ -779,7 +1137,11 @@ function RouteForklift({
 
   return (
     <group name={name}>
-      <ForkliftModel rig={rig} color={color} packs={cargo.packs} />
+      {pick ? (
+        <PickableForklift rig={rig} color={color} packs={cargo.packs} pick={pick} />
+      ) : (
+        <ForkliftModel rig={rig} color={color} packs={cargo.packs} />
+      )}
       {cargo.at && (
         <group ref={ghost} position={cargo.at} visible={false}>
           <PalletModel packs={cargo.packs} wrapped />
@@ -789,12 +1151,16 @@ function RouteForklift({
   );
 }
 
+function forkPick(f: SimForklift | null | undefined) {
+  return f ? { id: `forklift:${f.id}`, name: `Heftruck ${f.id}`, visual: forkliftVisual(f) } : null;
+}
+
 const putawayPlan = (from: Pose, m: Move) => putawayRoute(from, m.slot);
 const loadPlan = (from: Pose, m: Move) => loadRoute(from, m.slot, m.dock ?? 0);
 const slotPickup = (m: Move): Vec3 => rackSlotPosition(m.slot);
 
 /** Heftruck palletiser → stelling: speelt elke putaway uit de HU-data na. */
-export function PutawayForklift({ logistics, transit }: { logistics: Logistics; transit: Transit }) {
+export function PutawayForklift({ logistics, transit, sim }: { logistics: Logistics; transit: Transit; sim?: SimForklift | null }) {
   const { palette } = useTwin();
   const turntableBusy = logistics.palletiser.length > 0;
   const pickup = useCallback(
@@ -804,6 +1170,7 @@ export function PutawayForklift({ logistics, transit }: { logistics: Logistics; 
   return (
     <RouteForklift
       name="forklift-putaway"
+      pick={forkPick(sim)}
       move={logistics.lastPutaway}
       park={PARK_PUTAWAY}
       plan={putawayPlan}
@@ -816,11 +1183,12 @@ export function PutawayForklift({ logistics, transit }: { logistics: Logistics; 
 }
 
 /** Heftruck stelling → truck: speelt elke laadactie (ship) na, van het vak naar de dock. */
-export function LoaderForklift({ logistics, transit }: { logistics: Logistics; transit: Transit }) {
+export function LoaderForklift({ logistics, transit, sim }: { logistics: Logistics; transit: Transit; sim?: SimForklift | null }) {
   const { palette } = useTwin();
   return (
     <RouteForklift
       name="forklift-loader"
+      pick={forkPick(sim)}
       move={logistics.lastLoad}
       park={PARK_LOADER}
       plan={loadPlan}

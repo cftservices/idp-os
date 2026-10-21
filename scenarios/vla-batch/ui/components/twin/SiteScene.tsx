@@ -8,7 +8,18 @@ import { CAMERA_HOME, CAMERA_TARGET, LINE_EQUIPMENT, MAX_DOCKS, type Vec3 } from
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { TwinContext, type TwinCtx } from "./context";
 import { EquipmentObject, ProcessPipe } from "./objects/Equipment";
-import { ColdStore, DepartingTruck, DockTruck, EmptyDock, LoaderForklift, Palletiser, PutawayForklift, Silo } from "./objects/Logistics";
+import {
+  ColdStore,
+  DepartingTruck,
+  DockTruck,
+  EmptyDock,
+  LoaderForklift,
+  Palletiser,
+  PutawayForklift,
+  SimDepartingTruck,
+  Silo,
+  Tanker,
+} from "./objects/Logistics";
 import { SiteGround } from "./objects/Site";
 import { preloadProps } from "./models";
 
@@ -30,7 +41,7 @@ function homePosition(aspect: number): Vector3 {
   return new Vector3(...CAMERA_HOME).sub(t).multiplyScalar(k).add(t);
 }
 
-function CameraRig({ focus, resetSignal }: { focus: Vec3 | null; resetSignal: number }) {
+function CameraRig({ focus, resetSignal, zoom }: { focus: Vec3 | null; resetSignal: number; zoom: { n: number; dir: 1 | -1 } }) {
   const controls = useThree((s) => s.controls) as unknown as { target: Vector3; update: () => void } | null;
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
@@ -58,6 +69,15 @@ function CameraRig({ focus, resetSignal }: { focus: Vec3 | null; resetSignal: nu
     };
   }, [resetSignal]);
 
+  useEffect(() => {
+    if (zoom.n === 0 || !controls) return;
+    const t = controls.target.clone();
+    const off = camera.position.clone().sub(t);
+    const len = Math.min(200, Math.max(18, off.length() * (zoom.dir > 0 ? 0.78 : 1.28)));
+    goal.current = { target: t, pos: t.clone().add(off.setLength(len)), until: performance.now() + 700 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom.n]);
+
   useFrame(() => {
     const g = goal.current;
     if (!g || !controls) return;
@@ -74,11 +94,13 @@ export default function SiteScene({
   ctx,
   presenting,
   resetSignal,
+  zoom,
 }: {
   model: TwinModel;
   ctx: TwinCtx;
   presenting: boolean;
   resetSignal: number;
+  zoom: { n: number; dir: 1 | -1 };
 }) {
   const { palette, reducedMotion } = ctx;
   const flowing = model.batch ? ACTIVE_STATES.has(model.batch.state) : false;
@@ -102,25 +124,26 @@ export default function SiteScene({
     >
       <TwinContext.Provider value={ctx}>
         <color attach="background" args={[palette.sky]} />
-        <fog attach="fog" args={[palette.sky, 90, 260]} />
-        <hemisphereLight args={[palette.glow, palette.ground, 0.9]} />
-        <ambientLight intensity={0.35} />
+        <fog attach="fog" args={[palette.sky, 120, 320]} />
+        <hemisphereLight args={[palette["roof-edge"], palette.ground, 1.1]} />
+        <ambientLight intensity={0.45} />
         {/* Studio-reflecties voor RVS en lak: alleen lichtvlakken, geen HDR-download. */}
-        <Environment resolution={256} environmentIntensity={0.7}>
+        <Environment resolution={256} environmentIntensity={0.8}>
           <Lightformer form="rect" intensity={2.5} position={[0, 12, 0]} rotation-x={Math.PI / 2} scale={[40, 12, 1]} />
           <Lightformer form="rect" intensity={1.2} position={[-30, 6, 0]} rotation-y={Math.PI / 2} scale={[30, 6, 1]} />
           <Lightformer form="rect" intensity={1.2} position={[30, 6, 0]} rotation-y={-Math.PI / 2} scale={[30, 6, 1]} />
-          <Lightformer form="ring" intensity={1.5} color={palette.glow} position={[0, 5, -20]} scale={8} />
         </Environment>
         <directionalLight
-          position={[25, 40, 20]}
-          intensity={2.2}
+          position={[-22, 42, 28]}
+          intensity={2.4}
           castShadow
           shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-45}
-          shadow-camera-right={45}
-          shadow-camera-top={30}
-          shadow-camera-bottom={-30}
+          shadow-bias={-0.0004}
+          shadow-radius={6}
+          shadow-camera-left={-50}
+          shadow-camera-right={50}
+          shadow-camera-top={34}
+          shadow-camera-bottom={-34}
         />
 
         <SiteGround />
@@ -137,17 +160,23 @@ export default function SiteScene({
         ))}
 
         <Palletiser logistics={model.logistics} visual={lv.palletiser} />
-        <PutawayForklift logistics={model.logistics} transit={transit} />
-        <LoaderForklift logistics={model.logistics} transit={transit} />
+        <PutawayForklift logistics={model.logistics} transit={transit} sim={model.sim?.forklifts.find((f) => f.role === "putaway")} />
+        <LoaderForklift logistics={model.logistics} transit={transit} sim={model.sim?.forklifts.find((f) => f.role === "loader")} />
         <ColdStore logistics={model.logistics} visual={lv.coldstore} transit={transit} />
 
         {Array.from({ length: MAX_DOCKS }, (_, i) => {
           const slot = model.logistics.docks.find((d) => d.dock === i);
           return slot ? <DockTruck key={slot.batch_id} slot={slot} visual={lv.dock} /> : <EmptyDock key={`e${i}`} index={i} />;
         })}
-        {model.logistics.departures.slice(0, 3).map((d, i) => (
-          <DepartingTruck key={d.batch_id} dep={d} index={i} visual={lv.truck} />
-        ))}
+        {model.sim
+          ? model.sim.shipments
+              .filter((s) => s.stage === "en_route")
+              .slice(0, 3)
+              .map((s, i) => <SimDepartingTruck key={s.shipment_id} s={s} lane={i} />)
+          : model.logistics.departures.slice(0, 3).map((d, i) => (
+              <DepartingTruck key={d.batch_id} dep={d} index={i} visual={lv.truck} />
+            ))}
+        {model.sim?.inbounds.map((i) => <Tanker key={i.material_id ?? "milk"} inbound={i} />)}
 
         <OrbitControls
           makeDefault
@@ -159,7 +188,7 @@ export default function SiteScene({
           autoRotate={presenting && !reducedMotion}
           autoRotateSpeed={0.6}
         />
-        <CameraRig focus={focus} resetSignal={resetSignal} />
+        <CameraRig focus={focus} resetSignal={resetSignal} zoom={zoom} />
       </TwinContext.Provider>
     </Canvas>
   );
