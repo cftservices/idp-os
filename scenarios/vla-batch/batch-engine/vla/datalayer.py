@@ -142,12 +142,19 @@ def _prefix(equipment_id: str) -> str:
     return f"{ln.uns_root}/{M.area_of(equipment_id)}/{equipment_id}/Status/"
 
 
-def topic_state(row: dict, threshold: float) -> str:
+# Tags die alleen bij een wijziging publiceren: de retained waarde geldt tot de
+# volgende wijziging en is dus niet "verouderd".
+ON_CHANGE_TAGS = {"maintenance_state", "work_order"}
+
+
+def topic_state(row: dict, threshold: float, tag: Optional[str] = None) -> str:
     """GOOD, STALE of BAD voor één topic. BAD wint: een slechte waarde die
     vers binnenkomt is erger dan een goede die oud is."""
     q = str(row.get("quality") or "UNKNOWN").upper()
     if q.startswith("BAD"):
         return "BAD"
+    if tag in ON_CHANGE_TAGS and (row.get("retained") or row.get("age_s") is None):
+        return "GOOD"
     if row.get("retained") or row.get("age_s") is None:
         return "STALE"
     if row["age_s"] > threshold:
@@ -174,13 +181,13 @@ def layer_map(buses: dict, db=None, extra: Optional[dict] = None) -> dict:
     verbose = _verbose(buses)
     sources = []
     for lid, ln in M.LINES.items():
-        # Signaalkwaliteit gaat over machinesignalen (conventie .../Status/{tag});
-        # retained regel- en orderinformatie ververst niet live en zou anders
-        # als "verouderd" meetellen.
-        rows = {t: r for t, r in verbose.items()
-                if t.startswith(ln.uns_root + "/") and "/Status/" in t}
+        # Signaalkwaliteit gaat over machinesignalen, met dezelfde prefixen als
+        # quality(); retained order- en regelinformatie ververst niet live en
+        # zou anders als "verouderd" meetellen.
+        prefixes = tuple(_prefix(e) for e in ln.equipment_ids)
+        rows = {t: r for t, r in verbose.items() if t.startswith(prefixes)}
         ages = [r["age_s"] for r in rows.values() if r.get("age_s") is not None]
-        states = [topic_state(r, threshold) for r in rows.values()]
+        states = [topic_state(r, threshold, t.rsplit("/", 1)[-1]) for t, r in rows.items()]
         bus = buses.get(lid)
         sources.append({
             "id": f"opcua-{lid.lower()}",
@@ -304,7 +311,7 @@ def context(equipment_id: str, buses: dict, db=None,
             continue
         tag = t[len(prefix):]
         row = dict(verbose[t])
-        state = topic_state(row, threshold)
+        state = topic_state(row, threshold, tag)
         from_engine = tag in engine
         if dropped and not from_engine:
             state, row["quality"], row["value"] = "BAD", "BAD_SENSOR_FAILURE", None
@@ -380,7 +387,7 @@ def quality(buses: dict) -> dict:
             if not t.startswith(prefix):
                 continue
             tag = t[len(prefix):]
-            state = topic_state(row, threshold)
+            state = topic_state(row, threshold, tag)
             if eq in dropped and tag not in engine:
                 state = "BAD"
             counts[state] += 1
