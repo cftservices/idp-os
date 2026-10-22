@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Glyph, StatusPill, statusFromKpi } from "@/components/toolkit/StatusPill";
 import { PILL, SHAPE, type Visual, type VisualState } from "@/lib/twin/derive";
 import { needsPin, searchItems } from "@/lib/twin/flow";
+import { orderStops, type OrderStop } from "@/lib/twin/orderPath";
 import { delta, sparkPath, type Sample } from "@/lib/twin/history";
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { EMPTY, compact, num, shortTime } from "@/lib/format";
@@ -218,7 +219,12 @@ export type ActiveOrder = {
   due_date?: string | null;
   target_qty_L?: number | null;
   status: string;
-  progress?: { progress_pct?: number | null; produced_L?: number | null; batches_count?: number | null } | null;
+  progress?: {
+    progress_pct?: number | null;
+    produced_L?: number | null;
+    batches_count?: number | null;
+    batch_ids?: string[] | null;
+  } | null;
 };
 
 function KpiValue({ v, unit }: { v: number | null | undefined; unit: string }) {
@@ -231,7 +237,19 @@ function KpiValue({ v, unit }: { v: number | null | undefined; unit: string }) {
   );
 }
 
-function OrderCard({ order, now }: { order: ActiveOrder | null; now: number }) {
+function OrderCard({
+  order,
+  now,
+  showPath,
+  onTogglePath,
+  stops,
+}: {
+  order: ActiveOrder | null;
+  now: number;
+  showPath?: boolean;
+  onTogglePath?: () => void;
+  stops?: OrderStop[];
+}) {
   if (!order) {
     return (
       <div className="wt-kpi wt-kpi-order wt-glass" data-twin-order="">
@@ -263,11 +281,121 @@ function OrderCard({ order, now }: { order: ActiveOrder | null; now: number }) {
           {order.due_date ? shortTime(order.due_date) : EMPTY}
         </span>
       </dd>
+      {onTogglePath && (
+        <dd>
+          <button
+            type="button"
+            className="wt-chip-btn"
+            aria-pressed={showPath ? "true" : "false"}
+            onClick={onTogglePath}
+            data-twin-path-toggle=""
+          >
+            {showPath ? "Orderpad verbergen" : "Toon orderpad"}
+          </button>
+        </dd>
+      )}
+      {showPath && stops && (
+        <dd>
+          <ol className="wt-path-list" aria-label="Orderpad" data-twin-path-list="">
+            {stops.map((s) => (
+              <li key={s.key} data-twin-path-chip={s.key}>
+                <span>{s.label}</span>
+                <span className="num">{s.value}</span>
+              </li>
+            ))}
+          </ol>
+        </dd>
+      )}
     </div>
   );
 }
 
-export function KpiCards({ m, series, order }: { m: TwinModel; series: (k: string) => Sample[]; order: ActiveOrder | null }) {
+const DIRECTION_WORD = { higher_is_better: "hoger is beter", lower_is_better: "lager is beter" } as const;
+
+function KpiInfo({ k, samples, onClose }: { k: TwinModel["kpis"][number]; samples: Sample[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    const down = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (ref.current && t && !ref.current.contains(t) && !t.closest("[data-twin-kpi]")) onClose();
+    };
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("pointerdown", down);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("pointerdown", down);
+    };
+  }, [onClose]);
+  const fmt = (v: number | null) => (v == null ? EMPTY : `${num(v)} ${k.unit}`.trim());
+  return (
+    <div ref={ref} tabIndex={-1} className="wt-kpi-info wt-glass" role="dialog" aria-label={`Uitleg ${k.name}`} data-twin-kpi-info={k.kpi_id}>
+      <header className="wt-detail-head">
+        <div>
+          <p className="wt-eyebrow">{k.iso_ref || "KPI"}</p>
+          <h2 className="wt-detail-title">{k.name}</h2>
+        </div>
+        <button type="button" className="wt-btn" onClick={onClose} aria-label="Sluiten (Escape)">
+          ✕
+        </button>
+      </header>
+      <div className="wt-kpi-info-now">
+        <span className="num">{k.value == null || k.status === "UNSET" ? EMPTY : fmt(k.value)}</span>
+        <StatusPill status={statusFromKpi(k.status)} />
+      </div>
+      <Sparkline samples={samples} w={300} h={64} label={k.name} />
+      <dl className="wt-rows">
+        <div>
+          <dt>Formule</dt>
+          <dd>{k.formula || EMPTY}</dd>
+        </div>
+        <div>
+          <dt>Richting</dt>
+          <dd>{DIRECTION_WORD[k.direction] ?? k.direction}</dd>
+        </div>
+        <div>
+          <dt>Doel · waarschuwing · kritiek</dt>
+          <dd className="num">
+            {fmt(k.target)} · {fmt(k.warn)} · {fmt(k.critical)}
+          </dd>
+        </div>
+        <div>
+          <dt>Venster</dt>
+          <dd>{k.window || EMPTY}</dd>
+        </div>
+        {k.timing && (
+          <div>
+            <dt>Timing</dt>
+            <dd>{k.timing}</dd>
+          </div>
+        )}
+      </dl>
+      <p className="wt-note">Verloop: laatste waarnemingen in deze browser.</p>
+    </div>
+  );
+}
+
+export function KpiCards({
+  m,
+  series,
+  order,
+  showPath,
+  onTogglePath,
+}: {
+  m: TwinModel;
+  series: (k: string) => Sample[];
+  order: ActiveOrder | null;
+  showPath?: boolean;
+  onTogglePath?: () => void;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const close = useMemo(() => () => setOpen(null), []);
   const picked = useMemo(() => {
     const ranked = [...m.kpis].sort((a, b) => {
       const ia = KPI_PREFERENCE.indexOf(a.kpi_id);
@@ -278,6 +406,7 @@ export function KpiCards({ m, series, order }: { m: TwinModel; series: (k: strin
   }, [m.kpis]);
 
   return (
+    <>
     <dl className="wt-kpis" data-twin-hud="">
       {picked.length === 0 ? (
         <div className="wt-kpi wt-glass">
@@ -290,8 +419,25 @@ export function KpiCards({ m, series, order }: { m: TwinModel; series: (k: strin
       ) : (
         picked.map((k, i) => {
           const s = series(`kpi:${k.kpi_id}`);
+          const toggle = () => setOpen((o) => (o === k.kpi_id ? null : k.kpi_id));
           return (
-            <div key={k.kpi_id} className="wt-kpi wt-glass" data-twin-kpi={k.kpi_id} style={{ animationDelay: `${i * 50}ms` }}>
+            <div
+              key={k.kpi_id}
+              className="wt-kpi wt-kpi-click wt-glass"
+              data-twin-kpi={k.kpi_id}
+              style={{ animationDelay: `${i * 50}ms` }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={open === k.kpi_id}
+              aria-label={`${k.name}: uitleg en verloop`}
+              onClick={toggle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggle();
+                }
+              }}
+            >
               <dt title={k.name}>{k.name}</dt>
               <KpiValue v={k.value == null || k.status === "UNSET" ? null : k.value} unit={k.unit} />
               <dd className="wt-kpi-foot">
@@ -309,8 +455,14 @@ export function KpiCards({ m, series, order }: { m: TwinModel; series: (k: strin
           <Sparkline samples={series("produced")} w={72} h={18} label="geproduceerd" />
         </dd>
       </div>
-      <OrderCard order={order} now={m.now} />
+      <OrderCard order={order} now={m.now} showPath={showPath} onTogglePath={onTogglePath} stops={order && showPath ? orderStops(order, m) : undefined} />
     </dl>
+    {open &&
+      (() => {
+        const k = m.kpis.find((x) => x.kpi_id === open);
+        return k ? <KpiInfo k={k} samples={series(`kpi:${k.kpi_id}`)} onClose={close} /> : null;
+      })()}
+    </>
   );
 }
 
@@ -423,11 +575,15 @@ export function DetailCard({
   m,
   series,
   onClose,
+  following,
+  onFollow,
 }: {
   id: string;
   m: TwinModel;
   series: (k: string) => Sample[];
   onClose: () => void;
+  following?: boolean;
+  onFollow?: () => void;
 }) {
   const d = describe(id, m);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -448,6 +604,11 @@ export function DetailCard({
         </button>
       </header>
       <VisualPill v={d.visual} />
+      {onFollow && (
+        <button type="button" className="wt-chip-btn" aria-pressed={following ? "true" : "false"} onClick={onFollow} data-twin-follow={id}>
+          {following ? "■ Stop volgen" : "◎ Volg met camera"}
+        </button>
+      )}
       {d.visual.reasons.length > 0 && (
         <ul className="wt-reasons">
           {d.visual.reasons.map((r) => (
@@ -525,12 +686,33 @@ function MiniSteps({ steps, index }: { steps: readonly string[]; index: number }
 
 /* ---------------- tijdlijn onder ---------------- */
 
-export function Timeline({ title, right, steps, index }: { title: ReactNode; right: ReactNode; steps: readonly string[]; index: number }) {
+export function Timeline({
+  title,
+  right,
+  steps,
+  index,
+  following,
+  onFollow,
+}: {
+  title: ReactNode;
+  right: ReactNode;
+  steps: readonly string[];
+  index: number;
+  following?: boolean;
+  onFollow?: () => void;
+}) {
   return (
     <section className="wt-timeline wt-glass" aria-label="Procestijdlijn" data-twin-timeline="">
       <div className="wt-timeline-head">
         <span>{title}</span>
-        <span>{right}</span>
+        <span className="wt-timeline-right">
+          {right}
+          {onFollow && (
+            <button type="button" className="wt-chip-btn" aria-pressed={following ? "true" : "false"} onClick={onFollow} data-twin-follow-batch="">
+              {following ? "■ Stop volgen" : "◎ Volg batch"}
+            </button>
+          )}
+        </span>
       </div>
       <MiniSteps steps={steps} index={index} />
     </section>

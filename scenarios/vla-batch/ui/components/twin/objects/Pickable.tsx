@@ -3,16 +3,30 @@
 import { useRef, type ReactNode } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { AdditiveBlending, type Group, type Mesh } from "three";
+import { AdditiveBlending, type Group, type Mesh, type Object3D } from "three";
 import type { Vec3 } from "@/lib/twin/layout";
 import type { Visual } from "@/lib/twin/derive";
 import { needsPin } from "@/lib/twin/flow";
 import { statusColor, useTwin } from "../context";
 
+/**
+ * Het 3D-object achter elke selecteerbare id, zodat de camera een rijdende
+ * heftruck of truck kan volgen. Vult zich via `onUpdate` in `usePick`; een
+ * object dat uit de scène is gehaald heeft geen parent meer en telt niet.
+ */
+const tracked = new Map<string, Object3D>();
+export function trackedObject(id: string): Object3D | null {
+  const o = tracked.get(id);
+  return o && o.parent ? o : null;
+}
+
 /** Klik- en hoverhandlers voor alles wat selecteerbaar is, ook bewegende objecten. */
 export function usePick(id: string) {
   const { selected, select, hover } = useTwin();
   return {
+    onUpdate(self: Object3D) {
+      tracked.set(id, self);
+    },
     onClick(e: ThreeEvent<MouseEvent>) {
       e.stopPropagation();
       select(selected === id ? null : id);
