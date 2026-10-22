@@ -1,14 +1,31 @@
 # Vla Batch v2 demo — the missing AI data layer, end-to-end
 
-> Generic anonymized batch-dairy line **"Vla"** (chocolate vla, 1L packs). A running
-> simulated factory drives one secure demo URL: a live batch through
-> **Receiving → Mixing → Cook → Cooling → Filling**, with an EBR-style batch report
-> as the proof artifact. This is the **v2 architecture**: the factory is an OPC-UA
+> Generic anonymized batch-dairy plant **"Vla"** with **two lines and five end products**
+> (1L packs). A running simulated factory drives one secure demo URL: live batches through
+> **Preparation → Receiving → Mixing → Cook → Cooling → Filling**, with an EBR-style batch
+> report as the proof artifact. This is the **v2 architecture**: the factory is an OPC-UA
 > server ("black box with SCADA knobs"), MonsterMQ is the data layer / UNS bus, and
 > everything downstream (historian, MES, Grafana, dashboard) consumes the UNS.
 >
 > **⚠ Anonymization is hard.** DairyWorks + generic names only. No real client/vendor
 > names, IPs or schemas anywhere.
+
+### Lines and products
+
+| Line | Hall | Products (recipe id) | Factory / UNS |
+|------|------|----------------------|---------------|
+| **L1** | Hal 1 | Chocolate Vla 1L (`chocolate-vla-1L`) | `vla-factory`, `DairyWorks/Vla/#` |
+| **L2** | Hal 2 | Vanilla, Banana, Caramel, Strawberry Vla 1L (`vanilla-`, `banana-`, `caramel-`, `strawberry-vla-1L`) | `vla-factory-l2` (own OPC-UA server, registered by `vla-l2-opcua-init`), `DairyWorks/Vla-L2/#` |
+
+- **Preparation room** (`vla/preparation.py`, `dw_prep_orders`): one room serves both lines. Each line
+  has its own weigh station and premix tank, so a fault on one line never holds up the other. Sugar,
+  starch and the flavouring are weighed and premixed per batch; milk comes straight from the silo.
+  API: `GET/POST /api/v1/prep-orders`; UI page `/voorbereiding`.
+- **Changeovers:** a CIP is only required when the next product is lighter than the previous one
+  (colour residue would show), not between every batch.
+- **Line-aware API and UI:** equipment, OEE, health, batches and alarms accept `?line=L1|L2`; the
+  autopilot runs per line (`/autopilot` → `lines.{L1,L2}`). Equipment ids follow ISA-95 numbering
+  (`-01` on L1, `-02` on L2).
 
 ---
 
@@ -296,17 +313,23 @@ A game-style 3D twin of the whole site (react-three-fiber), live at
 invents state.
 
 - **Line:** receiving tank, mixer, cooker, cooler and filler, each with its live process value and
-  status (running, idle, attention, alarm, stale, no data).
+  status (running, idle, attention, alarm, stale, no data). Hall 1 holds line L1, Hall 2 line L2.
+- **Preparation room:** weigh stations and premix tanks for both lines; active stations show their
+  set (state, flavour, line) on a shared board.
 - **Raw materials:** four silos (milk, sugar, starch, cocoa) filled to `stock / (4 × reorder level)`.
   Each material has its own supplier vehicle: a stainless tanker for milk, bulk tankers for sugar
   and starch, a pallet truck for cocoa. A silo below 50% places an order; while unloading the
   vehicle books real goods receipts in chunks (`inventory.receive`), capped at silo capacity.
   Each vehicle has its own unloading bay (`INBOUND_BAYS` in `ui/lib/twin/flow.ts`).
 - **Warehouse:** palletiser robot, cold store with 96 rack slots, forklifts with battery and trips,
-  four docks. Docked trailers are see-through and show the loaded pallets.
+  four docks. Docked trailers are see-through and show the loaded pallets. Cartons and pallets
+  (also on the forklift forks) carry the colour of their flavour. A truck loads at the dock, leaves
+  when full, and its chip shows which orders it carries; the dock chips form one board.
+- **Order traceability:** `Toon orderpad` follows an order from preparation set through batch,
+  pallet and dock to the departing truck.
 - **WareTrack overlay:** glass panels with tabs per group, search (`/`), floating labels with
-  priority (selected, then alarm, within a label budget), a detail card with sparklines, and a batch
-  timeline.
+  priority (selected, then alarm, within a label budget that skips a label landing on another one
+  on screen), a detail card with sparklines, and a batch timeline.
 
 Driven by the autopilot (`DEMO_AUTOPILOT`, `DEMO_AUTOPILOT_LOGISTICS`): batches, warehouse moves and
 the logistics simulation (`vla/logistics_sim.py`, exposed at `GET /api/v1/logistics`). The pure rules
