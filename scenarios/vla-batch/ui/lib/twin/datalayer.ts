@@ -33,7 +33,7 @@ export type LayerNode = {
 export type LayerMap = {
   generated_at: string;
   stale_threshold_s: number;
-  datalayer: { name: string; convention: string; topics: number; good: number; stale: number; bad: number; roots: string[] };
+  datalayer: { name: string; convention: string; topics: number; signals?: number; good: number; stale: number; bad: number; roots: string[] };
   sources: LayerNode[];
   services: LayerNode[];
 };

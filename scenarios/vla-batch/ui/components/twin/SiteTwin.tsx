@@ -147,6 +147,7 @@ export default function SiteTwin() {
     const down = new Set(open.filter((w) => w.kind === "breakdown").map((w) => w.equipment_id));
     return [...model.equipment, ...model.line2.equipment].map((e) => ({
       id: e.id,
+      name: e.name,
       pos: e.pos,
       quality: q.get(e.id)?.quality ?? "NO_DATA",
       wo: wo.get(e.id) ?? null,
@@ -240,7 +241,7 @@ export default function SiteTwin() {
     if (follow === BATCH_FOLLOW && !model.batch) setFollow(null);
   }, [follow, model]);
 
-  const labelled = useMemo(() => labelBudget(items, selected, hovered, 6), [items, selected, hovered]);
+  const labelled = useMemo(() => labelBudget(items, selected, hovered, lens ? 0 : 6), [items, selected, hovered, lens]);
   const meta = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.meta])), [items]);
 
   const ctx: TwinCtx | null = useMemo(
