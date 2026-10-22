@@ -203,7 +203,14 @@ export default function SiteScene({
 
         {Array.from({ length: MAX_DOCKS }, (_, i) => {
           const slot = model.logistics.docks.find((d) => d.dock === i);
-          return slot ? <DockTruck key={slot.batch_id} slot={slot} visual={lv.dock} /> : <EmptyDock key={`e${i}`} index={i} />;
+          return slot ? (
+            <DockTruck
+              key={slot.batch_id}
+              slot={slot}
+              visual={lv.dock}
+              ship={model.sim?.shipments.find((s) => s.batch_id === slot.batch_id)}
+            />
+          ) : <EmptyDock key={`e${i}`} index={i} />;
         })}
         {model.sim
           ? model.sim.shipments

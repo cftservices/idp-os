@@ -303,9 +303,10 @@ export function describe(id: string, m: TwinModel): Detail | null {
       kind: "Dock",
       visual: m.logisticsVisual.dock,
       rows: [
+        ["Status", d.state === "laden" ? "Laden" : "Aangemeld, laden start zo"],
+        ...(s ? ([["Order", s.order_id ?? EMPTY], ["Klant", `${s.customer}, ${s.destination}`], ["Truck", s.truck_id]] as Array<[string, string]>) : []),
         ["Batch", d.batch_id],
         ["Geladen", `${d.loaded.length} / ${d.loaded.length + d.waiting.length} HU`],
-        ...(s ? ([["Truck", s.truck_id], ["Klant", `${s.customer}, ${s.destination}`]] as Array<[string, string]>) : []),
       ],
       progress: { label: "Laden", pct: d.progress * 100 },
       timeline: s ? { steps: SHIP_STEPS, index: shipStepIndex(s.stage) } : undefined,
@@ -341,6 +342,7 @@ export function describe(id: string, m: TwinModel): Detail | null {
       kind: "Zending",
       visual: shipmentVisual(s),
       rows: [
+        ["Order", s.order_id ?? EMPTY],
         ["Klant", s.customer],
         ["Bestemming", s.destination],
         ["Batch", s.batch_id],

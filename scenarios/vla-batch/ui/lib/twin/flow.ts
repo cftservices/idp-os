@@ -13,6 +13,7 @@ export type SimShipment = {
   shipment_id: string;
   truck_id: string;
   batch_id: string;
+  order_id?: string | null;
   customer: string;
   destination: string;
   drive_min: number;
