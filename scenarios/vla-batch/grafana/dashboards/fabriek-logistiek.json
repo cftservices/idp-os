@@ -1,0 +1,1524 @@
+{
+  "uid": "fabriek-logistiek",
+  "title": "Fabriek — logistiek en track & trace",
+  "description": "Inkomende melk, uitgaande vrachtwagens, heftrucks en het volledige spoor per order.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "heftruck",
+        "label": "Heftruck",
+        "type": "custom",
+        "hide": 0,
+        "query": "HT-01,HT-02,HT-03,HT-04",
+        "current": {
+          "text": "HT-01",
+          "value": "HT-01"
+        },
+        "options": [
+          {
+            "text": "HT-01",
+            "value": "HT-01",
+            "selected": true
+          },
+          {
+            "text": "HT-02",
+            "value": "HT-02",
+            "selected": false
+          },
+          {
+            "text": "HT-03",
+            "value": "HT-03",
+            "selected": false
+          },
+          {
+            "text": "HT-04",
+            "value": "HT-04",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "order",
+        "label": "Order",
+        "type": "query",
+        "hide": 0,
+        "refresh": 2,
+        "sort": 2,
+        "datasource": {
+          "type": "marcusolsson-json-datasource",
+          "uid": "vla-batch-engine"
+        },
+        "query": {
+          "method": "GET",
+          "urlPath": "/orders",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$[*].order_id",
+              "name": "order",
+              "type": "string"
+            }
+          ]
+        },
+        "current": {},
+        "options": [],
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Magazijn en transport",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Melktankwagen",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.inbound.id",
+              "name": "Wagen",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.inbound.stage",
+              "name": "Fase",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "Lossen",
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.inbound.unloaded_pct",
+              "name": "Gelost",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Te laden",
+      "gridPos": {
+        "x": 10,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$count(shipments[stage='order'])",
+              "name": "Te laden",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Onderweg",
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$count(shipments[stage='en_route'])",
+              "name": "Onderweg",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Afgeleverd",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$count(shipments[stage='delivered'])",
+              "name": "Afgeleverd",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Zendingen",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 14,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.shipments[*].shipment_id",
+              "name": "Zending",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].truck_id",
+              "name": "Wagen",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].order_id",
+              "name": "Order",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].customer",
+              "name": "Klant",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].destination",
+              "name": "Bestemming",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].stage",
+              "name": "Fase",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].pallets_loaded",
+              "name": "Geladen",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.shipments[*].pallets",
+              "name": "Pallets",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Heftrucks",
+      "gridPos": {
+        "x": 14,
+        "y": 5,
+        "w": 10,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.forklifts[*].id",
+              "name": "Heftruck",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].role",
+              "name": "Taak",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].state",
+              "name": "Toestand",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].battery_pct",
+              "name": "Accu %",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].trips_today",
+              "name": "Ritten",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Per heftruck: $heftruck",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Bewegingen",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 6,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/forklifts/$heftruck/history",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.moves",
+              "name": "Bewegingen",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Weggezet",
+      "gridPos": {
+        "x": 6,
+        "y": 15,
+        "w": 6,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/forklifts/$heftruck/history",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.putaway",
+              "name": "Weggezet",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Geladen",
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 6,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/forklifts/$heftruck/history",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.loaded",
+              "name": "Geladen",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Orders",
+      "gridPos": {
+        "x": 18,
+        "y": 15,
+        "w": 6,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/forklifts/$heftruck/history",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.orders",
+              "name": "Orders",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Orders behandeld door $heftruck",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/forklifts/$heftruck/history",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.orders[*].order_id",
+              "name": "Order",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.orders[*].customer",
+              "name": "Klant",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.orders[*].recipe_id",
+              "name": "Recept",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.orders[*].putaway",
+              "name": "Weggezet",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.orders[*].loaded",
+              "name": "Geladen",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.orders[*].first_ts",
+              "name": "Eerste",
+              "type": "time",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.orders[*].last_ts",
+              "name": "Laatste",
+              "type": "time",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Laatste bewegingen $heftruck",
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/forklifts/$heftruck/history",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.recent[*].ts",
+              "name": "Tijd",
+              "type": "time",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.recent[*].task",
+              "name": "Taak",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.recent[*].hu_id",
+              "name": "Pallet (SSCC)",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.recent[*].order_id",
+              "name": "Order",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.recent[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.recent[*].slot",
+              "name": "Vak",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.recent[*].truck_id",
+              "name": "Wagen",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Track & trace order: $order",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Batches",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.batches",
+              "name": "Batches",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Pallets",
+      "gridPos": {
+        "x": 4,
+        "y": 28,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.pallets",
+              "name": "Pallets",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Pakken",
+      "gridPos": {
+        "x": 8,
+        "y": 28,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.packs",
+              "name": "Pakken",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Wagens onderweg",
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.trucks_en_route",
+              "name": "Wagens onderweg",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Wagens afgeleverd",
+      "gridPos": {
+        "x": 16,
+        "y": 28,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.trucks_delivered",
+              "name": "Wagens afgeleverd",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Pakken afgeleverd",
+      "gridPos": {
+        "x": 20,
+        "y": 28,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.totals.packs_delivered",
+              "name": "Pakken afgeleverd",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Batches van de order",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.batches[*].batch_id",
+              "name": "Batch",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].state",
+              "name": "Toestand",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].verdict",
+              "name": "Oordeel",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].packs",
+              "name": "Pakken",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].pallets",
+              "name": "Pallets",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].step",
+              "name": "Stap",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].started_at",
+              "name": "Start",
+              "type": "time",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.batches[*].completed_at",
+              "name": "Klaar",
+              "type": "time",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 24,
+      "type": "table",
+      "title": "Gebeurtenissen van de order",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders/$order/trace",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.events[*].ts",
+              "name": "Tijd",
+              "type": "time",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.events[*].batch_id",
+              "name": "Batch",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.events[*].type",
+              "name": "Gebeurtenis",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Tijd",
+            "desc": true
+          }
+        ]
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "description": "Maximaal 600 gebeurtenissen per order (de API kapt af en meldt dat met events_truncated)."
+    }
+  ]
+}

@@ -80,7 +80,7 @@
 | Next.js webapp | techflow24.com | Live PLC data dashboard |
 | MonsterMQ | mqtt.techflow24.com | MQTT broker + OPC-UA client + web UI |
 | FastAPI | api.techflow24.com | REST API voor process data (Grafana datasource) |
-| Grafana | grafana.techflow24.com | Time-series dashboards + ad-hoc queries |
+| Grafana | milkdemo.techflow24.com/grafana | Time-series dashboards + ad-hoc queries (`grafana.*` heeft geen vhost meer) |
 | Portainer | portainer.techflow24.com | Container management UI |
 | OPC-UA sim | intern (port 4840) | 3 gesimuleerde PLCs (asyncua) |
 | MongoDB | intern | Process data store |
@@ -200,6 +200,10 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
 - **Nieuw:** `deploy/stack.sh` — offline, online, back-up en herstel van de hele stack in één commando
 - **Nieuw:** Grafana op `milkdemo…/grafana` (dubbel slot), historian en lokale AI draaien op de VPS
 - **Nieuw:** datalaag-lens met oorzaakanalyse; AI-samenvatting op de achtergrond
+- **Nieuw:** zeven fabrieksdashboards in Grafana (`fabriek-*`), gegenereerd door
+  `scenarios/vla-batch/grafana/build_dashboards.py` en paneel voor paneel gecontroleerd door
+  `validate_dashboards.py`; de historian schrijft nu ook L2, voorbereiding en Vla-B weg. Valkuilen
+  van de JSON- en TDengine-plugin staan in `scenarios/vla-batch/DEPLOY.md`.
 
 ### 2026-10-21: vla-batch site-twin
 - **Nieuw:** 3D site-twin op `/site` met WareTrack-overlay, autopilot-magazijn en OIP-modellen (MIT)

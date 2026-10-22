@@ -1,0 +1,942 @@
+{
+  "uid": "fabriek-oee",
+  "title": "Fabriek — OEE en verliezen",
+  "description": "OEE per machine, verliezen in euro's en betrouwbaarheid per lijn.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "lijn",
+        "label": "Lijn",
+        "type": "custom",
+        "hide": 0,
+        "query": "L1,L2",
+        "current": {
+          "text": "L1",
+          "value": "L1"
+        },
+        "options": [
+          {
+            "text": "L1",
+            "value": "L1",
+            "selected": true
+          },
+          {
+            "text": "L2",
+            "value": "L2",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "uren",
+        "label": "Venster (uren)",
+        "type": "custom",
+        "hide": 0,
+        "query": "2,8,24,168",
+        "current": {
+          "text": "24",
+          "value": "24"
+        },
+        "options": [
+          {
+            "text": "2",
+            "value": "2",
+            "selected": false
+          },
+          {
+            "text": "8",
+            "value": "8",
+            "selected": false
+          },
+          {
+            "text": "24",
+            "value": "24",
+            "selected": true
+          },
+          {
+            "text": "168",
+            "value": "168",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "dagen",
+        "label": "Rapportperiode (dagen)",
+        "type": "custom",
+        "hide": 0,
+        "query": "1,7,30",
+        "current": {
+          "text": "7",
+          "value": "7"
+        },
+        "options": [
+          {
+            "text": "1",
+            "value": "1",
+            "selected": false
+          },
+          {
+            "text": "7",
+            "value": "7",
+            "selected": true
+          },
+          {
+            "text": "30",
+            "value": "30",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Batches",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "days",
+              "$dagen"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.batches_total",
+              "name": "Batches",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Rendement",
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "days",
+              "$dagen"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.yield_pct",
+              "name": "Rendement",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Afgekeurd",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "days",
+              "$dagen"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.batches_by_verdict.REJECTED",
+              "name": "Afgekeurd",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Stilstandmeldingen",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "days",
+              "$dagen"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.downtime_events",
+              "name": "Stilstand",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Verlies lijn (venster)",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/losses/equipment",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "line",
+              "$lijn"
+            ],
+            [
+              "hours",
+              "$uren"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.total_causal",
+              "name": "Verlies",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 6,
+      "type": "bargauge",
+      "title": "OEE per machine — $lijn",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/oee",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "line",
+              "$lijn"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].oee",
+              "name": "OEE",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.65
+              },
+              {
+                "color": "green",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "/OEE/",
+          "values": true
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "OEE-factoren",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/oee",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "line",
+              "$lijn"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].availability",
+              "name": "Beschikbaarheid",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].performance",
+              "name": "Prestatie",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].quality",
+              "name": "Kwaliteit",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].oee",
+              "name": "OEE",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "custom": {
+            "cellOptions": {
+              "type": "color-text"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.65
+              },
+              {
+                "color": "green",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Verlies per machine (venster)",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/losses/equipment",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "line",
+              "$lijn"
+            ],
+            [
+              "hours",
+              "$uren"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.equipment[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].total_causal",
+              "name": "Verlies",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "/Verlies/",
+          "values": true
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Betrouwbaarheid (MTBF / MTTR)",
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/reliability",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "line",
+              "$lijn"
+            ],
+            [
+              "hours",
+              "$uren"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.equipment[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].availability",
+              "name": "Beschikbaarheid",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].failures",
+              "name": "Storingen",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].mtbf_h",
+              "name": "MTBF (u)",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].mttr_min",
+              "name": "MTTR (min)",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].downtime_eur",
+              "name": "Stilstand €",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Beschikbaarheid"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stilstand €"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyEUR"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Verliesoorzaken fabriek (deze week)",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.losses.items[*].label",
+              "name": "Verlies",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].cause",
+              "name": "Oorzaak",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].causal_or_resultant",
+              "name": "Soort",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].amount",
+              "name": "Bedrag",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].share_pct",
+              "name": "Aandeel %",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bedrag"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyEUR"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    }
+  ]
+}

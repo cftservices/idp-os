@@ -160,7 +160,7 @@ docker compose -f docker-compose.v3.yml logs -f nifi rabbitmq monstermq
 | UI | URL (with DOMAIN configured) | Local fallback |
 |----|------------------------------|-----------------|
 | Webapp (live dashboard) | `https://${DOMAIN}` | — |
-| Grafana | `https://grafana.${DOMAIN}` | — |
+| Grafana | `https://milkdemo.${DOMAIN}/grafana` | vla-batch: 7 factory dashboards |
 | FastAPI docs | `https://api.${DOMAIN}/docs` | — |
 | NiFi | `https://nifi.${DOMAIN}` | `https://localhost:8443/nifi` |
 | RabbitMQ management | `https://mqtt.${DOMAIN}` | `http://localhost:15672` |
@@ -184,7 +184,7 @@ Workshop and demo scenarios live in [`scenarios/`](./scenarios/). Each one is a 
 
 > 🔒 **Anonymisation is a hard rule.** Scenarios use fictional names (DairyWorks, …) only — no real customer, vendor or employer names, IPs or vendor schemas.
 >
-> 🌐 The vla-batch demo runs on a shared VPS behind basic auth; access on request. It is **one Docker Compose project (`idp-os`, 13 services)** managed by a single script, [`scenarios/vla-batch/deploy/stack.sh`](./scenarios/vla-batch/deploy/stack.sh): `status`, `offline`, `online [--build]`, `backup [--met-historian]`, `restore <dir>`, `remove`. Take it offline and bring it back in one command each; a backup (Mongo dump, Grafana, code, secrets) restores onto a fresh machine. Runbook: [`scenarios/vla-batch/DEPLOY.md`](./scenarios/vla-batch/DEPLOY.md) (top section). Grafana lives at `/grafana` behind the same basic auth plus its own login; the historian (TDengine) and a small local LLM (`qwen2.5:1.5b`, for the root-cause summary) run alongside.
+> 🌐 The vla-batch demo runs on a shared VPS behind basic auth; access on request. It is **one Docker Compose project (`idp-os`, 13 services)** managed by a single script, [`scenarios/vla-batch/deploy/stack.sh`](./scenarios/vla-batch/deploy/stack.sh): `status`, `offline`, `online [--build]`, `backup [--met-historian]`, `restore <dir>`, `remove`. Take it offline and bring it back in one command each; a backup (Mongo dump, Grafana, code, secrets) restores onto a fresh machine. Runbook: [`scenarios/vla-batch/DEPLOY.md`](./scenarios/vla-batch/DEPLOY.md) (top section). Grafana lives at `/grafana` behind the same basic auth plus its own login, with seven factory dashboards (overview, line live, preparation, OEE and losses, logistics and track & trace, maintenance, historian) generated from [`grafana/build_dashboards.py`](./scenarios/vla-batch/grafana/build_dashboards.py) and checked panel by panel by a validator; the historian (TDengine) and a small local LLM (`qwen2.5:1.5b`, for the root-cause summary) run alongside.
 
 ---
 

@@ -91,6 +91,47 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
   (`scp -r techflow-vps:/root/backups/idp-os/nacht/<map> .`).
 - De cron `hoststats.sh` (elke minuut) voedt het DataOps-tabblad en mag blijven staan.
 
+### Fabrieksdashboards (Grafana)
+
+Zeven dashboards in de map *Vla Batch Demo*, op `https://milkdemo.<domain>/grafana/d/<uid>`
+(basic auth plus Grafana-login). `grafana.<domain>` heeft geen vhost meer; het DNS-record is
+een overblijfsel uit de Traefik-tijd. TDengine heeft bewust géén publieke URL (alleen via een
+ssh-tunnel naar `127.0.0.1:6041`).
+
+| uid | Inhoud | Bron |
+|---|---|---|
+| `fabriek-overzicht` | home: KPI's, L1/L2/voorbereiding, alarmen, werkorders, voorraad | engine + TDengine |
+| `fabriek-lijn` | één lijn live, variabele `lijn` (L1/L2) | TDengine |
+| `fabriek-voorbereiding` | weegstations, premixtanks, voorbereidingssets | TDengine + `/prep-orders` |
+| `fabriek-oee` | OEE per machine, verliezen in euro's, MTBF/MTTR, periodeverslag | engine |
+| `fabriek-logistiek` | magazijn, zendingen, per heftruck, per order (track & trace) | engine |
+| `fabriek-onderhoud` | onderhoudstoestand, draaiuren, vervuiling, werkorders | TDengine + engine |
+| `fabriek-historian` | TDengine zelf: rijen, instroom per gebied, versheid per topic, datakwaliteit | TDengine + engine |
+
+`vla-line` en `vla-mes` blijven staan, want `/analyse` embedt `vla-line`.
+
+**Workflow.** Wijzig nooit de JSON, maar [`grafana/build_dashboards.py`](grafana/build_dashboards.py):
+`python build_dashboards.py` → `scp grafana/dashboards/fabriek-*.json` naar de VPS → ~40 s wachten
+(provisioning scant zelf) → valideren met [`grafana/validate_dashboards.py`](grafana/validate_dashboards.py):
+`scp` naar `/tmp/vd.py`, dan
+`P=$(grep ^GRAFANA_ADMIN_PASSWORD= /root/idp-os/.env|cut -d= -f2-); docker exec -i -e GF_PASS="$P" vla-batch-engine python - < /tmp/vd.py`.
+Het script draait elke paneelquery voor beide lijnen en eindigt op `0 panelen met fout of leeg`.
+
+**Historian.** Sinds 2026-10-22 schrijft de bridge `DairyWorks/Vla/#`, `Vla-L2/#`, `Prep/#` en
+`Vla-B/#` weg (`MQTT_TOPICS` in `docker-compose.vla.yml`). De historie van L2 en voorbereiding
+begint op die datum. Gemeten daarna: 347 topics, `vla-tdengine` 289 van 640 MB.
+
+**Plugin-valkuilen** (alle zonder bruikbare foutmelding):
+- *TDengine 3.7.1*: gereserveerde woorden (`topic`, `vgroups`) als alias geven syntax error 9728,
+  dus backticks. `partition by` met gewone spaties geeft "group_by_column config is null", dus
+  `partition\nby`. Bij een tabel met meer rijen moet de eerste kolom een timestamp zijn.
+- *JSON-datasource 1.4.3* (alleen frontend): `queryParams` per query wordt **genegeerd**; alleen
+  `params` (sleutel/waarde-paren) komt in de URL. JSONPath-filters `[?()]` worden geweigerd
+  ("eval prevented"), dus filters en tellingen in JSONata: `$count(shipments[stage='en_route'])`.
+  Grafana's `/api/ds/query` kan deze plugin niet draaien; de validator speelt JSON-queries
+  daarom zelf na tegen de engine.
+- Grafana-API vraagt een sessiecookie (`POST /grafana/login`), want eigen basic auth staat uit.
+
 **Code uitrollen.** `/root/idp-os` is geen git-checkout. Gewijzigde bestanden gaan per
 `scp`/tar erheen, daarna `$S online --build` (of gericht:
 `docker compose -p idp-os -f … up -d --no-deps --build vla-ui vla-batch-engine`). Zet bij
