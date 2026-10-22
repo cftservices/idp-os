@@ -536,8 +536,8 @@ export function CausePanel({ id, onSelect }: { id: string; onSelect?: (id: strin
     <div className="wt-dl-cause" data-twin-cause={id}>
       <p className="wt-eyebrow">Van symptoom naar oorzaak</p>
       <ol className="wt-dl-chain">
-        {d.chain.map((s) => (
-          <li key={s.step}>
+        {d.chain.map((s, i) => (
+          <li key={`${s.step}-${i}`}>
             <button type="button" className="wt-dl-link" onClick={() => onSelect?.(`equipment:${s.equipment_id}`)}>
               <strong>{s.label}</strong>
             </button>
@@ -552,6 +552,7 @@ export function CausePanel({ id, onSelect }: { id: string; onSelect?: (id: strin
           <small>lokaal model · {d.ai.model}</small>
         </blockquote>
       )}
+      {d.ai?.pending && <p className="wt-note">Het lokale model vat de keten samen…</p>}
       {onSelect && d.focus_equipment && (
         <button type="button" className="wt-chip-btn" onClick={() => onSelect(`equipment:${d.focus_equipment}`)}>
           ◎ Toon {d.focus_equipment}

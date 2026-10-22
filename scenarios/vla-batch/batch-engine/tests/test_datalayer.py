@@ -270,3 +270,29 @@ def test_api_datalayer_cmms_mcp_end_to_end():
         assert {r["id"] for r in ops["rules"]} >= {"DQ-01", "DQ-02", "DQ-03"}
         assert c.get("/api/v1/system/resources").json()["available"] is False
         assert c.get("/api/v1/alarms/A-NOPE/cause").status_code == 404
+
+
+def test_ai_summary_runs_in_background_and_is_cached(monkeypatch):
+    import time
+    from vla import rca as R
+    calls = []
+
+    def fake(facts, url, model, timeout):
+        calls.append(facts)
+        return {"model": model, "text": "Vervuiling gaf een te lage viscositeit."}
+
+    monkeypatch.setattr(R, "_ai_summary", fake)
+    R._ai_cache.clear()
+    out = {"alarm": {"equipment_id": "cook-unit-01", "message": "visc laag"},
+           "chain": [{"step": "fouling", "label": "Vervuiling", "evidence": "x"},
+                     {"step": "work_order", "label": "WO-1", "evidence": "a"},
+                     {"step": "work_order", "label": "WO-2", "evidence": "b"}]}
+    first = R.ai_summary_async(out, "http://x", "m")
+    assert first["pending"] is True and first["text"] is None
+    for _ in range(50):
+        if R._ai_cache:
+            break
+        time.sleep(0.02)
+    second = R.ai_summary_async(out, "http://x", "m")
+    assert second["text"].startswith("Vervuiling")
+    assert len(calls) == 1 and "WO-2" not in calls[0]
