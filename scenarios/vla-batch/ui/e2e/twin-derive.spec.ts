@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import {
+  ARRIVE_LEAD_MS,
   DEPART_WINDOW_MS,
+  STORE_DWELL_MS,
   deriveLogistics,
   equipmentVisual,
   logisticsVisuals,
@@ -112,12 +114,24 @@ test.describe("deriveLogistics", () => {
   });
 
   test("hooguit MAX_DOCKS trucks aan een dock, de rest telt als overloop, oudste eerst", () => {
-    const hus = Array.from({ length: MAX_DOCKS + 2 }, (_, i) => hu(`B${i}`, "awaiting_shipment", (10 - i) * 60_000));
+    const hus = Array.from({ length: MAX_DOCKS + 2 }, (_, i) =>     hu(`B${i}`, "awaiting_shipment", (20 - i) * 60_000));
     const l = deriveLogistics(hus, NOW);
     expect(l.docks).toHaveLength(MAX_DOCKS);
     expect(l.docksOverflow).toBe(2);
     expect(l.docks.map((d) => d.batch_id)).toEqual(["B0", "B1", "B2", "B3"]);
   });
+
+      test("een truck meldt zich pas bij laadklaar, en laadt pas als er een pallet in zit", () => {
+        const vers = deriveLogistics([hu("VERS", "awaiting_shipment", 60_000)], NOW);
+        expect(vers.docks, "net opgeslagen batch heeft nog geen truck").toEqual([]);
+
+        const bijnaKlaar = deriveLogistics([hu("KLAAR", "awaiting_shipment", STORE_DWELL_MS - ARRIVE_LEAD_MS + 1_000)], NOW);
+        expect(bijnaKlaar.docks).toHaveLength(1);
+        expect(bijnaKlaar.docks[0].state).toBe("aangemeld");
+
+        const laadt = deriveLogistics([hu("L", "shipped", 1_000), hu("L", "awaiting_shipment", 60_000)], NOW);
+        expect(laadt.docks[0].state).toBe("laden");
+      });
 
   test("laadvoortgang telt geladen tegen het totaal van de batch", () => {
     const l = deriveLogistics(

@@ -168,6 +168,8 @@ export type DockSlot = {
   loaded: Hu[];
   /** 0..1, hoeveel van de batch al in de truck zit. */
   progress: number;
+  /** aangemeld: truck staat klaar, de koelceltijd loopt bijna af; laden: heftruck laadt. */
+  state: "aangemeld" | "laden";
 };
 
 export type Departure = { batch_id: string; hus: number; packs: number; ts: string; ageMs: number };
@@ -188,6 +190,10 @@ export type Logistics = {
 };
 
 export const DEPART_WINDOW_MS = 10 * 60 * 1000;
+/** Koelceltijd van de engine (warehouse.STORE_DWELL_S): pas daarna wordt een batch geladen. */
+export const STORE_DWELL_MS = 12 * 60 * 1000;
+/** Zo lang vóór het einde van de koelceltijd meldt de truck zich aan het dock. */
+export const ARRIVE_LEAD_MS = 90 * 1000;
 
 function t(iso: string): number {
   const v = Date.parse(iso);
@@ -207,9 +213,12 @@ function preferredDock(batchId: string): number {
 
 /**
  * Trucks zitten niet in het datamodel. Ze worden afgeleid uit de HU-status:
- *   - een batch met HU's in de koelcel (awaiting_shipment) krijgt een truck
- *     aan een dock: eerst de batches die al laden, dan de oudste wachtende,
- *     maximaal MAX_DOCKS. Elke batch heeft een vaste voorkeursdock;
+ *   - een batch krijgt pas een truck aan een dock als het laden begonnen is,
+ *     of als de koelceltijd van zijn laatste pallet bijna om is (de truck
+ *     meldt zich aan). Een lege truck die twaalf minuten op 0/11 staat te
+ *     wachten is geen logistiek, dat is een misverstand op het scherm.
+ *     Eerst de batches die al laden, dan de oudste, maximaal MAX_DOCKS.
+ *     Elke batch heeft een vaste voorkeursdock;
  *   - een batch waarvan alles geshipt is en de laatste ship binnen het
  *     vertrekvenster valt, is een vertrekkende truck.
  * Dat is een visualisatie van de HU-stroom en in de UI ook zo benoemd.
@@ -256,7 +265,12 @@ export function deriveLogistics(hus: Hu[] | null | undefined, now: number): Logi
   }
 
   const atDock = [...byBatch.entries()]
-    .filter(([, e]) => e.waiting.length > 0)
+    .filter(([, e]) => {
+      if (e.waiting.length === 0) return false;
+      if (e.loaded.length > 0) return true;
+      const lastIn = Math.max(...e.waiting.map((h) => t(h.ts)));
+      return now - lastIn >= STORE_DWELL_MS - ARRIVE_LEAD_MS;
+    })
     .sort(
       ([ia, a], [ib, b]) =>
         Number(b.loaded.length > 0) - Number(a.loaded.length > 0) ||
@@ -275,6 +289,7 @@ export function deriveLogistics(hus: Hu[] | null | undefined, now: number): Logi
       waiting: e.waiting,
       loaded: e.loaded,
       progress: e.loaded.length / (e.loaded.length + e.waiting.length),
+      state: e.loaded.length > 0 ? "laden" : "aangemeld",
     };
   });
 

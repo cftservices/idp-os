@@ -843,7 +843,7 @@ function DockBlock({ index }: { index: number }) {
   );
 }
 
-export function DockTruck({ slot, visual }: { slot: DockSlot; visual: Visual }) {
+export function DockTruck({ slot, visual, ship }: { slot: DockSlot; visual: Visual; ship?: SimShipment }) {
   const [x, , z] = dockPosition(slot.dock);
   return (
     <group>
@@ -859,20 +859,67 @@ export function DockTruck({ slot, visual }: { slot: DockSlot; visual: Visual }) 
         labelHeight={4.6}
       >
         <TruckModel load={slot.progress} docked cargo={slot.loaded} />
-        <DockChip id={`dock:${slot.batch_id}`} dock={slot.dock} loaded={slot.loaded.length} total={slot.loaded.length + slot.waiting.length} />
+        <DockChip
+          id={`dock:${slot.batch_id}`}
+          dock={slot.dock}
+          state={slot.state}
+          loaded={slot.loaded.length}
+          total={slot.loaded.length + slot.waiting.length}
+          ship={ship}
+        />
       </Pickable>
     </group>
   );
 }
 
-/** Compacte HU-teller boven het dock; wijkt voor het volledige label bij hover of selectie. */
-function DockChip({ id, dock, loaded, total }: { id: string; dock: number; loaded: number; total: number }) {
+/** "PO-…1D1B": genoeg om de order in de lijst terug te vinden, kort genoeg voor een chip. */
+export function shortOrder(id?: string | null): string | null {
+  return id ? `PO-…${id.slice(-4)}` : null;
+}
+
+/** Wat er in de truck zit: truck, klant en order. Leeg als de sim geen zending kent. */
+function cargoLine(ship?: SimShipment): string {
+  if (!ship) return "";
+  return [ship.truck_id, ship.customer, shortOrder(ship.order_id)].filter(Boolean).join(" · ");
+}
+
+/** Chip boven het dock: welke order erin gaat en hoe ver het laden is; wijkt voor het volledige label. */
+function DockChip({
+  id,
+  dock,
+  state,
+  loaded,
+  total,
+  ship,
+}: {
+  id: string;
+  dock: number;
+  state: DockSlot["state"];
+  loaded: number;
+  total: number;
+  ship?: SimShipment;
+}) {
+  const { labelled } = useTwin();
+  if (labelled.has(id)) return null;
+  const cargo = cargoLine(ship);
+  return (
+    <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+      <div className="twin-chip" data-twin-dock={dock + 1}>
+        D{dock + 1}
+        {cargo && ` · ${cargo}`} · {state === "laden" ? `laden ${loaded}/${total}` : `aangemeld · ${total} pallets`}
+      </div>
+    </Html>
+  );
+}
+
+/** Chip boven een vertrekkende truck: welke order en klant hij vervoert. */
+function TruckChip({ id, ship }: { id: string; ship: SimShipment }) {
   const { labelled } = useTwin();
   if (labelled.has(id)) return null;
   return (
     <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-      <div className="twin-chip" data-twin-dock={dock + 1}>
-        D{dock + 1} · {loaded}/{total} HU
+      <div className="twin-chip">
+        {cargoLine(ship)} · {ship.pallets} pallets
       </div>
     </Html>
   );
@@ -964,8 +1011,9 @@ function Driving({
 export function SimDepartingTruck({ s, lane }: { s: SimShipment; lane: number }) {
   const pose = useCallback((now: number) => departPose(s, now, lane, ROAD_Z), [s, lane]);
   return (
-    <Driving id={`shipment:${s.shipment_id}`} name={`${s.truck_id} · ${s.customer}`} visual={shipmentVisual(s)} pose={pose} labelHeight={4.2}>
+    <Driving id={`shipment:${s.shipment_id}`} name={cargoLine(s)} visual={shipmentVisual(s)} pose={pose} labelHeight={4.2}>
       <TruckModel load={1} />
+      <TruckChip id={`shipment:${s.shipment_id}`} ship={s} />
     </Driving>
   );
 }
