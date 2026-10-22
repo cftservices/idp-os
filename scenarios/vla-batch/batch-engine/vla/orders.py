@@ -28,7 +28,8 @@ class OrderManager:
         self.bus = bus
 
     def create_order(self, recipe_id: str, target_qty_L: float,
-                     due_date: Optional[str] = None) -> dict:
+                     due_date: Optional[str] = None,
+                     customer: Optional[str] = None) -> dict:
         if M.get_recipe(recipe_id) is None:
             raise ValueError(f"unknown recipe_id {recipe_id!r}")
         if float(target_qty_L) <= 0:
@@ -39,12 +40,14 @@ class OrderManager:
             "recipe_id": recipe_id,
             "target_qty_L": float(target_qty_L),
             "due_date": due_date,
+            "customer": customer,
             "status": M.ORDER_OPEN,
             "created_at": _iso(),
         }
         self.db.dw_orders.insert_one(doc)
         self._event(order_id, "order_created", {"recipe_id": recipe_id,
-                                                "target_qty_L": float(target_qty_L)})
+                                                "target_qty_L": float(target_qty_L),
+                                                "customer": customer})
         self.publish_status(doc)
         return dict(doc)
 

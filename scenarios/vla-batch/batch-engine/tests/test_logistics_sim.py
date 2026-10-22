@@ -46,7 +46,7 @@ def test_shipment_customer_is_stable_per_batch(monkeypatch):
 def test_forklift_charges_and_other_takes_over():
     logi = LogisticsSim(db=None, operator_id=OPERATOR)
     ht1 = logi.forklifts["putaway"]
-    ht1.battery = LS.CHARGE_BELOW_PCT + 1
+    ht1.battery = LS.CHARGE_BELOW_PCT + LS.BATTERY_PER_MOVE_PCT / 2
     logi.record(["putaway HU-1"], T0)
     assert ht1.charging and ht1.trips_today == 1
     logi.record(["putaway HU-2"], T0 + timedelta(seconds=10))
@@ -57,6 +57,46 @@ def test_forklift_charges_and_other_takes_over():
     assert not ht1.charging and ht1.battery >= LS.CHARGE_UNTIL_PCT
     logi.record(["putaway HU-3"], T0 + timedelta(minutes=31))
     assert ht1.trips_today == 2
+
+
+def test_forklifts_stagger_charging_and_never_starve():
+    """Op de echte cadans (~10 bewegingen per minuut) stonden beide trucks
+    voorgoed op ~0 % aan de lader. Nu nooit tegelijk aan de lader zolang er
+    één boven de kritieke grens zit, en geen van beide loopt leeg."""
+    logi = LogisticsSim(db=None, operator_id=OPERATOR)
+    t = T0
+    both = 0
+    for i in range(8 * 60 * 10):          # eight hours, a move every 6 s
+        t += timedelta(seconds=6)
+        logi.record([("putaway" if i % 2 else "ship") + f" HU-{i}"], t)
+        fl = list(logi.forklifts.values())
+        both += all(f.charging for f in fl)
+        assert min(f.battery for f in fl) > LS.CHARGE_CRITICAL_PCT
+    assert both == 0
+
+
+def test_second_truck_waits_for_the_charger():
+    logi = LogisticsSim(db=None, operator_id=OPERATOR)
+    ht1, ht2 = logi.forklifts["putaway"], logi.forklifts["loader"]
+    ht1.charging, ht1.battery = True, 30.0
+    ht2.battery = LS.CHARGE_BELOW_PCT - 1
+    logi.record(["ship HU-1"], T0)
+    assert not ht2.charging            # waits: one charger, HT-01 is on it
+    ht2.battery = LS.CHARGE_CRITICAL_PCT - 1
+    logi.record(["ship HU-2"], T0 + timedelta(seconds=5))
+    assert ht2.charging                # critical: goes anyway
+
+
+def test_shipment_customer_comes_from_the_customer_order(monkeypatch):
+    db, sim, (bid,) = _setup()
+    db.dw_orders.insert_one({"order_id": "PO-K1", "customer": "Koelketen Midden",
+                             "status": "RUNNING"})
+    db.dw_batches.update_one({"batch_id": bid}, {"$set": {"order_id": "PO-K1"}})
+    logi = LogisticsSim(db, OPERATOR)
+    t = _run(sim, db, 90, monkey=monkeypatch)
+    (s,) = logi.shipments(t)
+    assert s["customer"] == "Koelketen Midden" and s["order_id"] == "PO-K1"
+    assert (s["destination"], s["drive_min"]) == LS.destination_of("Koelketen Midden")
 
 
 def test_trips_reset_at_midnight():

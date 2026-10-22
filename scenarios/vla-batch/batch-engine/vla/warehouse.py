@@ -37,8 +37,10 @@ STORE_DWELL_S = 12 * 60.0
 SHIP_EVERY_S = 6.0
 LOOKBACK_S = 15 * 60.0      # older completed batches are not palletised
 # Must exceed LOOKBACK_S: once its HUs are dropped a batch looks unpalletised
-# again, so it must have left the lookback window by then.
-KEEP_SHIPPED_S = 30 * 60.0
+# again, so it must have left the lookback window by then. Two hours so a
+# shipment stays visible as "delivered" after its drive time (was 30 min:
+# the delivery history vanished almost as soon as it arrived).
+KEEP_SHIPPED_S = 2 * 60 * 60.0
 MAX_AT_PALLETISER = 4
 PRESSURE_FREE_SLOTS = 12
 
