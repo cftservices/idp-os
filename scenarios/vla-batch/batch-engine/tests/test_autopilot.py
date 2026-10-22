@@ -72,6 +72,20 @@ def test_order_closes_in_full_and_on_time_then_next_customer():
     assert value == 100.0 and meta["on_time_in_full"] == 1
 
 
+def test_legacy_day_order_without_customer_is_closed_for_a_customer_order():
+    """Na de uitrol stond het oude dagorder (3 mln L, geen klant) nog open; dat
+    haalt in-full nooit, dus zonder deze regel kwam er nooit een klantorder."""
+    db, _eq, pilot = _setup()
+    pilot.step(now=0)
+    pilot.step(now=11)
+    oid = db.dw_batches.find({})[0]["order_id"]
+    db.dw_orders.update_one({"order_id": oid},
+                            {"$set": {"customer": None, "target_qty_L": 3e6}})
+    db.dw_autopilot.update_one({"key": "order"}, {"$unset": {"seq": ""}})
+    assert pilot._current_order() != oid
+    assert db.dw_orders.find_one({"order_id": oid})["status"] == "DONE"
+
+
 def test_prune_drops_orphaned_running_autopilot_batch_after_an_hour():
     db, _eq, pilot = _setup()
     old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
