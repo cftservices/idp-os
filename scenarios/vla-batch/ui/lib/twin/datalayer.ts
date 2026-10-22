@@ -119,7 +119,7 @@ export type Cause = {
   chain: CauseStep[];
   verdict: string;
   focus_equipment: string;
-  ai: { model: string; text: string | null; error?: string } | null;
+  ai: { model: string; text: string | null; pending?: boolean; error?: string } | null;
 };
 
 export type DataOps = {
@@ -161,7 +161,7 @@ export const useReliability = (on = true) =>
   poll<{ equipment: ReliabilityRow[]; window_h: number }>(["cmms", "rel"], on ? "/reliability?hours=24" : null, 5000);
 export const useEquipmentLosses = (on = true) => poll<Losses>(["losses", "eq"], on ? "/losses/equipment?hours=24" : null, 5000);
 export const useCause = (alarmId: string | null) =>
-  poll<Cause>(["rca", alarmId], alarmId ? `/alarms/${encodeURIComponent(alarmId)}/cause?ai=1` : null, 60_000);
+  poll<Cause>(["rca", alarmId], alarmId ? `/alarms/${encodeURIComponent(alarmId)}/cause?ai=1` : null, 15_000);
 export const useDataOps = (on = true) => poll<DataOps>(["dataops"], on ? "/dataops" : null, 5000);
 export const useResources = (on = true) => poll<Resources>(["resources"], on ? "/system/resources" : null, 5000);
 

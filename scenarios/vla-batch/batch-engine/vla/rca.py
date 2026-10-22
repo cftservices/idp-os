@@ -12,8 +12,10 @@ feiten toe en valt bij een time-out stil terug.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import threading
 import urllib.request
 from datetime import datetime, timedelta
 from typing import Optional
@@ -23,6 +25,14 @@ from . import model as M
 log = logging.getLogger("vla.rca")
 
 WINDOW_MIN = 10
+
+# Een klein model op een gedeelde CPU doet tientallen seconden over een
+# samenvatting. Dat mag nooit in het verzoekpad: de keten komt meteen terug,
+# de tekst wordt op de achtergrond gemaakt en per alarm en keten bewaard.
+AI_TIMEOUT_S = 150.0
+_ai_lock = threading.Lock()
+_ai_cache: dict[str, dict] = {}
+_ai_busy: set[str] = set()
 
 
 def _parse(ts) -> Optional[datetime]:
@@ -53,7 +63,7 @@ def find_alarm(db, alarm_id: str) -> Optional[dict]:
 
 def cause(db, alarm_id: str, cmms=None, cost_model: Optional[dict] = None,
           ai: bool = False, ollama_url: Optional[str] = None,
-          ai_model: str = "qwen2.5:3b", ai_timeout_s: float = 20.0) -> Optional[dict]:
+          ai_model: str = "qwen2.5:3b", ai_timeout_s: float = AI_TIMEOUT_S) -> Optional[dict]:
     alarm = find_alarm(db, alarm_id)
     if alarm is None:
         return None
@@ -155,22 +165,67 @@ def cause(db, alarm_id: str, cmms=None, cost_model: Optional[dict] = None,
         "ai": None,
     }
     if ai and ollama_url and chain:
-        out["ai"] = _ai_summary(out, ollama_url, ai_model, ai_timeout_s)
+        out["ai"] = ai_summary_async(out, ollama_url, ai_model, ai_timeout_s)
     return out
 
 
-def _ai_summary(rca: dict, url: str, model: str, timeout: float) -> Optional[dict]:
-    prompt = ("Vat in maximaal drie Nederlandse zinnen samen waarom dit alarm "
-              "optrad. Gebruik alleen deze feiten, voeg niets toe.\n"
-              + json.dumps({"alarm": rca["alarm"], "keten": rca["chain"]},
-                           ensure_ascii=False))
-    body = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode()
+def _facts(rca: dict) -> str:
+    """Compacte feitenlijst: elke prompt-token kost op deze CPU ~25 ms."""
+    a = rca["alarm"]
+    lines = [f"Alarm op {a.get('equipment_id')}: {a.get('message')}"]
+    seen_wo = False
+    for s in rca["chain"]:
+        if s["step"] == "work_order":
+            if seen_wo:
+                continue
+            seen_wo = True
+        lines.append(f"- {s['label']}: {s['evidence']}")
+    return "\n".join(lines)
+
+
+def ai_summary_async(rca: dict, url: str, model: str,
+                     timeout: float = AI_TIMEOUT_S) -> dict:
+    facts = _facts(rca)
+    key = hashlib.sha1(f"{model}\n{facts}".encode()).hexdigest()
+    with _ai_lock:
+        hit = _ai_cache.get(key)
+        if hit is not None:
+            return hit
+        if key not in _ai_busy:
+            _ai_busy.add(key)
+            threading.Thread(target=_ai_worker, args=(key, facts, url, model, timeout),
+                             daemon=True, name="rca-ai").start()
+    return {"model": model, "text": None, "pending": True}
+
+
+def _ai_worker(key: str, facts: str, url: str, model: str, timeout: float) -> None:
+    try:
+        res = _ai_summary(facts, url, model, timeout)
+    finally:
+        with _ai_lock:
+            _ai_busy.discard(key)
+    with _ai_lock:
+        # Een mislukte poging wordt niet bewaard, zodat de volgende poll het
+        # opnieuw probeert in plaats van voorgoed "niet beschikbaar" te tonen.
+        if res.get("text"):
+            if len(_ai_cache) > 200:
+                _ai_cache.clear()
+            _ai_cache[key] = res
+
+
+def _ai_summary(facts: str, url: str, model: str, timeout: float) -> dict:
+    prompt = ("Leg in maximaal drie korte Nederlandse zinnen uit waarom dit alarm "
+              "optrad en wat de actie is. Platte tekst, geen opsomming. Gebruik "
+              "alleen deze feiten, voeg niets toe.\n" + facts)
+    body = json.dumps({"model": model, "prompt": prompt, "stream": False,
+                       "options": {"num_predict": 110, "num_ctx": 1024,
+                                   "temperature": 0.2}}).encode()
     req = urllib.request.Request(url.rstrip("/") + "/api/generate", data=body,
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             text = json.loads(r.read().decode()).get("response", "").strip()
-        return {"model": model, "text": text} if text else None
+        return {"model": model, "text": text or None}
     except Exception as e:
         log.info("AI-samenvatting overgeslagen: %s", e)
         return {"model": model, "text": None, "error": "niet beschikbaar"}
