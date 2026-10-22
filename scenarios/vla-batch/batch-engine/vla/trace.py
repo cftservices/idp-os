@@ -48,6 +48,55 @@ def _step(batch: dict, hus: dict, stage: Optional[str]) -> str:
     return "productie"
 
 
+# Milestones for the order timeline. The rest (dose_booked, phase_mirrored,
+# stock_mutation, ...) is process detail that would drown the chain.
+TIMELINE_EVENTS = {
+    "order_created", "order_scanned", "order_running", "order_closed",
+    "batch_created", "batch_started", "setpoints_pushed", "filling_done",
+    "sample_taken", "verdict_set", "batch_complete", "batch_discarded",
+    "hu_scanned", "putaway_booked", "forklift_task", "hu_shipped",
+}
+TIMELINE_MAX = 600
+
+
+def _pallets(db, bid: str, events: list[dict]) -> list[dict]:
+    """Every pallet of the batch with who moved it. Live HUs first; pallets
+    whose HU was already dropped are rebuilt from their batch events."""
+    out: dict[str, dict] = {}
+    for h in db.dw_handling_units.find({"batch_id": bid}):
+        out[h["hu_id"]] = {"hu_id": h["hu_id"], "status": h.get("status"),
+                           "packs": h.get("packs_count"), "slot": h.get("slot"),
+                           "putaway_by": h.get("putaway_by"), "loaded_by": h.get("loaded_by"),
+                           "truck_id": None, "wrapped_at": h.get("created_at"),
+                           "stored_at": None, "shipped_at": None}
+    for e in events:
+        p = e.get("payload") or {}
+        hid = p.get("hu_id")
+        if not hid:
+            continue
+        r = out.setdefault(hid, {"hu_id": hid, "status": None, "packs": None, "slot": None,
+                                 "putaway_by": None, "loaded_by": None, "truck_id": None,
+                                 "wrapped_at": None, "stored_at": None, "shipped_at": None})
+        kind = e.get("event_type")
+        if kind == "hu_scanned":
+            r["wrapped_at"] = r["wrapped_at"] or e.get("ts")
+            r["packs"] = r["packs"] or p.get("packs_count")
+        elif kind == "putaway_booked":
+            r["stored_at"] = e.get("ts")
+            if r["slot"] is None:
+                r["slot"] = p.get("slot")
+        elif kind == "hu_shipped":
+            r["shipped_at"] = e.get("ts")
+            r["status"] = r["status"] or M.HU_SHIPPED
+        elif kind == "forklift_task":
+            if p.get("task") == "putaway":
+                r["putaway_by"] = r["putaway_by"] or p.get("forklift_id")
+            else:
+                r["loaded_by"] = r["loaded_by"] or p.get("forklift_id")
+                r["truck_id"] = p.get("truck_id")
+    return sorted(out.values(), key=lambda r: r["wrapped_at"] or r["hu_id"])
+
+
 def order_trace(db, order_id: str, now: datetime,
                 live_shipments: Optional[list[dict]] = None) -> Optional[dict]:
     order = db.dw_orders.find_one({"order_id": order_id})
@@ -78,9 +127,14 @@ def order_trace(db, order_id: str, now: datetime,
             "history": x.get("history") or [],
             "components": x.get("components") or []}
 
+    timeline = [e for e in db.dw_batch_events.find({"order_id": order_id})
+                if e.get("event_type") in TIMELINE_EVENTS]
     rows = []
     for b in batches:
         bid = b["batch_id"]
+        bev = [e for e in db.dw_batch_events.find({"batch_id": bid})
+               if e.get("event_type") in TIMELINE_EVENTS]
+        timeline += bev
         ship = live.get(bid) or stored.get(bid)
         stage = _stage(ship, now)
         counts = hus.get(bid, {})
@@ -92,6 +146,7 @@ def order_trace(db, order_id: str, now: datetime,
             "completed_at": b.get("completed_at"),
             "pallets": pallets, "hu": counts, "line": M.line_of_doc(b),
             "prep": _prep(prep_by_batch.get(bid)),
+            "pallet_list": _pallets(db, bid, bev),
             "step": _step(b, counts, stage),
             "shipment": None if not ship else {
                 "shipment_id": ship.get("shipment_id"), "truck_id": ship.get("truck_id"),
@@ -107,6 +162,22 @@ def order_trace(db, order_id: str, now: datetime,
         return sum(1 for r in rows if r["step"] == step)
 
     delivered = [r for r in rows if r["step"] == "afgeleverd"]
+    for x in preps:
+        for h in x.get("history") or []:
+            timeline.append({"batch_id": x.get("batch_id"), "event_type": "prep_" + str(h.get("state")),
+                             "payload": {"prep_id": x.get("prep_id")}, "ts": h.get("ts")})
+    for r in rows:
+        sh = r["shipment"] or {}
+        if sh.get("eta") and r["step"] == "afgeleverd":
+            timeline.append({"batch_id": r["batch_id"], "event_type": "delivered",
+                             "payload": {"truck_id": sh.get("truck_id"),
+                                         "customer": sh.get("customer"),
+                                         "destination": sh.get("destination")},
+                             "ts": sh.get("eta")})
+    timeline.sort(key=lambda e: e.get("ts") or "")
+    events = [{"ts": e.get("ts"), "batch_id": e.get("batch_id"),
+               "type": e.get("event_type"), "payload": e.get("payload") or {}}
+              for e in timeline[-TIMELINE_MAX:]]
     return {
         "order_id": order_id, "customer": order.get("customer"),
         "status": order.get("status"), "recipe_id": order.get("recipe_id"),
@@ -118,6 +189,8 @@ def order_trace(db, order_id: str, now: datetime,
         "created_at": order.get("created_at"), "completed_at": order.get("completed_at"),
         "steps": STEPS,
         "batches": rows,
+        "events": events,
+        "events_truncated": len(timeline) > TIMELINE_MAX,
         "totals": {
             "batches": len(rows),
             "pallets": sum(r["pallets"] for r in rows),

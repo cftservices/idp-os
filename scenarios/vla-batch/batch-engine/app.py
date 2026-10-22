@@ -47,6 +47,7 @@ from vla.scan import ScanFlow, ScanRejected
 from vla.warehouse import WarehouseSim
 from vla.logistics_sim import LogisticsSim
 from vla.trace import order_trace
+from vla import forklift_trace
 from vla.preparation import PrepManager
 
 logging.basicConfig(
@@ -271,6 +272,14 @@ def _startup() -> None:
         mqtt_publish=(lambda t, p: bus.client.publish(t, p, qos=0))
         if getattr(bus, "client", None) else None)
     seed_recipes(db)
+    # Track & trace reads dw_batch_events by batch, order, pallet and truck;
+    # without indexes each trace is a full scan over ~50k events.
+    try:
+        for keys in (["batch_id"], ["order_id"], ["payload.hu_id"],
+                     ["event_type", "payload.forklift_id"]):
+            db.dw_batch_events.create_index([(k, 1) for k in keys])
+    except Exception as e:  # pragma: no cover - offline / mock db
+        log.warning("index creation skipped (%s)", e)
     orders = OrderManager(db, bus)
     equipment = EquipmentMonitor(db, bus, buses=buses)
     runners = {lid: BatchRunner(db, buses[lid], control=controls[lid], orders=orders,
@@ -406,6 +415,24 @@ def logistics_overview():
     if sim is None:
         return {"source": None, "shipments": [], "forklifts": [], "inbound": None}
     return sim.snapshot()
+
+
+def _db():
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    return db
+
+
+@app.get(f"{API}/forklifts/{{forklift_id}}/history")
+def forklift_history(forklift_id: str, limit: int = Query(default=50, ge=0, le=500)):
+    """Which orders (and pallets) this forklift handled, newest first."""
+    db = _db()
+    sim = STATE.get("logistics")
+    known = {f.id for f in sim.forklifts.values()} if sim is not None else set()
+    if known and forklift_id not in known:
+        raise HTTPException(404, f"unknown forklift: {forklift_id}")
+    return forklift_trace.forklift_history(db, forklift_id, limit)
 
 
 @app.get(f"{API}/tags")
@@ -962,6 +989,15 @@ def putaway_hu(hu_id: str, body: HuAction):
 @app.post(f"{API}/hu/{{hu_id}}/ship")
 def ship_hu(hu_id: str, body: HuAction):
     return _scan_call(_handling().ship, hu_id, body.operator_id)
+
+
+@app.get(f"{API}/hu/{{hu_id}}/history")
+def hu_history(hu_id: str):
+    """Every event of one pallet: wrap, putaway (by which forklift), load, ship."""
+    out = forklift_trace.hu_history(_db(), hu_id)
+    if out is None:
+        raise HTTPException(404, f"unknown pallet: {hu_id}")
+    return out
 
 
 @app.get(f"{API}/hu")

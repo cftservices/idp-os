@@ -155,3 +155,69 @@ def test_oee_en_kpi_delen_dezelfde_indeling():
     verwacht = productief / (productief + stilstand)
 
     assert beschikbaarheid == pytest.approx(verwacht, rel=0.1)
+
+
+def test_oee_quality_is_per_line():
+    """Een HOLD op L2 zegt niets over de machines van L1. Plant-breed stond
+    op beide lijnen dezelfde kwaliteit, waardoor niet te zien was welke lijn
+    verloor."""
+    mon = _monitor()
+    mon.db.dw_batches.insert_one({"batch_id": "B-L1", "line": "L1", "state": M.COMPLETE,
+                                  "verdict": M.APPROVED, "packs_total": 1000})
+    mon.db.dw_batches.insert_one({"batch_id": "B-L2a", "line": "L2", "state": M.COMPLETE,
+                                  "verdict": M.APPROVED, "packs_total": 1000})
+    mon.db.dw_batches.insert_one({"batch_id": "B-L2b", "line": "L2", "state": M.COMPLETE,
+                                  "verdict": M.HOLD, "packs_total": 1000})
+    rows = {r["equipment_id"]: r for r in mon.oee()}
+    assert rows["cook-unit-01"]["quality"] == 1.0
+    assert rows["cook-unit-02"]["quality"] == 0.5
+    assert rows["filler-02"]["line"] == "L2"
+    only_l2 = mon.oee(line="L2")
+    assert {r["quality"] for r in only_l2} == {0.5}
+
+
+def test_throughput_is_per_line_and_in_process_time(monkeypatch):
+    """De norm is 'scope: line' en in echte tijd; de demo draait versneld en
+    heeft twee lijnen. Zonder omrekening las de tegel ~20x de norm."""
+    mon = _monitor()
+    db = mon.db
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(hours=2)
+    db.dw_batches.insert_one({"batch_id": "B-1", "line": "L1"})
+    db.dw_batches.insert_one({"batch_id": "B-2", "line": "L2"})
+    # without run times: falls back to elapsed time (2 h)
+    for bid, packs in (("B-1", 30000), ("B-2", 10000)):
+        db.dw_production.insert_one({"batch_id": bid, "packs": packs,
+                                     "ts": (now - timedelta(minutes=30)).isoformat()})
+    monkeypatch.setenv("KPI_TIME_SCALE", "1")
+    value, meta = kpi._throughput_rate(db, start, now + timedelta(hours=10))
+    # elapsed = 2 h, not 12 h: the future part of the window does not count
+    assert meta["per_line"] == {"L1": pytest.approx(15000, rel=0.01),
+                                "L2": pytest.approx(5000, rel=0.01)}
+    assert value == pytest.approx(10000, rel=0.01)
+    monkeypatch.setenv("KPI_TIME_SCALE", "10")
+    value, meta = kpi._throughput_rate(db, start, now)
+    assert value == pytest.approx(1000, rel=0.01) and meta["time_scale"] == 10
+
+
+def test_throughput_divides_by_run_time_not_calendar_time(monkeypatch):
+    """ISO 22400: TR = (GQ + RQ) / AOET. Een lijn die pas net draait, of een
+    demo die 's nachts uit staat, mag niet onder de norm zakken door lege uren."""
+    mon = _monitor()
+    db = mon.db
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=3)
+    t0 = now - timedelta(hours=2)
+    # two L1 batches of 30 min each, 1000 packs each; one L2 batch of 15 min
+    for bid, ln, s_min, dur, packs in (("A", "L1", 0, 30, 1000), ("B", "L1", 60, 30, 1000),
+                                        ("C", "L2", 0, 15, 500)):
+        st = t0 + timedelta(minutes=s_min)
+        en = st + timedelta(minutes=dur)
+        db.dw_batches.insert_one({"batch_id": bid, "line": ln, "started_at": st.isoformat(),
+                                  "completed_at": en.isoformat()})
+        db.dw_production.insert_one({"batch_id": bid, "packs": packs, "ts": en.isoformat()})
+    monkeypatch.setenv("KPI_TIME_SCALE", "1")
+    value, meta = kpi._throughput_rate(db, start, now)
+    assert meta["per_line"] == {"L1": pytest.approx(2000, rel=0.01), "L2": pytest.approx(2000, rel=0.01)}
+    assert meta["run_hours"]["L1"] == pytest.approx(1.0, rel=0.01)
+    assert value == pytest.approx(2000, rel=0.01)

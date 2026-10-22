@@ -16,6 +16,7 @@ import { orderStops, type OrderStop } from "@/lib/twin/orderPath";
 import { delta, sparkPath, type Sample } from "@/lib/twin/history";
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { EMPTY, compact, num, shortTime } from "@/lib/format";
+import { useForkliftHistory } from "@/lib/queries";
 import { GROUPS, describe, type TwinGroup, type TwinItem } from "./selection";
 
 export function VisualPill({ v }: { v: Visual }) {
@@ -653,6 +654,7 @@ export function DetailCard({
         ))}
       </dl>
       {d.timeline && d.timeline.index >= 0 && <MiniSteps steps={d.timeline.steps} index={d.timeline.index} />}
+      {id.startsWith("forklift:") && <ForkliftActivity id={id.slice("forklift:".length)} />}
       <ul className="wt-links">
         {d.links.map((l) => (
           <li key={l.href}>
@@ -662,6 +664,52 @@ export function DetailCard({
       </ul>
       {d.note && <p className="wt-note">{d.note}</p>}
     </aside>
+  );
+}
+
+/** Welke orders deze heftruck heeft behandeld: inslag en laden, per order. */
+function ForkliftActivity({ id }: { id: string }) {
+  const h = useForkliftHistory(id);
+  if (h.isError) return <p className="wt-note">Historie niet beschikbaar.</p>;
+  if (!h.data) return <p className="wt-note">Historie laden…</p>;
+  const t = h.data.totals;
+  return (
+    <div className="wt-fk-history" data-twin-forklift-history={id}>
+      <p className="wt-eyebrow">
+        Behandeld · {t.moves} pallets · {t.orders} orders
+      </p>
+      {h.data.orders.length === 0 ? (
+        <p className="wt-note">Nog geen geregistreerde ritten.</p>
+      ) : (
+        <dl className="wt-rows">
+          {h.data.orders.map((o) => (
+            <div key={o.order_id ?? "zonder-order"}>
+              <dt>
+                {o.order_id ? <Link href={`/orders?order=${o.order_id}`}>{o.order_id}</Link> : "zonder order"}
+                {o.customer ? ` · ${o.customer}` : ""}
+              </dt>
+              <dd className="num">
+                {o.putaway > 0 && `${o.putaway} in`}
+                {o.putaway > 0 && o.loaded > 0 && " · "}
+                {o.loaded > 0 && `${o.loaded} geladen`}
+                {o.trucks.length > 0 && ` → ${o.trucks.join(", ")}`}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {h.data.recent.length > 0 && (
+        <ul className="wt-fk-recent">
+          {h.data.recent.slice(0, 5).map((r, i) => (
+            <li key={`${r.hu_id}-${r.task}-${i}`}>
+              <span className="num">{r.ts ? shortTime(r.ts) : EMPTY}</span>{" "}
+              {r.task === "load" ? "geladen" : "ingeslagen"} <span className="mono">{r.hu_id}</span>
+              {r.task === "load" ? (r.truck_id ? ` → ${r.truck_id}` : "") : r.slot != null ? ` → vak ${r.slot}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

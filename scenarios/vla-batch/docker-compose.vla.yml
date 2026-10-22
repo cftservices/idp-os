@@ -205,6 +205,10 @@ services:
       MONGO_DB: ${MONGO_DB}
       FACTORY_MODEL: /model/isa95-vla.json
       OPCUA_URL_L2: "opc.tcp://vla-factory-l2:4840/DairyWorks"
+      # Gelijk houden aan TIME_SCALE van vla-factory: de doorzet-KPI rekent de
+      # versnelde demo terug naar procestijd, want de norm (5200 packs/h per
+      # lijn) is die van een echte lijn.
+      KPI_TIME_SCALE: "15.0"
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
     mem_limit: 256m

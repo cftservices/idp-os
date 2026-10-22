@@ -285,17 +285,89 @@ def _production_rows(db, start: datetime, end: datetime) -> list[dict]:
             if _within(p.get("ts"), start, end)]
 
 
+def _time_scale() -> float:
+    """Proces-seconden per echte seconde, gelijk aan TIME_SCALE van de
+    fabriekssimulatie. De norm in het model is in procestijd (een echte lijn),
+    de demo draait versneld; zonder deze omrekening meet je 15x de norm."""
+    try:
+        v = float(os.environ.get("KPI_TIME_SCALE", "1") or 1)
+    except ValueError:
+        return 1.0
+    return v if v > 0 else 1.0
+
+
+def _ts(v) -> Optional[datetime]:
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    if isinstance(v, str) and v:
+        try:
+            d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _busy_hours(intervals: list[tuple[datetime, datetime]]) -> float:
+    """Vereniging van looptijden in uren: overlappende batches tellen één keer."""
+    total, cur_s, cur_e = 0.0, None, None
+    for s, e in sorted(intervals):
+        if cur_e is None or s > cur_e:
+            if cur_e is not None:
+                total += (cur_e - cur_s).total_seconds()
+            cur_s, cur_e = s, e
+        elif e > cur_e:
+            cur_e = e
+    if cur_e is not None:
+        total += (cur_e - cur_s).total_seconds()
+    return total / 3600.0
+
+
 def _throughput_rate(db, start, end) -> tuple[Optional[float], dict]:
-    """Packs per uur over het venster. Bewust uit dw_production op `ts` en niet
-    uit /inventory: die telt all-time en beweegt dus niet met het venster mee."""
+    """Throughput rate per ISO 22400-2: (GQ + RQ) / AOET, PER LIJN, in
+    procestijd. Bewust uit dw_production op `ts` en niet uit /inventory: die
+    telt all-time en beweegt dus niet met het venster mee.
+
+    * De noemer is AOET, de werkelijke looptijd van de batches (started_at tot
+      completed_at, vereniging per lijn), niet de kalendertijd. Een week die
+      dinsdag gemeten wordt, of een lijn die pas gisteren startte, telde
+      anders lege dagen mee en zakte ver onder de norm.
+    * Per lijn, want de norm in het model is `scope: line`; de waarde is het
+      gemiddelde van de lijnen die produceerden.
+    * Gedeeld door KPI_TIME_SCALE (versnelde demo naar procestijd).
+    Zonder looptijden (oude boekingen) valt de lijn terug op verstreken tijd."""
     rows = _production_rows(db, start, end)
     if not rows:
         return None, {"reason": "geen productieboekingen in dit venster"}
-    packs = sum(_num(r.get("packs")) for r in rows)
-    hours = (end - start).total_seconds() / 3600.0
-    if hours <= 0:
+    eff_end = min(end, datetime.now(timezone.utc))
+    elapsed = (eff_end - start).total_seconds() / 3600.0
+    if elapsed <= 0:
         return None, {"reason": "venster heeft geen lengte"}
-    return round(packs / hours, 2), {"sample_n": len(rows), "packs": packs}
+    scale = _time_scale()
+    ids = {r.get("batch_id") for r in rows}
+    batches = {b["batch_id"]: b for b in db.dw_batches.find({}) if b.get("batch_id") in ids}
+    packs_by: dict[str, float] = {}
+    spans: dict[str, list] = {}
+    for r in rows:
+        b = batches.get(r.get("batch_id")) or {}
+        ln = M.line_of_doc(b) if b else M.DEFAULT_LINE
+        packs_by[ln] = packs_by.get(ln, 0.0) + _num(r.get("packs"))
+        s_, e_ = _ts(b.get("started_at")), _ts(b.get("completed_at"))
+        if s_ and e_ and e_ > s_:
+            spans.setdefault(ln, []).append((max(s_, start), min(e_, eff_end)))
+    hours_by = {}
+    for ln in packs_by:
+        h = _busy_hours([(a, z) for a, z in spans.get(ln, []) if z > a])
+        hours_by[ln] = h if h > 0 else elapsed
+    per_line = {ln: round(packs_by[ln] / hours_by[ln] / scale, 2) for ln in sorted(packs_by)}
+    packs = sum(packs_by.values())
+    value = round(sum(per_line.values()) / len(per_line), 2)
+    return value, {"sample_n": len(rows), "packs": packs, "per_line": per_line,
+                   "run_hours": {ln: round(h, 3) for ln, h in sorted(hours_by.items())},
+                   "plant_total": round(packs / elapsed / scale, 2),
+                   "time_scale": scale, "hours": round(elapsed, 2),
+                   "note": "gemiddelde per lijn over de looptijd (AOET), in procestijd"
+                   if scale != 1 else "gemiddelde per lijn over de looptijd (AOET)"}
 
 
 def _quality_ratio(db, start, end) -> tuple[Optional[float], dict]:

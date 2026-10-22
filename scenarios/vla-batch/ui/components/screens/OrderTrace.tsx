@@ -35,6 +35,26 @@ type TracePrep = {
   state_changed_at: string | null;
 };
 
+type TracePallet = {
+  hu_id: string;
+  status: string | null;
+  packs: number | null;
+  slot: number | null;
+  putaway_by: string | null;
+  loaded_by: string | null;
+  truck_id: string | null;
+  wrapped_at: string | null;
+  stored_at: string | null;
+  shipped_at: string | null;
+};
+
+type TraceEvent = {
+  ts: string | null;
+  batch_id: string | null;
+  type: string | null;
+  payload: Record<string, unknown>;
+};
+
 type TraceBatch = {
   batch_id: string;
   line?: string | null;
@@ -46,6 +66,7 @@ type TraceBatch = {
   pallets: number;
   step: string;
   shipment: Shipment | null;
+  pallet_list?: TracePallet[];
 };
 
 export type Trace = {
@@ -56,6 +77,8 @@ export type Trace = {
   prep_pending?: TracePrep[];
   steps: string[];
   batches: TraceBatch[];
+  events?: TraceEvent[];
+  events_truncated?: boolean;
   totals: {
     batches: number;
     pallets: number;
@@ -80,6 +103,108 @@ function truckLine(s: Shipment | null): string {
   if (s.stage === "en_route") return `ETA ${shortDateTime(s.eta)}`;
   if (s.stage === "loading") return `laden ${s.pallets_loaded}/${s.pallets}`;
   return `wacht op laden · 0/${s.pallets}`;
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  order_created: "order aangemaakt",
+  order_scanned: "order gescand",
+  order_running: "order in productie",
+  order_closed: "order gesloten",
+  batch_created: "batch aangemaakt",
+  batch_started: "batch gestart",
+  setpoints_pushed: "setpoints naar PLC",
+  filling_done: "vullen klaar",
+  sample_taken: "monster genomen",
+  verdict_set: "verdict",
+  batch_complete: "batch klaar",
+  batch_discarded: "batch afgekeurd",
+  hu_scanned: "pallet gewikkeld",
+  putaway_booked: "inslag geboekt",
+  forklift_task: "heftruck",
+  hu_shipped: "pallet verzonden",
+  delivered: "afgeleverd bij klant",
+};
+
+function str(v: unknown): string | null {
+  return typeof v === "string" || typeof v === "number" ? String(v) : null;
+}
+
+function eventLabel(e: TraceEvent): string {
+  const t = e.type ?? "";
+  if (t.startsWith("prep_")) return `voorbereiding ${t.slice(5)}`;
+  return EVENT_LABEL[t] ?? t;
+}
+
+function eventDetail(e: TraceEvent): string {
+  const p = e.payload ?? {};
+  if (e.type === "forklift_task") {
+    const what = p.task === "load" ? `laadt ${str(p.hu_id) ?? ""} in ${str(p.truck_id) ?? "?"}` : `slaat ${str(p.hu_id) ?? ""} in${p.slot != null ? ` (vak ${str(p.slot)})` : ""}`;
+    return `${str(p.forklift_id) ?? "?"} ${what}`;
+  }
+  if (e.type === "verdict_set") return str(p.verdict) ?? "";
+  return [str(p.hu_id), str(p.truck_id), str(p.sample_id)].filter(Boolean).join(" · ");
+}
+
+function PalletTable({ batches }: { batches: TraceBatch[] }) {
+  const rows = batches.flatMap((b) => (b.pallet_list ?? []).map((p) => ({ ...p, batch_id: b.batch_id })));
+  if (rows.length === 0) return null;
+  return (
+    <details className="text-[0.75rem]" data-testid="trace-pallets">
+      <summary className="cursor-pointer font-semibold">
+        Pallets <span className="num">{rows.length}</span>: wie sloeg in, wie laadde, welke wagen
+      </summary>
+      <div className="table-scroll">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-line text-left">
+              {["Pallet", "Batch", "Status", "Pakken", "Vak", "Ingeslagen door", "Geladen door", "Vrachtwagen", "Verzonden"].map((h) => (
+                <th key={h} className="px-2 py-1 text-[0.625rem] font-semibold tracking-[0.06em] uppercase text-ink-faint">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => (
+              <tr key={p.hu_id} className="border-b border-line last:border-b-0">
+                <td className="px-2 py-1 mono">{p.hu_id}</td>
+                <td className="px-2 py-1 mono">{p.batch_id}</td>
+                <td className="px-2 py-1">{p.status ?? EMPTY}</td>
+                <td className="px-2 py-1 num">{p.packs != null ? num(p.packs, 0) : EMPTY}</td>
+                <td className="px-2 py-1 num">{p.slot ?? EMPTY}</td>
+                <td className="px-2 py-1 mono">{p.putaway_by ?? EMPTY}</td>
+                <td className="px-2 py-1 mono">{p.loaded_by ?? EMPTY}</td>
+                <td className="px-2 py-1 mono">{p.truck_id ?? EMPTY}</td>
+                <td className="px-2 py-1 num text-ink-muted">{p.shipped_at ? shortDateTime(p.shipped_at) : EMPTY}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+function EventTimeline({ events, truncated }: { events: TraceEvent[]; truncated: boolean }) {
+  if (events.length === 0) return null;
+  return (
+    <details className="text-[0.75rem]" data-testid="trace-events">
+      <summary className="cursor-pointer font-semibold">
+        Alle gebeurtenissen <span className="num">{events.length}</span>
+        {truncated && " (laatste, oudere afgekapt)"}
+      </summary>
+      <ol className="max-h-[22rem] overflow-y-auto">
+        {events.map((e, i) => (
+          <li key={`${e.ts}-${e.type}-${i}`} className="flex gap-2 border-b border-line py-0.5 last:border-b-0">
+            <span className="num w-[7.5rem] shrink-0 text-ink-muted">{shortDateTime(e.ts)}</span>
+            <span className="w-[10rem] shrink-0 font-semibold">{eventLabel(e)}</span>
+            <span className="mono w-[7rem] shrink-0 text-ink-faint">{e.batch_id ?? ""}</span>
+            <span className="text-ink-muted">{eventDetail(e)}</span>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
 }
 
 export function OrderTrace({ trace }: { trace: Trace }) {
@@ -181,6 +306,8 @@ export function OrderTrace({ trace }: { trace: Trace }) {
           </tbody>
         </table>
       </div>
+      <PalletTable batches={trace.batches} />
+      <EventTimeline events={trace.events ?? []} truncated={Boolean(trace.events_truncated)} />
     </div>
   );
 }
