@@ -25,6 +25,7 @@ export const TWIN_KEYS = [
   "tank",
   "milk",
   "vla",
+  "choco",
   "pipe",
   "rack",
   "pallet",

@@ -3,7 +3,26 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { Box3, CanvasTexture, Matrix4, Quaternion, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type Group, type Texture } from "three";
+import {
+  Box3,
+  BoxGeometry,
+  BufferGeometry,
+  CanvasTexture,
+  Color,
+  CylinderGeometry,
+  Float32BufferAttribute,
+  Matrix4,
+  MeshStandardMaterial,
+  Quaternion,
+  RepeatWrapping,
+  SRGBColorSpace,
+  TextureLoader,
+  Vector3,
+  type Group,
+  type Texture,
+} from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import type { TwinPalette } from "@/lib/twin/palette";
 import {
   COLDSTORE,
   MAIN_AISLE_Z,
@@ -155,37 +174,183 @@ const PACKS_PER_LAYER = 80;
 const LAYER_H = 0.12;
 const MAX_LAYERS = 6;
 
-/** Zijaanzicht van één laag: trays van karton met de kartons erop, als herhalende textuur. */
-const layerTextures = new Map<string, CanvasTexture>();
-function layerTexture(milk: string, vla: string, tray: string, seam: string, layers: number): CanvasTexture | null {
+/** Kartons per laag: 10 in de lengte, 8 in de breedte (= PACKS_PER_LAYER). */
+const COLS = 10;
+const ROWS = 8;
+const LOAD_W = 1.16;
+const LOAD_D = 0.96;
+const DECK_Y = 0.122;
+const GABLE_H = 0.045;
+
+const paletteKey = (p: TwinPalette) => `${p.milk}|${p.choco}|${p.accent}|${p.pack}|${p.seam}|${p.film}`;
+
+/**
+ * Zijaanzicht van één pak chocoladevla in zijn laag: bovenaan de spleet naar
+ * de laag erboven, dan het bedrukte pak (merkband, logo, bruine golf met
+ * productnaam) en onderaan de kartonnen tray. De textuur herhaalt per pak en
+ * per laag; de geveltoppen van de bovenste laag zijn echte geometrie.
+ */
+const cartonCanvases = new Map<string, HTMLCanvasElement>();
+function cartonCanvas(p: TwinPalette): HTMLCanvasElement | null {
   if (typeof document === "undefined") return null;
-  const key = `${milk}|${vla}|${tray}|${seam}|${layers}`;
-  const hit = layerTextures.get(key);
+  const key = paletteKey(p);
+  const hit = cartonCanvases.get(key);
   if (hit) return hit;
+  const S = 128;
   const c = document.createElement("canvas");
-  c.width = 64;
-  c.height = 32;
+  c.width = c.height = S;
   const g = c.getContext("2d")!;
-  g.fillStyle = milk;
-  g.fillRect(0, 0, 64, 32);
-  g.fillStyle = vla; // bedrukte band op de kartons
-  g.fillRect(0, 6, 64, 7);
-  g.fillStyle = seam; // naden tussen de kartons
-  g.globalAlpha = 0.18;
-  for (let x = 0; x < 64; x += 8) g.fillRect(x, 0, 1, 24);
+  g.fillStyle = p.seam;
+  g.globalAlpha = 0.55;
+  g.fillRect(0, 0, S, S);
   g.globalAlpha = 1;
-  g.fillStyle = tray;
-  g.fillRect(0, 22, 64, 10);
-  g.fillStyle = seam;
-  g.globalAlpha = 0.25;
-  g.fillRect(0, 22, 64, 1);
+  // het pak zelf, met een smalle spleet naar de buren
+  g.fillStyle = p.milk;
+  g.fillRect(4, 5, S - 8, 95);
+  g.fillStyle = p.accent;
+  g.fillRect(4, 12, S - 8, 9);
+  g.beginPath();
+  g.arc(S / 2, 36, 9, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = p.milk;
+  g.beginPath();
+  g.arc(S / 2, 36, 4, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = p.choco;
+  g.beginPath();
+  g.moveTo(4, 60);
+  g.bezierCurveTo(40, 46, 86, 74, S - 4, 56);
+  g.lineTo(S - 4, 100);
+  g.lineTo(4, 100);
+  g.closePath();
+  g.fill();
+  g.fillStyle = p.milk;
+  g.fillRect(S / 2 - 26, 78, 52, 7);
+  g.fillRect(S / 2 - 14, 89, 28, 4);
+  // licht van boven: de bovenrand iets lichter, de zijkant iets donkerder
+  g.fillStyle = p.seam;
+  g.globalAlpha = 0.1;
+  g.fillRect(S - 14, 5, 10, 95);
   g.globalAlpha = 1;
-  const tex = new CanvasTexture(c);
-  tex.wrapS = tex.wrapT = RepeatWrapping;
-  tex.repeat.set(3, layers);
-  tex.colorSpace = SRGBColorSpace;
-  layerTextures.set(key, tex);
-  return tex;
+  // kartonnen tray met een rand
+  g.fillStyle = p.pack;
+  g.fillRect(0, 100, S, 28);
+  g.fillStyle = p.seam;
+  g.globalAlpha = 0.28;
+  g.fillRect(0, 100, S, 2);
+  g.globalAlpha = 0.12;
+  g.fillRect(0, 124, S, 4);
+  g.globalAlpha = 1;
+  cartonCanvases.set(key, c);
+  return c;
+}
+
+/** Materialen voor een blok lading: pakken op de zijkanten, tray eronder. Gedeeld per palet en maat. */
+const loadMaterials = new Map<string, MeshStandardMaterial[]>();
+function loadMaterial(p: TwinPalette, cols: number, layers: number): MeshStandardMaterial[] | null {
+  const canvas = cartonCanvas(p);
+  if (!canvas) return null;
+  const key = `${paletteKey(p)}|${cols}|${layers}`;
+  const hit = loadMaterials.get(key);
+  if (hit) return hit;
+  const side = (n: number) => {
+    const t = new CanvasTexture(canvas);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.repeat.set(n, layers);
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = 4;
+    return new MeshStandardMaterial({ map: t, roughness: 0.55 });
+  };
+  const ends = side(ROWS);
+  const front = side(cols);
+  const top = new MeshStandardMaterial({ color: p.milk, roughness: 0.6 });
+  const bottom = new MeshStandardMaterial({ color: p.pack, roughness: 0.9 });
+  // volgorde van BoxGeometry: +x, -x, +y, -y, +z, -z
+  const mats = [ends, ends, top, bottom, front, front];
+  loadMaterials.set(key, mats);
+  return mats;
+}
+
+function paint(geo: BufferGeometry, col: Color): BufferGeometry {
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) arr.set([col.r, col.g, col.b], i * 3);
+  geo.setAttribute("color", new Float32BufferAttribute(arr, 3));
+  return geo;
+}
+
+/**
+ * De geveltoppen van een laag: per pak een dakje met vouwnaad en een
+ * schroefdop, samengevoegd tot één geometrie per aantal kolommen.
+ */
+const gableGeometries = new Map<string, BufferGeometry>();
+function gableGeometry(p: TwinPalette, cols: number): BufferGeometry {
+  const key = `${paletteKey(p)}|${cols}`;
+  const hit = gableGeometries.get(key);
+  if (hit) return hit;
+  const cw = LOAD_W / COLS;
+  const cd = LOAD_D / ROWS;
+  const white = new Color(p.milk);
+  const cap = new Color(p.accent);
+  const roofH = GABLE_H * 0.72;
+  const r = (cw * 0.94) / Math.sqrt(3);
+  const roof = new CylinderGeometry(r, r, cd * 0.92, 3);
+  roof.rotateX(-Math.PI / 2);
+  const sy = roofH / (1.5 * r);
+  roof.scale(1, sy, 1);
+  roof.translate(0, (r / 2) * sy, 0);
+  paint(roof, white);
+  const fin = new BoxGeometry(0.007, GABLE_H - roofH + 0.004, cd * 0.92);
+  fin.translate(0, roofH + (GABLE_H - roofH) / 2 - 0.002, 0);
+  paint(fin, white);
+  const screw = new CylinderGeometry(0.015, 0.015, 0.014, 10);
+  screw.translate(cw * 0.2, roofH * 0.55, cd * 0.18);
+  paint(screw, cap);
+  const parts: BufferGeometry[] = [];
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < ROWS; j++) {
+      const x = -LOAD_W / 2 + cw * (i + 0.5);
+      const z = -LOAD_D / 2 + cd * (j + 0.5);
+      for (const t of [roof, fin, screw]) parts.push(t.clone().translate(x, 0, z));
+    }
+  }
+  const merged = mergeGeometries(parts) ?? roof;
+  for (const g of parts) g.dispose();
+  gableGeometries.set(key, merged);
+  return merged;
+}
+
+const gableMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.5, flatShading: true });
+
+/**
+ * Blokpallet van 1200 x 1000: drie onderlatten, negen klossen, drie
+ * dwarslatten en zeven dekplanken met kieren, samengevoegd tot één geometrie.
+ */
+let palletGeo: BufferGeometry | null = null;
+function palletGeometry(): BufferGeometry {
+  if (palletGeo) return palletGeo;
+  const parts: BufferGeometry[] = [];
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number) =>
+    parts.push(new BoxGeometry(w, h, d).translate(x, y, z));
+  for (const z of [-0.43, 0, 0.43]) box(1.2, 0.022, 0.14, 0, 0.011, z);
+  for (const x of [-0.53, 0, 0.53]) for (const z of [-0.43, 0, 0.43]) box(0.14, 0.062, z === 0 ? 0.12 : 0.14, x, 0.053, z);
+  for (const x of [-0.53, 0, 0.53]) box(0.14, 0.02, 1.0, x, 0.094, 0);
+  for (const [z, w] of [[-0.43, 0.14], [-0.285, 0.1], [-0.143, 0.1], [0, 0.14], [0.143, 0.1], [0.285, 0.1], [0.43, 0.14]])
+    box(1.2, 0.018, w, 0, 0.113, z);
+  palletGeo = mergeGeometries(parts) ?? parts[0];
+  return palletGeo;
+}
+
+/** Wikkelfolie om de zijkanten; boven en onder open, zodat de geveltoppen zichtbaar blijven. */
+const filmMaterialCache = new Map<string, MeshStandardMaterial[]>();
+function filmMaterials(p: TwinPalette): MeshStandardMaterial[] {
+  const hit = filmMaterialCache.get(p.film);
+  if (hit) return hit;
+  const side = new MeshStandardMaterial({ color: p.film, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0.1, depthWrite: false });
+  const none = new MeshStandardMaterial({ visible: false });
+  const mats = [side, side, none, none, side, side];
+  filmMaterialCache.set(p.film, mats);
+  return mats;
 }
 
 export /** Houttextuur van de europallet (Open Industry Project), één keer geladen en gedeeld door alle pallets. */
@@ -207,47 +372,43 @@ function PalletModel({ packs = 1, wrapped = false }: { packs?: number; wrapped?:
   const { palette } = useTwin();
   const n = Math.max(1, Number(packs) || 1);
   const full = Math.min(MAX_LAYERS, Math.floor(n / PACKS_PER_LAYER));
-  const rest = full < MAX_LAYERS ? (n % PACKS_PER_LAYER) / PACKS_PER_LAYER : 0;
-  const tex = layerTexture(palette.milk, palette.vla, palette.pallet, palette.seam, Math.max(1, full));
-  const loadH = full * LAYER_H + (rest > 0 ? LAYER_H : 0);
+  const rest = full < MAX_LAYERS ? n % PACKS_PER_LAYER : 0;
+  const restCols = rest > 0 ? Math.max(1, Math.ceil((rest / PACKS_PER_LAYER) * COLS)) : 0;
+  const topY = DECK_Y + full * LAYER_H;
+  const loadH = full * LAYER_H + (restCols ? LAYER_H : 0) + GABLE_H;
+  const fullMats = full > 0 ? loadMaterial(palette, COLS, full) : null;
+  const restMats = restCols ? loadMaterial(palette, restCols, 1) : null;
+  const restW = (restCols * LOAD_W) / COLS;
   const wood = palletWood();
   const woodColor = wood ? palette.white : palette.pallet;
   return (
     <group>
-      {/* europallet: drie onderlatten, klossen als één blok, dekplanken */}
-      {[-0.45, 0, 0.45].map((z) => (
-        <mesh key={z} position={[0, 0.011, z]} receiveShadow>
-          <boxGeometry args={[1.2, 0.022, 0.1]} />
-          <meshStandardMaterial color={woodColor} {...wood} roughness={0.95} />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.06, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.16, 0.076, 0.96]} />
-        <meshStandardMaterial color={woodColor} {...wood} roughness={0.95} />
-      </mesh>
-      <mesh position={[0, 0.11, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.2, 0.024, 1]} />
-        <meshStandardMaterial color={woodColor} {...wood} roughness={0.9} />
+      <mesh geometry={palletGeometry()} castShadow receiveShadow>
+        <meshStandardMaterial color={woodColor} {...wood} roughness={0.92} />
       </mesh>
       {full > 0 && (
-        <mesh position={[0, 0.122 + (full * LAYER_H) / 2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.16, full * LAYER_H, 0.96]} />
-          <meshStandardMaterial map={tex ?? undefined} color={tex ? palette.white : palette.pack} roughness={0.8} />
+        <>
+          <mesh position={[0, DECK_Y + (full * LAYER_H) / 2, 0]} material={fullMats ?? undefined} castShadow receiveShadow>
+            <boxGeometry args={[LOAD_W, full * LAYER_H, LOAD_D]} />
+            {!fullMats && <meshStandardMaterial color={palette.milk} />}
+          </mesh>
+          <mesh position={[0, topY, 0]} geometry={gableGeometry(palette, COLS)} material={gableMaterial} castShadow />
+        </>
+      )}
+      {restCols > 0 && (
+        <>
+          <mesh position={[-LOAD_W / 2 + restW / 2, topY + LAYER_H / 2, 0]} material={restMats ?? undefined} castShadow receiveShadow>
+            <boxGeometry args={[restW, LAYER_H, LOAD_D]} />
+            {!restMats && <meshStandardMaterial color={palette.milk} />}
+          </mesh>
+          <mesh position={[0, topY + LAYER_H, 0]} geometry={gableGeometry(palette, restCols)} material={gableMaterial} castShadow />
+        </>
+      )}
+      {wrapped && (
+        <mesh position={[0, DECK_Y + loadH / 2, 0]} material={filmMaterials(palette)}>
+          <boxGeometry args={[1.19, loadH + 0.01, 0.99]} />
         </mesh>
       )}
-      {rest > 0 && (
-        <mesh position={[-0.58 + (1.16 * rest) / 2, 0.122 + full * LAYER_H + LAYER_H / 2, 0]} castShadow>
-          <boxGeometry args={[1.16 * rest, LAYER_H, 0.96]} />
-          <meshStandardMaterial color={palette.milk} roughness={0.8} />
-        </mesh>
-      )}
-      {wrapped ? (
-        /* krimpfolie: glanzend en doorschijnend, net iets groter dan de lading */
-        <mesh position={[0, 0.122 + loadH / 2, 0]}>
-          <boxGeometry args={[1.19, loadH + 0.02, 0.99]} />
-          <meshStandardMaterial color={palette.film} transparent opacity={0.22} roughness={0.05} metalness={0.1} depthWrite={false} />
-        </mesh>
-      ) : null}
     </group>
   );
 }
