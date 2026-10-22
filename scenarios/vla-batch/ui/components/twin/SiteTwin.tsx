@@ -62,12 +62,24 @@ const PHASE_EQUIPMENT: Record<string, string> = {
   COOLING: "cooler-01",
 };
 
+const BATCH_FOLLOW = "batch";
+/** Rijdende objecten die de camera kan volgen. */
+const FOLLOWABLE = /^(forklift|shipment|inbound):/;
+function batchTarget(state: string | undefined): string | null {
+  if (!state) return null;
+  if (state === "FILLING") return "equipment:filler-01";
+  const eq = PHASE_EQUIPMENT[state];
+  return eq ? `equipment:${eq}` : "palletiser";
+}
+
 function phaseText(m: ReturnType<typeof useTwinData>): string {
   const state = m.batch?.state;
   if (!state) return "";
   if (state === "FILLING") {
     const p = m.filling?.packs_progress_pct;
-    return p != null ? `vullen ${Math.round(p)}%` : "";
+    if (p != null && p > 0) return `vullen ${Math.round(p)}%`;
+    const total = m.filling?.packs_total;
+    return total ? `vullen · ${num(total, 0)} packs` : p != null ? `vullen ${Math.round(p)}%` : "";
   }
   const eq = m.equipment.find((e) => e.id === PHASE_EQUIPMENT[state]);
   if (!eq?.live) return "";
@@ -105,6 +117,8 @@ export default function SiteTwin() {
   const [drawer, setDrawer] = useState(false);
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [, setTick] = useState(0);
+  const [follow, setFollow] = useState<string | null>(null);
+  const [showPath, setShowPath] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => setWebgl(hasWebGL()), []);
@@ -174,6 +188,7 @@ export default function SiteTwin() {
       if (e.key === "Escape") {
         setSelected(null);
         setDrawer(false);
+        setFollow(null);
       }
       if ((e.key === "p" || e.key === "P") && !e.metaKey && !e.ctrlKey && !e.altKey) togglePresent();
     };
@@ -185,6 +200,13 @@ export default function SiteTwin() {
   useEffect(() => {
     if (selected && !describe(selected, model)) setSelected(null);
   }, [selected, model]);
+
+  // Volgen: een rijdend object, of "batch" = het apparaat waar de batch nu zit.
+  const followId = follow === BATCH_FOLLOW ? batchTarget(model.batch?.state) : follow;
+  useEffect(() => {
+    if (follow && follow !== BATCH_FOLLOW && !describe(follow, model)) setFollow(null);
+    if (follow === BATCH_FOLLOW && !model.batch) setFollow(null);
+  }, [follow, model]);
 
   const labelled = useMemo(() => labelBudget(items, selected, hovered, 6), [items, selected, hovered]);
   const meta = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.meta])), [items]);
@@ -206,7 +228,16 @@ export default function SiteTwin() {
         {webgl === false ? (
           <SceneHolder text="Deze browser ondersteunt geen WebGL. De objectlijst toont dezelfde status." />
         ) : ctx && webgl ? (
-          <SiteScene model={model} ctx={ctx} presenting={presenting} resetSignal={resetSignal} zoom={zoom} />
+          <SiteScene
+            model={model}
+            ctx={ctx}
+            presenting={presenting}
+            resetSignal={resetSignal}
+            zoom={zoom}
+            follow={followId}
+            order={order}
+            showPath={showPath}
+          />
         ) : (
           <SceneHolder text="3D-scène laden" />
         )}
@@ -223,7 +254,7 @@ export default function SiteTwin() {
         drawerOpen={drawer}
       />
 
-      <KpiCards m={model} series={get} order={order} />
+      <KpiCards m={model} series={get} order={order} showPath={showPath} onTogglePath={() => setShowPath((s) => !s)} />
 
       <TabPanel
         items={items}
@@ -237,7 +268,16 @@ export default function SiteTwin() {
         simOn={!!model.sim}
       />
 
-      {selected && <DetailCard id={selected} m={model} series={get} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DetailCard
+          id={selected}
+          m={model}
+          series={get}
+          onClose={() => setSelected(null)}
+          following={follow === selected}
+          onFollow={FOLLOWABLE.test(selected) ? () => setFollow((f) => (f === selected ? null : selected)) : undefined}
+        />
+      )}
 
       <Timeline
         title={
@@ -254,9 +294,17 @@ export default function SiteTwin() {
         right={phaseText(model)}
         steps={BATCH_STEPS}
         index={batchStepIndex(batch?.state, model.hus, batch?.batch_id)}
+        following={follow === BATCH_FOLLOW}
+        onFollow={batch ? () => setFollow((f) => (f === BATCH_FOLLOW ? null : BATCH_FOLLOW)) : undefined}
       />
 
-      <CameraControls onZoom={(dir) => setZoom((z) => ({ n: z.n + 1, dir }))} onReset={() => setResetSignal((n) => n + 1)} />
+      <CameraControls
+        onZoom={(dir) => setZoom((z) => ({ n: z.n + 1, dir }))}
+        onReset={() => {
+          setFollow(null);
+          setResetSignal((n) => n + 1);
+        }}
+      />
     </main>
   );
 }

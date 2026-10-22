@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer, OrbitControls } from "@react-three/drei";
-import { Vector3 } from "three";
+import { Box3, Vector3 } from "three";
+import { trackedObject } from "./objects/Pickable";
+import { OrderPath } from "./objects/OrderPath";
+import type { ActiveOrder } from "./overlay";
 import { CAMERA_HOME, CAMERA_TARGET, LINE_EQUIPMENT, MAX_DOCKS, type Vec3 } from "@/lib/twin/layout";
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { TwinContext, type TwinCtx } from "./context";
@@ -41,7 +44,17 @@ function homePosition(aspect: number): Vector3 {
   return new Vector3(...CAMERA_HOME).sub(t).multiplyScalar(k).add(t);
 }
 
-function CameraRig({ focus, resetSignal, zoom }: { focus: Vec3 | null; resetSignal: number; zoom: { n: number; dir: 1 | -1 } }) {
+function CameraRig({
+  focus,
+  follow,
+  resetSignal,
+  zoom,
+}: {
+  focus: Vec3 | null;
+  follow: string | null;
+  resetSignal: number;
+  zoom: { n: number; dir: 1 | -1 };
+}) {
   const controls = useThree((s) => s.controls) as unknown as { target: Vector3; update: () => void } | null;
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
@@ -78,7 +91,25 @@ function CameraRig({ focus, resetSignal, zoom }: { focus: Vec3 | null; resetSign
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom.n]);
 
+  const box = useRef(new Box3());
+  const centre = useRef(new Vector3());
   useFrame(() => {
+    if (follow && controls) {
+      const obj = trackedObject(follow);
+      if (obj) {
+        box.current.setFromObject(obj);
+        if (!box.current.isEmpty()) {
+          box.current.getCenter(centre.current);
+          centre.current.y = Math.min(centre.current.y, 2);
+          const delta = centre.current.sub(controls.target).multiplyScalar(0.08);
+          controls.target.add(delta);
+          camera.position.add(delta);
+          controls.update();
+          goal.current = null;
+          return;
+        }
+      }
+    }
     const g = goal.current;
     if (!g || !controls) return;
     controls.target.lerp(g.target, 0.12);
@@ -95,12 +126,18 @@ export default function SiteScene({
   presenting,
   resetSignal,
   zoom,
+  follow = null,
+  order = null,
+  showPath = false,
 }: {
   model: TwinModel;
   ctx: TwinCtx;
   presenting: boolean;
   resetSignal: number;
   zoom: { n: number; dir: 1 | -1 };
+  follow?: string | null;
+  order?: ActiveOrder | null;
+  showPath?: boolean;
 }) {
   const { palette, reducedMotion } = ctx;
   const flowing = model.batch ? ACTIVE_STATES.has(model.batch.state) : false;
@@ -188,7 +225,8 @@ export default function SiteScene({
           autoRotate={presenting && !reducedMotion}
           autoRotateSpeed={0.6}
         />
-        <CameraRig focus={focus} resetSignal={resetSignal} zoom={zoom} />
+        {showPath && order && <OrderPath order={order} model={model} />}
+        <CameraRig focus={focus} follow={follow} resetSignal={resetSignal} zoom={zoom} />
       </TwinContext.Provider>
     </Canvas>
   );
