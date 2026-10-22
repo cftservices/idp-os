@@ -37,6 +37,18 @@ def test_full_hu_flow_wrapped_putaway_shipped():
     assert len(diff) == 1 and diff[0]["payload"]["difference"] == 4980 - 2400
 
 
+def test_ship_books_finished_goods_out():
+    """Productie boekt de packs in; uitlevering moet ze weer uitboeken,
+    anders groeit de voorraad eindproduct eindeloos (46,9 mln packs live)."""
+    db, bid = approved_batch()
+    fg = lambda: db.dw_materials.find_one({"material_id": M.FINISHED_GOOD_ID})["stock_qty"]
+    hum = HandlingUnitManager(db)
+    hu = hum.putaway(hum.create_hu(bid, packs_count=480)["hu_id"])
+    before = fg()
+    hum.ship(hu["hu_id"])
+    assert fg() == before - 480
+
+
 def test_approved_gate_blocks_hold_rejected():
     db, bid = approved_batch()
     db.dw_batches.update_one({"batch_id": bid}, {"$set": {"verdict": "REJECTED"}})

@@ -7,8 +7,9 @@ labels them as simulated in the API (`source: "demo-sim"`).
 
   shipments  one per autopilot batch with pallets in the cold store; derived
              from the HU statuses on every request, so it never drifts from
-             the rack. Customer and destination are fictitious and stable per
-             batch (anonymisation rule: no real company names).
+             the rack. The customer is the one on the batch's customer order
+             (autopilot orders carry one); the city is fixed per customer.
+             Both are fictitious (anonymisation rule: no real company names).
   forklifts  HT-01 puts away, HT-02 loads trucks. Each move drains the
              battery; below CHARGE_BELOW_PCT a truck goes to the charger and
              the other one takes over its work. Trips reset at midnight.
@@ -38,17 +39,23 @@ from . import model as M
 SOURCE = "demo-sim"
 
 # Fictitious customers and destinations, with a drive time in demo minutes
-# (compressed: a delivery must finish before shipped HUs are dropped, 30 min).
+# (compressed, so a delivery finishes well before shipped HUs are dropped).
 CUSTOMERS = ["Zuivelhandel Noord", "Versmarkt Groep", "Koelketen Midden",
              "Dessertgroothandel West", "Supermarktcentrale Oost"]
 DESTINATIONS = [("Zwolle", 8), ("Utrecht", 12), ("Eindhoven", 16),
                 ("Groningen", 18), ("Rotterdam", 14), ("Arnhem", 10)]
 
-BATTERY_PER_MOVE_PCT = 1.6
+# The warehouse sim moves ~10 pallets a minute in total. At 1.6 % a move a
+# truck drained ~8 %/min against 4 %/min charging, so both ended up on the
+# charger at ~0 % for good. 0.1 % a move gives a few hours per charge.
+BATTERY_PER_MOVE_PCT = 0.1
 BATTERY_IDLE_PER_MIN_PCT = 0.05
 CHARGE_PER_MIN_PCT = 4.0
 CHARGE_BELOW_PCT = 25.0
 CHARGE_UNTIL_PCT = 95.0
+# Below CHARGE_BELOW a truck waits for the charger while the other one is on
+# it (one charger, staggered); only below this it goes anyway.
+CHARGE_CRITICAL_PCT = 10.0
 
 TANKER_EN_ROUTE_S = 3 * 60
 TANKER_UNLOAD_S = 5 * 60
@@ -89,6 +96,11 @@ def _parse(iso: Optional[str]) -> Optional[datetime]:
 def _pick(seq, key: str):
     h = int(hashlib.sha1(key.encode()).hexdigest()[:8], 16)
     return seq[h % len(seq)]
+
+
+def destination_of(customer: str) -> tuple[str, int]:
+    """One fixed delivery city (and drive time) per customer."""
+    return _pick(DESTINATIONS, customer + ":dest")
 
 
 class Forklift:
@@ -161,11 +173,16 @@ class LogisticsSim:
             if role is None:
                 continue
             f = self._worker(role)
-            f.battery = max(0.0, f.battery - BATTERY_PER_MOVE_PCT)
+            if not f.charging:
+                # both trucks on the charger (critical): the move happens
+                # anyway, without draining a battery that is charging
+                f.battery = max(0.0, f.battery - BATTERY_PER_MOVE_PCT)
             f.trips_today += 1
             f.last_task = m
             f.last_move = now
-            if f.battery < CHARGE_BELOW_PCT:
+            other = next(o for o in self.forklifts.values() if o is not f)
+            if not f.charging and f.battery < CHARGE_BELOW_PCT and (
+                    not other.charging or f.battery < CHARGE_CRITICAL_PCT):
                 f.charging = True
         if self.db is not None:
             self._supply(now)
@@ -230,6 +247,19 @@ class LogisticsSim:
 
     # ------------------------------------------------------------- shipments
 
+    def _customers(self, batch_ids) -> dict[str, tuple[Optional[str], Optional[str]]]:
+        """batch_id -> (order_id, customer of that order). The customer comes
+        from the customer order the batch was made for, so the chain order ->
+        batch -> HU -> shipment ends at the customer who asked for it."""
+        orders = {o["order_id"]: o.get("customer")
+                  for o in self.db.dw_orders.find({}) if o.get("order_id")}
+        out = {}
+        for b in self.db.dw_batches.find({}):
+            if b.get("batch_id") in batch_ids:
+                oid = b.get("order_id")
+                out[b["batch_id"]] = (oid, orders.get(oid))
+        return out
+
     def shipments(self, now: datetime) -> list[dict]:
         by_batch: dict[str, list[dict]] = {}
         for h in self.db.dw_handling_units.find({}):
@@ -237,10 +267,14 @@ class LogisticsSim:
                 continue
             if h["status"] in (M.HU_AWAITING, M.HU_SHIPPED):
                 by_batch.setdefault(h["batch_id"], []).append(h)
+        links = self._customers(set(by_batch))
         out = []
         for batch_id, rows in by_batch.items():
             shipped = [h for h in rows if h["status"] == M.HU_SHIPPED]
-            city, drive_min = _pick(DESTINATIONS, batch_id + ":dest")
+            order_id, customer = links.get(batch_id, (None, None))
+            # orders without a customer (manual, older) keep the stable pick
+            customer = customer or _pick(CUSTOMERS, batch_id + ":cust")
+            city, drive_min = destination_of(customer)
             first_ts = min(_parse(h["ts"]) or now for h in rows)
             loaded_at = max((_parse(h["ts"]) or now for h in shipped), default=None)
             eta = None
@@ -257,7 +291,8 @@ class LogisticsSim:
                 "shipment_id": f"SHP-{suffix}",
                 "truck_id": f"TRK-{int(hashlib.sha1(batch_id.encode()).hexdigest()[:4], 16) % 90 + 10}",
                 "batch_id": batch_id,
-                "customer": _pick(CUSTOMERS, batch_id + ":cust"),
+                "order_id": order_id,
+                "customer": customer,
                 "destination": city,
                 "drive_min": drive_min,
                 "stage": stage,

@@ -7,7 +7,8 @@ what an operator would do, through the same runner calls as the API:
 
   1. wait until no MES batch is running and the factory reports COMPLETE/IDLE;
   2. run CIP on cook-unit-01 when the PR-29 gate says Dirty;
-  3. book the batch on a standing order of the day;
+  3. book the batch on the current customer order (next customer once the
+     order is in full);
   4. create + start the batch (live-follow does the rest).
 
 It never bypasses a gate: CIP goes through perform_cip, the batch through
@@ -36,11 +37,19 @@ from typing import Optional
 
 from vla import model as M
 from vla.equipment import EQUIPMENT_IDS, CipRequired
+from vla.logistics_sim import CUSTOMERS
 
 log = logging.getLogger("vla.autopilot")
 
 OPERATOR = "autopilot"
 RUNNING = (M.DOSING, M.COOKING, M.COOLING, M.FILLING)
+# Customer orders: size in batches (cycled) and delivery deadline. At ~2 min
+# a batch an order of 12 takes ~25 min, well inside the lead time.
+ORDER_BATCHES = (6, 8, 10, 12)
+ORDER_LEAD_HOURS = 2.0
+# A running batch nobody follows any more (engine restart) is dropped after
+# this, instead of staying COOKING/COOLING in every list until keep_hours.
+ORPHAN_PRUNE_S = 3600.0
 # collections whose rows belong to one batch (pruned with the batch)
 BATCH_COLLECTIONS = ("dw_doses", "dw_samples", "dw_batch_events", "dw_alarms",
                      "dw_handling_units", "dw_production")
@@ -190,7 +199,7 @@ class Autopilot:
 
         try:
             batch = self.runner.create_batch(self.recipe_id, auto_start=True,
-                                             order_id=self._order_of_today(),
+                                             order_id=self._current_order(),
                                              operator_id=OPERATOR)
         except CipRequired:
             return self._record("cip_required")
@@ -204,30 +213,41 @@ class Autopilot:
 
     # ---------------------------------------------------------------- order
 
-    def _order_of_today(self) -> Optional[str]:
-        """One standing production order per day for all autopilot batches,
-        instead of an implicit order per batch (~700 orders a day)."""
+    def _current_order(self) -> Optional[str]:
+        """The customer order the next batch is for.
+
+        A customer asks for N batches' worth of product with a delivery
+        deadline. The autopilot keeps batching on it until it is in full
+        (produced >= target), closes it then -- on time unless the line was
+        slow -- and takes the next customer. This replaced one standing order
+        per day without a customer: its 600 x basis_L target was never reached
+        (a batch fills 4,980 packs from 5,000 L) and it was closed after its
+        own deadline, so OTIF could only ever be 0 %."""
         if self.orders is None:
             return None
-        day = _now().strftime("%Y-%m-%d")
         st = self.db.dw_autopilot.find_one({"key": "order"}) or {}
         order = self.orders.get_order(st["order_id"]) if st.get("order_id") else None
-        if order is not None and st.get("day") == day and order["status"] != M.ORDER_DONE:
-            return order["order_id"]
         if order is not None and order["status"] != M.ORDER_DONE:
+            prog = self.orders.order_progress(order["order_id"])
+            if prog["produced_L"] < float(order.get("target_qty_L") or 0):
+                return order["order_id"]
             try:
                 self.orders.close_order(order["order_id"])
             except ValueError as e:
                 log.warning("autopilot: closing %s failed: %s", order["order_id"], e)
+                return order["order_id"]
+        seq = int(st.get("seq") or 0)
+        customer = CUSTOMERS[seq % len(CUSTOMERS)]
+        n_batches = ORDER_BATCHES[seq % len(ORDER_BATCHES)]
         recipe = M.get_recipe(self.recipe_id)
-        # Same format as UI-created orders (ISO, UTC): a bare date compares as
+        # ISO with offset, like UI-created orders: a bare date compares as
         # offset-naive and broke /kpi/summary (OTIF) with a TypeError.
-        due = f"{day}T23:59:59+00:00"
-        new = self.orders.create_order(self.recipe_id, recipe.basis_L * 600,
-                                       due_date=due)
+        due = (_now() + timedelta(hours=ORDER_LEAD_HOURS)).isoformat()
+        new = self.orders.create_order(self.recipe_id, recipe.basis_L * n_batches,
+                                       due_date=due, customer=customer)
         self.db.dw_autopilot.update_one(
             {"key": "order"},
-            {"$set": {"order_id": new["order_id"], "day": day}}, upsert=True)
+            {"$set": {"order_id": new["order_id"], "seq": seq + 1}}, upsert=True)
         self.db.dw_orders.update_one({"order_id": new["order_id"]},
                                      {"$set": {"created_by": OPERATOR}})
         return new["order_id"]
@@ -239,9 +259,14 @@ class Autopilot:
         DONE autopilot orders left empty, and old equipment-state history.
         Manual batches are never touched. Returns the number of batches."""
         cutoff = (_now() - timedelta(hours=self.keep_hours)).isoformat()
+        orphan_cutoff = (_now() - timedelta(seconds=ORPHAN_PRUNE_S)).isoformat()
         n = 0
         for b in self.db.dw_batches.find({"created_by": OPERATOR}):
-            if self._is_active(b) or (b.get("created_at") or "") >= cutoff:
+            if self._is_active(b):
+                continue
+            orphan = b.get("state") in RUNNING and \
+                (b.get("started_at") or b.get("created_at") or "") < orphan_cutoff
+            if not orphan and (b.get("created_at") or "") >= cutoff:
                 continue
             for coll in BATCH_COLLECTIONS:
                 self.db.collection(coll).delete_many({"batch_id": b["batch_id"]})

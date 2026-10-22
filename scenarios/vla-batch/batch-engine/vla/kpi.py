@@ -480,15 +480,26 @@ def _otif(db, start, end) -> tuple[Optional[float], dict]:
         return None, {"reason": ("geen orders met leverdatum in dit venster"
                                  if total else "geen orders"),
                       "orders_without_due_date": total}
+    # Een open order waarvan de leverdatum nog niet voorbij is, is niet te laat:
+    # die telde als mislukt en drukte OTIF van vandaag elke ochtend naar 0.
+    now = datetime.now(timezone.utc)
+    orders = [o for o in orders if o.get("status") == M.ORDER_DONE
+              or (_parse(o.get("due_date")) or now) <= now]
+    if not orders:
+        return None, {"reason": "nog geen order afgerond of over de leverdatum"}
+    from .orders import OrderManager  # lokaal: orders weet niets van kpi
+    om = OrderManager(db)
     ok = 0
     for o in orders:
         if o.get("status") != M.ORDER_DONE:
             continue
-        progress = o.get("progress") or {}
-        produced = _num(progress.get("produced_L"))
+        # de ruwe orderrij heeft geen `progress`; dat rekent OrderManager uit
+        produced = _num(om.order_progress(o["order_id"]).get("produced_L"))
         target = _num(o.get("target_qty_L"))
         in_full = target > 0 and produced >= target
-        closed = _parse(o.get("closed_at")) or _parse(o.get("updated_at"))
+        # close_order schrijft completed_at; closed_at bestond nergens
+        closed = (_parse(o.get("completed_at")) or _parse(o.get("closed_at"))
+                  or _parse(o.get("updated_at")))
         due = _parse(o.get("due_date"))
         on_time = closed is not None and due is not None and closed <= due
         if in_full and on_time:

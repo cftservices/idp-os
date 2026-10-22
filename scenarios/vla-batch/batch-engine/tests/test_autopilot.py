@@ -30,7 +30,7 @@ def _setup(bus=None):
     return db, eq, pilot
 
 
-def test_starts_batch_after_gap_and_books_on_one_daily_order():
+def test_starts_batch_after_gap_and_books_on_one_customer_order():
     db, _eq, pilot = _setup()
     assert pilot.step(now=0) == "wait_gap"
     assert pilot.step(now=11).startswith("started ")
@@ -40,6 +40,50 @@ def test_starts_batch_after_gap_and_books_on_one_daily_order():
     assert len(batches) == 2 and all(b["state"] == "COMPLETE" for b in batches)
     assert len({b["order_id"] for b in batches}) == 1
     assert pilot.status["batches_started"] == 2
+    order = db.dw_orders.find_one({"order_id": batches[0]["order_id"]})
+    from vla.logistics_sim import CUSTOMERS
+    assert order["customer"] in CUSTOMERS and order["due_date"]
+
+
+def test_order_closes_in_full_and_on_time_then_next_customer():
+    """Klant vraagt N batches; pas als die volledig geproduceerd zijn sluit de
+    order (vóór de leverdatum) en komt de volgende klant aan de beurt."""
+    from vla import autopilot as AP
+    from vla import kpi
+    db, _eq, pilot = _setup()
+    t, started = 0.0, []
+    while len({b["order_id"] for b in db.dw_batches.find({})}) < 2:
+        pilot.step(now=t)
+        t += 11
+        r = pilot.step(now=t)
+        if r == "cip":
+            continue
+        started.append(r)
+        assert len(started) < 40
+    first, second = sorted(db.dw_orders.find({}), key=lambda o: o["created_at"])
+    assert first["status"] == "DONE" and first["customer"] != second["customer"]
+    prog = pilot.orders.order_progress(first["order_id"])
+    assert prog["produced_L"] >= first["target_qty_L"]
+    # a batch fills 4,980 packs from 5,000 L: in full needs one batch extra
+    assert prog["batches_count"] == AP.ORDER_BATCHES[0] + 1
+    assert first["completed_at"] <= first["due_date"]
+    start = datetime.now(timezone.utc) - timedelta(days=1)
+    value, meta = kpi._otif(db, start, start + timedelta(days=2))
+    assert value == 100.0 and meta["on_time_in_full"] == 1
+
+
+def test_prune_drops_orphaned_running_autopilot_batch_after_an_hour():
+    db, _eq, pilot = _setup()
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    fresh = datetime.now(timezone.utc).isoformat()
+    db.dw_batches.insert_one({"batch_id": "B-STUCK", "state": "COOLING",
+                              "created_by": OPERATOR, "created_at": old,
+                              "started_at": old})
+    db.dw_batches.insert_one({"batch_id": "B-NEW", "state": "COMPLETE",
+                              "created_by": OPERATOR, "created_at": fresh})
+    assert pilot.prune() == 1
+    assert db.dw_batches.find_one({"batch_id": "B-STUCK"}) is None
+    assert db.dw_batches.find_one({"batch_id": "B-NEW"}) is not None
 
 
 def test_runs_cip_when_dirty_then_continues():
