@@ -19,8 +19,8 @@ import {
   shipmentVisual,
   tankerPose,
 } from "@/lib/twin/flow";
-import { PARK_LOADER, PARK_PUTAWAY } from "@/lib/twin/forklift";
-import { COLDSTORE, PALLETISER, ROAD_Z, dockPosition, type Vec3 } from "@/lib/twin/layout";
+import { PARK_LOADER, PARK_LOADER_2, PARK_PUTAWAY, PARK_PUTAWAY_L2 } from "@/lib/twin/forklift";
+import { COLDSTORE, PALLETISER, PALLETISER_L2, ROAD_Z, dockPosition, type Vec3 } from "@/lib/twin/layout";
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { FLAVOUR_WORD, PREP_STATE_WORD } from "@/lib/twin/lines";
 import { EMPTY, age, num, shortTime } from "@/lib/format";
@@ -141,10 +141,19 @@ export function listItems(m: TwinModel): TwinItem[] {
   items.push({
     id: "palletiser",
     group: "Magazijn",
-    name: "Palletiser",
-    meta: m.husAvailable ? `${l.palletiser.length} HU` : "",
+    name: "Palletiser · L1",
+    meta: m.husAvailable ? `${(l.palletisers?.L1 ?? l.palletiser).length} HU` : "",
     visual: m.logisticsVisual.palletiser,
     pos: PALLETISER,
+    labelHeight: 3.6,
+  });
+  items.push({
+    id: "palletiser-l2",
+    group: "Magazijn",
+    name: "Palletiser · L2",
+    meta: m.husAvailable ? `${(l.palletisers?.L2 ?? []).length} HU` : "",
+    visual: m.logisticsVisual.palletiserL2,
+    pos: PALLETISER_L2,
     labelHeight: 3.6,
   });
   items.push({
@@ -168,8 +177,16 @@ export function listItems(m: TwinModel): TwinItem[] {
       pct: d.progress * 100,
     });
   }
+  let loaderNo = 0;
   for (const f of m.sim?.forklifts ?? []) {
-    const park = f.role === "putaway" ? PARK_PUTAWAY : PARK_LOADER;
+    const park =
+      f.role === "putaway"
+        ? f.line === "L2"
+          ? PARK_PUTAWAY_L2
+          : PARK_PUTAWAY
+        : loaderNo++ === 0
+          ? PARK_LOADER
+          : PARK_LOADER_2;
     items.push({
       id: `forklift:${f.id}`,
       group: "Heftrucks",
@@ -323,18 +340,21 @@ export function describe(id: string, m: TwinModel): Detail | null {
     };
   }
 
-  if (kind === "palletiser") {
-    const p = m.logistics.palletiser;
+  if (kind === "palletiser" || kind === "palletiser-l2") {
+    const l2 = kind === "palletiser-l2";
+    const lg = m.logistics;
+    const p = l2 ? (lg.palletisers?.L2 ?? []) : (lg.palletisers?.L1 ?? lg.palletiser);
+    const batch = l2 ? m.line2?.batch : m.batch;
     return {
-      title: "Palletiser",
+      title: `Palletiser · ${l2 ? "L2" : "L1"}`,
       kind: "Magazijn",
-      visual: m.logisticsVisual.palletiser,
+      visual: l2 ? m.logisticsVisual.palletiserL2 : m.logisticsVisual.palletiser,
       rows: [
         ["Gewikkelde HU's", m.husAvailable ? String(p.length) : EMPTY],
         ["Laatste HU", p.length ? `${p[p.length - 1].hu_id} · ${shortTime(p[p.length - 1].ts)}` : EMPTY],
       ],
-      timeline: m.batch ? batchTimeline : undefined,
-      links: batchLinks(m.batch?.batch_id),
+      timeline: !l2 && m.batch ? batchTimeline : undefined,
+      links: batchLinks(batch?.batch_id),
     };
   }
 
@@ -380,7 +400,7 @@ export function describe(id: string, m: TwinModel): Detail | null {
     if (!f) return null;
     return {
       title: `Heftruck ${f.id}`,
-      kind: f.role === "putaway" ? "Heftruck · inslag" : "Heftruck · laden",
+      kind: f.role === "putaway" ? `Heftruck · inslag ${f.line ?? "L1"}` : "Heftruck · laden",
       visual: forkliftVisual(f),
       rows: [
         ["Ritten vandaag", String(f.trips_today)],

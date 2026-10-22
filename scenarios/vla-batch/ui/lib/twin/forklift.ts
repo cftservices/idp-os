@@ -8,7 +8,18 @@
  * staat CARRY_OFFSET voor het midden van de truck.
  */
 
-import { MAIN_AISLE_Z, PALLETISER_PICK, aisleStopZ, dockPosition, rackSlotCoords, rackSlotPosition, COLDSTORE } from "./layout";
+import {
+  COLDSTORE,
+  L2_AISLE_Z,
+  MAIN_AISLE_Z,
+  PALLETISER_PICK,
+  PALLETISER_PICK_L2,
+  SPINE_X,
+  dockPosition,
+  rackSlotCoords,
+  rackSlotPosition,
+  rowAccess,
+} from "./layout";
 
 export const DRIVE_SPEED = 6; // scène-eenheden per seconde
 export const LIFT_SPEED = 3;
@@ -116,60 +127,96 @@ export class Route {
   }
 }
 
-export const PARK_PUTAWAY: Pose = { x: 14.6, z: MAIN_AISLE_Z, rot: Math.PI / 2, fork: FORK_REST, carrying: false };
-export const PARK_LOADER: Pose = { x: 27.5, z: MAIN_AISLE_Z, rot: -Math.PI / 2, fork: FORK_REST, carrying: false };
-
-/** Waar het vak voor de truck ligt: midden van het vak op x, het pad voor de rij op z. */
-function slotStop(slot: number): [number, number] {
-  const [x] = rackSlotPosition(slot);
-  return [x, aisleStopZ(rackSlotCoords(slot).row)];
-}
-
-/** Door de opening in de westwand van de koelcel, op het hoofdpad. */
+/** Door de openingen in de westwand van de koelcel. */
 const DOOR_X = COLDSTORE.min[0];
 
-/** Palletiser → vak: oppakken, door de deur, het pad in, heffen, neerzetten, terug naar het hoofdpad. */
-export function putawayRoute(from: Pose, slot: number): Route {
-  const [sx, sz] = slotStop(slot);
+export const PARK_PUTAWAY: Pose = { x: 14.6, z: MAIN_AISLE_Z, rot: Math.PI / 2, fork: FORK_REST, carrying: false };
+export const PARK_PUTAWAY_L2: Pose = { x: 14.6, z: L2_AISLE_Z, rot: Math.PI / 2, fork: FORK_REST, carrying: false };
+export const PARK_LOADER: Pose = { x: 31.6, z: MAIN_AISLE_Z, rot: -Math.PI / 2, fork: FORK_REST, carrying: false };
+export const PARK_LOADER_2: Pose = { x: 31.6, z: L2_AISLE_Z, rot: -Math.PI / 2, fork: FORK_REST, carrying: false };
+
+/** Per lijn: waar de pallet klaarstaat, over welk pad en door welke deur de truck rijdt. */
+const LINE_ROUTE: Record<string, { pick: [number, number]; aisle: number }> = {
+  L1: { pick: PALLETISER_PICK, aisle: MAIN_AISLE_Z },
+  L2: { pick: PALLETISER_PICK_L2, aisle: L2_AISLE_Z },
+};
+
+/** Waar het vak voor de truck ligt: midden van het vak op x, het pad voor de rij op z. */
+function slotStop(slot: number): { x: number; z: number; aisle: number } {
+  const [x] = rackSlotPosition(slot);
+  const a = rowAccess(rackSlotCoords(slot).row);
+  return { x, z: a.stop, aisle: a.aisle };
+}
+
+const MID_Z = (MAIN_AISLE_Z + L2_AISLE_Z) / 2;
+function aisleOf(z: number): number {
+  return z > MID_Z ? MAIN_AISLE_Z : L2_AISLE_Z;
+}
+
+/** Terug naar een pad als de truck in een rij of bij een palletiser staat. */
+function onAisle(from: Pose, segs: Segment[]): [number, number] {
+  const aisle = aisleOf(from.z);
+  if (Math.abs(from.z - aisle) > 0.05) segs.push({ kind: "lift", to: FORK_REST }, { kind: "drive", to: [from.x, aisle], reverse: true });
+  return [from.x, aisle];
+}
+
+/** Over de paden naar (x, aisle): een ander pad bereik je via het dwarspad aan de oostkant. */
+function viaAisles(cur: [number, number], x: number, aisle: number, segs: Segment[], reverseLast = false) {
+  if (Math.abs(cur[1] - aisle) > 0.05) {
+    segs.push({ kind: "drive", to: [SPINE_X, cur[1]] }, { kind: "drive", to: [SPINE_X, aisle] });
+    cur = [SPINE_X, aisle];
+  }
+  segs.push({ kind: "drive", to: [x, aisle], reverse: reverseLast && cur[0] < x });
+}
+
+/** Palletiser → vak: oppakken, door de deur van de lijn, het pad in, heffen, neerzetten, terug naar het pad. */
+export function putawayRoute(from: Pose, slot: number, line = "L1"): Route {
+  const st = slotStop(slot);
   const level = rackSlotPosition(slot)[1];
-  const [px, pz] = PALLETISER_PICK;
+  const { pick, aisle } = LINE_ROUTE[line] ?? LINE_ROUTE.L1;
+  const [px, pz] = pick;
+  const bx = px + CARRY_OFFSET + 1.2;
   const segs: Segment[] = [];
-  if (Math.abs(from.z - MAIN_AISLE_Z) > 0.05) segs.push({ kind: "lift", to: FORK_REST }, { kind: "drive", to: [from.x, MAIN_AISLE_Z], reverse: true });
+  const cur = onAisle(from, segs);
+  segs.push({ kind: "lift", to: FORK_REST });
+  viaAisles(cur, bx, aisle, segs, true);
   segs.push(
-    { kind: "lift", to: FORK_REST },
-    { kind: "drive", to: [px + CARRY_OFFSET + 1.2, MAIN_AISLE_Z], reverse: from.x < px + CARRY_OFFSET + 1.2 },
-    { kind: "drive", to: [px + CARRY_OFFSET + 1.2, pz], reverse: true },
+    { kind: "drive", to: [bx, pz], reverse: true },
     // recht naar het westen, de vorken onder de pallet op de draaitafel
     { kind: "drive", to: [px + CARRY_OFFSET, pz] },
     { kind: "grab" },
-    { kind: "drive", to: [px + CARRY_OFFSET + 1.2, pz], reverse: true },
-    { kind: "drive", to: [px + CARRY_OFFSET + 1.2, MAIN_AISLE_Z] },
-    { kind: "drive", to: [DOOR_X, MAIN_AISLE_Z] },
-    { kind: "drive", to: [sx, MAIN_AISLE_Z] },
-    { kind: "drive", to: [sx, sz] },
+    { kind: "drive", to: [bx, pz], reverse: true },
+    { kind: "drive", to: [bx, aisle] },
+    { kind: "drive", to: [DOOR_X, aisle] },
+  );
+  viaAisles([DOOR_X, aisle], st.x, st.aisle, segs);
+  segs.push(
+    { kind: "drive", to: [st.x, st.z] },
     { kind: "lift", to: level },
     { kind: "drop" },
     { kind: "lift", to: FORK_REST },
-    { kind: "drive", to: [sx, MAIN_AISLE_Z], reverse: true },
+    { kind: "drive", to: [st.x, st.aisle], reverse: true },
   );
   return new Route(from, segs);
 }
 
 /** Vak → truck aan de dock: heffen, uitnemen, naar de dock, de trailer in. */
 export function loadRoute(from: Pose, slot: number, dock: number): Route {
-  const [sx, sz] = slotStop(slot);
+  const st = slotStop(slot);
   const level = rackSlotPosition(slot)[1];
   const [dx, , dz] = dockPosition(dock);
   const segs: Segment[] = [];
-  if (Math.abs(from.z - MAIN_AISLE_Z) > 0.05) segs.push({ kind: "lift", to: FORK_REST }, { kind: "drive", to: [from.x, MAIN_AISLE_Z], reverse: true });
+  const cur = onAisle(from, segs);
+  viaAisles(cur, st.x, st.aisle, segs);
   segs.push(
-    { kind: "drive", to: [sx, MAIN_AISLE_Z] },
-    { kind: "drive", to: [sx, sz] },
+    { kind: "drive", to: [st.x, st.z] },
     { kind: "lift", to: level },
     { kind: "grab" },
     { kind: "lift", to: FORK_REST },
-    { kind: "drive", to: [sx, MAIN_AISLE_Z], reverse: true },
-    { kind: "drive", to: [dx, MAIN_AISLE_Z] },
+    { kind: "drive", to: [st.x, st.aisle], reverse: true },
+  );
+  viaAisles([st.x, st.aisle], dx, MAIN_AISLE_Z, segs);
+  segs.push(
     { kind: "lift", to: TRAILER_FLOOR },
     { kind: "drive", to: [dx, dz + 0.4] },
     { kind: "drop" },

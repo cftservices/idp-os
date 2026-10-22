@@ -10,8 +10,24 @@ import {
   siloVisual,
   type Hu,
 } from "../lib/twin/derive";
-import { COLDSTORE, MAIN_AISLE_Z, MAX_DOCKS, PALLETISER_PICK, RACK_SLOTS, dockPosition, rackSlotPosition } from "../lib/twin/layout";
-import { CARRY_OFFSET, PARK_LOADER, PARK_PUTAWAY, loadRoute, putawayRoute } from "../lib/twin/forklift";
+import {
+  COLDSTORE,
+  L2_AISLE_Z,
+  MAIN_AISLE_Z,
+  MAX_DOCKS,
+  PALLETISER_PICK,
+  PALLETISER_PICK_L2,
+  RACK,
+  RACK_SLOTS,
+  RACK_ZONE_SLOTS,
+  SILO_SLOTS,
+  SPINE_X,
+  dockPosition,
+  rackSlotCoords,
+  rackSlotPosition,
+  rowAccess,
+} from "../lib/twin/layout";
+import { CARRY_OFFSET, PARK_LOADER, PARK_LOADER_2, PARK_PUTAWAY, PARK_PUTAWAY_L2, loadRoute, putawayRoute } from "../lib/twin/forklift";
 import { HALL, HALL2, LINE2_EQUIPMENT, LINE_EQUIPMENT, PREP_ROOM, PREP_STATIONS } from "../lib/twin/layout";
 import {
   FLAVOURS,
@@ -119,6 +135,19 @@ test.describe("silo", () => {
 });
 
 test.describe("deriveLogistics", () => {
+  test("elke lijn heeft een eigen palletiser en een eigen laatste putaway", () => {
+    const a = { ...hu("A", "wrapped"), line: "L1" };
+    const b = { ...hu("B", "wrapped"), line: "L2" };
+    const c = { ...hu("C", "awaiting_shipment", 30_000), line: "L2", slot: RACK_ZONE_SLOTS + 1 };
+    const d = { ...hu("D", "awaiting_shipment", 90_000), slot: 2 };
+    const l = deriveLogistics([a, b, c, d] as Hu[], NOW);
+    expect(l.palletisers.L1.map((h) => h.batch_id)).toEqual(["A"]);
+    expect(l.palletisers.L2.map((h) => h.batch_id)).toEqual(["B"]);
+    expect(l.lastPutawayByLine.L2?.hu.batch_id).toBe("C");
+    expect(l.lastPutawayByLine.L1?.hu.batch_id, "zonder line is het L1").toBe("D");
+    expect(l.lastLoads).toHaveLength(2);
+  });
+
   test("geen HU's is een lege site, geen fout", () => {
     for (const input of [null, undefined, []]) {
       const l = deriveLogistics(input, NOW);
@@ -133,7 +162,7 @@ test.describe("deriveLogistics", () => {
     const l = deriveLogistics(hus, NOW);
     expect(l.docks).toHaveLength(MAX_DOCKS);
     expect(l.docksOverflow).toBe(2);
-    expect(l.docks.map((d) => d.batch_id)).toEqual(["B0", "B1", "B2", "B3"]);
+    expect(l.docks.map((d) => d.batch_id)).toEqual(Array.from({ length: MAX_DOCKS }, (_, i) => `B${i}`));
   });
 
       test("een truck meldt zich pas bij laadklaar, en laadt pas als er een pallet in zit", () => {
@@ -234,7 +263,7 @@ test.describe("heftruckritten", () => {
       expect(p.z + Math.cos(p.rot) * CARRY_OFFSET).toBeCloseTo(sz, 3);
       expect(p.fork).toBeCloseTo(sy, 3);
       expect(r.poseAt(r.duration).carrying).toBe(false);
-      expect(r.poseAt(r.duration).z).toBeCloseTo(MAIN_AISLE_Z, 3);
+      expect(r.poseAt(r.duration).z).toBeCloseTo(rowAccess(rackSlotCoords(slot).row).aisle, 3);
       expect(r.duration, "een rit moet ongeveer in het putaway-ritme passen").toBeLessThan(14);
     }
   });
@@ -244,6 +273,49 @@ test.describe("heftruckritten", () => {
     const p = r.poseAt(r.grabAt!);
     expect(p.x + Math.sin(p.rot) * CARRY_OFFSET).toBeCloseTo(PALLETISER_PICK[0], 3);
     expect(p.z + Math.cos(p.rot) * CARRY_OFFSET).toBeCloseTo(PALLETISER_PICK[1], 3);
+  });
+
+  test("de inslagtruck van L2 pakt bij de palletiser van L2 en rijdt naar de noordelijke zone", () => {
+    const slot = RACK_ZONE_SLOTS + 10;
+    const r = putawayRoute(PARK_PUTAWAY_L2, slot, "L2");
+    const g = r.poseAt(r.grabAt!);
+    expect(g.x + Math.sin(g.rot) * CARRY_OFFSET).toBeCloseTo(PALLETISER_PICK_L2[0], 3);
+    expect(g.z + Math.cos(g.rot) * CARRY_OFFSET).toBeCloseTo(PALLETISER_PICK_L2[1], 3);
+    const p = r.poseAt(r.dropAt! - 0.01);
+    const [sx, , sz] = rackSlotPosition(slot);
+    expect(p.x + Math.sin(p.rot) * CARRY_OFFSET).toBeCloseTo(sx, 3);
+    expect(p.z + Math.cos(p.rot) * CARRY_OFFSET).toBeCloseTo(sz, 3);
+    expect(r.duration).toBeLessThan(16);
+  });
+
+  test("een L2-pallet in de zuidelijke zone steekt over via de dwarsgang", () => {
+    const r = putawayRoute(PARK_PUTAWAY_L2, 5, "L2");
+    let crossed = false;
+    for (let t = 0; t <= r.duration; t += 0.05) {
+      const p = r.poseAt(t);
+      if (p.z > L2_AISLE_Z + 1 && p.z < MAIN_AISLE_Z - 1 && Math.abs(p.x - SPINE_X) < 0.05) crossed = true;
+    }
+    expect(crossed).toBe(true);
+  });
+
+  test("rijen 0-3 aan het hoofdpad, 4-7 aan het L2-pad, en elke stop ligt tussen twee rijen of naast een pad", () => {
+    for (let row = 0; row < RACK.rows.length; row++) {
+      const a = rowAccess(row);
+      expect(a.aisle).toBe(row < 4 ? MAIN_AISLE_Z : L2_AISLE_Z);
+      expect(Math.abs(a.stop - RACK.rows[row])).toBeCloseTo(1.3, 5);
+      for (const other of RACK.rows) expect(Math.abs(a.stop - other)).toBeGreaterThan(RACK.depth / 2);
+    }
+  });
+
+  test("vier parkeerplekken, allemaal verschillend, tussen palletiser en de oostwand van de koelcel", () => {
+    const parks = [PARK_PUTAWAY, PARK_PUTAWAY_L2, PARK_LOADER, PARK_LOADER_2];
+    expect(new Set(parks.map((p) => `${p.x},${p.z}`)).size).toBe(4);
+    for (const p of parks) {
+      expect(p.x).toBeGreaterThan(PALLETISER_PICK[0]);
+      expect(p.x).toBeLessThan(COLDSTORE.max[0]);
+      expect(p.z).toBeGreaterThan(COLDSTORE.min[1]);
+      expect(p.z).toBeLessThan(COLDSTORE.max[1]);
+    }
   });
 
   test("laden pakt de pallet uit het vak en zet hem in de trailer", () => {
@@ -333,9 +405,10 @@ test.describe("twee hallen en de voorbereiding", () => {
     for (const e of LINE_EQUIPMENT) expect(lineOfEquipment(e.id)).toBe("L1");
   });
 
-  test("hal 1, de voorbereiding en hal 2 overlappen niet", () => {
-    expect(PREP_ROOM.max[1]).toBeLessThan(HALL.min[1]);
-    expect(PREP_ROOM.min[1]).toBeGreaterThan(HALL2.max[1]);
+  test("de voorbereiding staat west van beide hallen, de silo's daar weer west van", () => {
+    expect(PREP_ROOM.max[0]).toBeLessThan(HALL.min[0]);
+    expect(PREP_ROOM.max[0]).toBeLessThan(HALL2.min[0]);
+    for (const s of SILO_SLOTS) expect(s[0] + 1.6).toBeLessThan(PREP_ROOM.min[0]);
     for (const st of PREP_STATIONS) {
       expect(st.pos[0]).toBeGreaterThan(PREP_ROOM.min[0]);
       expect(st.pos[0]).toBeLessThan(PREP_ROOM.max[0]);

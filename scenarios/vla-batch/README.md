@@ -314,15 +314,19 @@ invents state.
 
 - **Line:** receiving tank, mixer, cooker, cooler and filler, each with its live process value and
   status (running, idle, attention, alarm, stale, no data). Hall 1 holds line L1, Hall 2 line L2.
-- **Preparation room:** weigh stations and premix tanks for both lines; active stations show their
-  set (state, flavour, line) on a shared board.
-- **Raw materials:** four silos (milk, sugar, starch, cocoa) filled to `stock / (4 × reorder level)`.
+- **Preparation room:** a separate room west of both halls (where the silos used to stand), with
+  weigh stations and premix tanks for both lines; a premix header feeds L1 and L2 by pipe. Active
+  stations show their set (state, flavour, line) on a shared board.
+- **Raw materials:** four silos west of the preparation room (milk, sugar, starch, cocoa) filled to `stock / (4 × reorder level)`.
   Each material has its own supplier vehicle: a stainless tanker for milk, bulk tankers for sugar
   and starch, a pallet truck for cocoa. A silo below 50% places an order; while unloading the
   vehicle books real goods receipts in chunks (`inventory.receive`), capped at silo capacity.
   Each vehicle has its own unloading bay (`INBOUND_BAYS` in `ui/lib/twin/flow.ts`).
-- **Warehouse:** palletiser robot, cold store with 96 rack slots, forklifts with battery and trips,
-  four docks. Docked trailers are see-through and show the loaded pallets. Cartons and pallets
+- **Warehouse:** each line has its own outfeed conveyor and palletiser robot. A cold store with
+  192 rack slots in 8 rows, split into one zone per line (L1 slots 0–95, L2 96–191, `ZONE_SLOTS`
+  in `vla/warehouse.py`), with a door per line. Four forklifts with battery and trips: HT-01 and
+  HT-03 do the putaway for L1 and L2, HT-02 and HT-04 load trucks, and they share one charger.
+  Six docks. Docked trailers are see-through and show the loaded pallets. Cartons and pallets
   (also on the forklift forks) carry the colour of their flavour. A truck loads at the dock, leaves
   when full, and its chip shows which orders it carries; the dock chips form one board.
 - **Order traceability:** `Toon orderpad` follows an order from preparation set through batch,

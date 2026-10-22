@@ -46,6 +46,7 @@ class HandlingUnitManager:
         row = {
             "hu_id": M.new_hu_id(),
             "batch_id": batch_id,
+            "line": M.line_of_doc(batch),
             "packs_count": int(packs_count),
             "location": None,
             "status": M.HU_WRAPPED,

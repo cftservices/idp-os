@@ -25,10 +25,14 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { TwinPalette } from "@/lib/twin/palette";
 import {
   COLDSTORE,
+  L2_AISLE_Z,
   MAIN_AISLE_Z,
   MAX_DOCKS,
   PALLETISER,
   PALLETISER_PICK,
+  PALLETISER_PICK_L2,
+  PALLETISERS,
+  SPINE_X,
   RACK,
   RACK_SLOTS,
   ROAD_X,
@@ -44,6 +48,7 @@ import {
   type DockSlot,
   type Hu,
   type Logistics,
+  type LogisticsLine,
   type Move,
   type Visual,
 } from "@/lib/twin/derive";
@@ -51,7 +56,9 @@ import {
   CARRY_OFFSET,
   FORK_REST,
   PARK_LOADER,
+  PARK_LOADER_2,
   PARK_PUTAWAY,
+  PARK_PUTAWAY_L2,
   loadRoute,
   putawayRoute,
   type Pose,
@@ -416,11 +423,14 @@ function PalletModel({ packs = 1, wrapped = false, batch }: { packs?: number; wr
   );
 }
 
-export function Palletiser({ logistics, visual }: { logistics: Logistics; visual: Visual }) {
+/** Palletiser met robot aan het eind van de band van één lijn; L1 heet "palletiser", L2 "palletiser-l2". */
+export function Palletiser({ logistics, visual, line = "L1" }: { logistics: Logistics; visual: Visual; line?: LogisticsLine }) {
   const { palette } = useTwin();
-  const busy = logistics.palletiser.length > 0;
+  const hus = logistics.palletisers?.[line] ?? (line === "L1" ? logistics.palletiser : []);
+  const busy = hus.length > 0;
+  const id = line === "L1" ? "palletiser" : "palletiser-l2";
   return (
-    <Pickable id="palletiser" name="Palletiser" visual={visual} position={PALLETISER} radius={1.4} labelHeight={4}>
+    <Pickable id={id} name={`Palletiser · ${line}`} visual={visual} position={PALLETISERS[line] ?? PALLETISER} radius={1.4} labelHeight={4}>
       <mesh position={[0, 0.08, 0]} receiveShadow>
         <cylinderGeometry args={[1.1, 1.1, 0.16, 24]} />
         <meshStandardMaterial color={palette["steel-dark"]} />
@@ -430,10 +440,10 @@ export function Palletiser({ logistics, visual }: { logistics: Logistics; visual
       </Suspense>
       {busy && (
         <group position={[0, 0.16, 0]}>
-          <PalletModel packs={logistics.palletiser[0].packs_count} batch={logistics.palletiser[0].batch_id} wrapped />
+          <PalletModel packs={hus[0].packs_count} batch={hus[0].batch_id} wrapped />
         </group>
       )}
-      {logistics.palletiser.slice(1, 4).map((hu, i) => (
+      {hus.slice(1, 4).map((hu, i) => (
         <group key={hu.hu_id} position={[0, 0, 1.4 + i * 1.2]}>
           <PalletModel packs={hu.packs_count} batch={hu.batch_id} wrapped />
         </group>
@@ -507,6 +517,7 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
   const [x0, z0] = COLDSTORE.min;
   const [x1, z1] = COLDSTORE.max;
   const [door0, door1] = COLDSTORE.door;
+  const [doorB0, doorB1] = COLDSTORE.door2;
   const cx = (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
   const w = x1 - x0;
@@ -514,7 +525,15 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
   const h = COLDSTORE.wall;
   const doorH = 3.2;
   const origin: [number, number] = [cx - 1, cz - 1];
-  const westD = door0 - z0;
+  // westwand van noord naar zuid: muur, deur L2, muur, deur L1 (die loopt door tot de voorgevel)
+  const westWalls: Array<[number, number]> = [
+    [z0, doorB0],
+    [doorB1, door0],
+  ];
+  const doors: Array<[number, number]> = [
+    [doorB0, doorB1],
+    [door0, door1],
+  ];
   return (
     <group>
       <mesh position={[cx, 0.05, cz]} receiveShadow>
@@ -522,9 +541,16 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
         <meshStandardMaterial color={palette["ground-line"]} />
       </mesh>
       {/* gele looplijnen langs het hoofdpad */}
-      {[MAIN_AISLE_Z - 0.85, MAIN_AISLE_Z + 0.85].map((z) => (
+      {[MAIN_AISLE_Z - 0.85, MAIN_AISLE_Z + 0.85, L2_AISLE_Z - 0.85, L2_AISLE_Z + 0.85].map((z) => (
         <mesh key={z} position={[cx, 0.11, z]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[w - 0.4, 0.08]} />
+          <meshBasicMaterial color={palette["road-mark"]} />
+        </mesh>
+      ))}
+      {/* dwarspad tussen de twee paden, ten oosten van de stellingen */}
+      {[SPINE_X - 0.85, SPINE_X + 0.85].map((x) => (
+        <mesh key={x} position={[x, 0.11, (MAIN_AISLE_Z + L2_AISLE_Z) / 2]} rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
+          <planeGeometry args={[MAIN_AISLE_Z - L2_AISLE_Z - 1.7, 0.08]} />
           <meshBasicMaterial color={palette["road-mark"]} />
         </mesh>
       ))}
@@ -537,19 +563,25 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
         <boxGeometry args={[0.3, h, d]} />
         <meshStandardMaterial color={palette.cold} />
       </mesh>
-      <mesh position={[x0, h / 2, z0 + westD / 2]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, h, westD]} />
-        <meshStandardMaterial color={palette.cold} />
-      </mesh>
-      <mesh position={[x0, (doorH + h) / 2, (door0 + door1) / 2]} castShadow>
-        <boxGeometry args={[0.3, h - doorH, door1 - door0]} />
-        <meshStandardMaterial color={palette.cold} />
-      </mesh>
-      {/* strokengordijn in de deuropening */}
-      <mesh position={[x0, doorH / 2, (door0 + door1) / 2]}>
-        <boxGeometry args={[0.04, doorH, door1 - door0]} />
-        <meshStandardMaterial color={palette.curtain} transparent opacity={0.18} depthWrite={false} />
-      </mesh>
+      {westWalls.map(([a, b]) => (
+        <mesh key={a} position={[x0, h / 2, (a + b) / 2]} castShadow receiveShadow>
+          <boxGeometry args={[0.3, h, b - a]} />
+          <meshStandardMaterial color={palette.cold} />
+        </mesh>
+      ))}
+      {doors.map(([a, b]) => (
+        <group key={a}>
+          <mesh position={[x0, (doorH + h) / 2, (a + b) / 2]} castShadow>
+            <boxGeometry args={[0.3, h - doorH, b - a]} />
+            <meshStandardMaterial color={palette.cold} />
+          </mesh>
+          {/* strokengordijn in de deuropening */}
+          <mesh position={[x0, doorH / 2, (a + b) / 2]}>
+            <boxGeometry args={[0.04, doorH, b - a]} />
+            <meshStandardMaterial color={palette.curtain} transparent opacity={0.18} depthWrite={false} />
+          </mesh>
+        </group>
+      ))}
       <mesh position={[cx, h + 0.1, z0 + 0.2]}>
         <boxGeometry args={[w + 0.4, 0.2, 0.6]} />
         <meshStandardMaterial color={palette["cold-roof"]} emissive={palette["cold-roof"]} emissiveIntensity={0.15} />
@@ -1382,25 +1414,34 @@ function forkPick(f: SimForklift | null | undefined) {
   return f ? { id: `forklift:${f.id}`, name: `Heftruck ${f.id}`, visual: forkliftVisual(f) } : null;
 }
 
-const putawayPlan = (from: Pose, m: Move) => putawayRoute(from, m.slot);
+const putawayPlanL1 = (from: Pose, m: Move) => putawayRoute(from, m.slot, "L1");
+const putawayPlanL2 = (from: Pose, m: Move) => putawayRoute(from, m.slot, "L2");
 const loadPlan = (from: Pose, m: Move) => loadRoute(from, m.slot, m.dock ?? 0);
 const slotPickup = (m: Move): Vec3 => rackSlotPosition(m.slot);
 
-/** Heftruck palletiser → stelling: speelt elke putaway uit de HU-data na. */
-export function PutawayForklift({ logistics, transit, sim }: { logistics: Logistics; transit: Transit; sim?: SimForklift | null }) {
+/** Heftruck palletiser → stelling, één per lijn: speelt elke putaway van die lijn uit de HU-data na. */
+export function PutawayForklift({
+  logistics,
+  transit,
+  sim,
+  line = "L1",
+}: {
+  logistics: Logistics;
+  transit: Transit;
+  sim?: SimForklift | null;
+  line?: LogisticsLine;
+}) {
   const { palette } = useTwin();
-  const turntableBusy = logistics.palletiser.length > 0;
-  const pickup = useCallback(
-    (): Vec3 | null => (turntableBusy ? null : [PALLETISER_PICK[0], 0.16, PALLETISER_PICK[1]]),
-    [turntableBusy],
-  );
+  const turntableBusy = (logistics.palletisers?.[line] ?? []).length > 0;
+  const pick = line === "L1" ? PALLETISER_PICK : PALLETISER_PICK_L2;
+  const pickup = useCallback((): Vec3 | null => (turntableBusy ? null : [pick[0], 0.16, pick[1]]), [turntableBusy, pick]);
   return (
     <RouteForklift
-      name="forklift-putaway"
+      name={`forklift-putaway-${line.toLowerCase()}`}
       pick={forkPick(sim)}
-      move={logistics.lastPutaway}
-      park={PARK_PUTAWAY}
-      plan={putawayPlan}
+      move={logistics.lastPutawayByLine?.[line] ?? (line === "L1" ? logistics.lastPutaway : null)}
+      park={line === "L1" ? PARK_PUTAWAY : PARK_PUTAWAY_L2}
+      plan={line === "L1" ? putawayPlanL1 : putawayPlanL2}
       color={palette.dock}
       transit={transit}
       hideUntilDrop
@@ -1409,15 +1450,25 @@ export function PutawayForklift({ logistics, transit, sim }: { logistics: Logist
   );
 }
 
-/** Heftruck stelling → truck: speelt elke laadactie (ship) na, van het vak naar de dock. */
-export function LoaderForklift({ logistics, transit, sim }: { logistics: Logistics; transit: Transit; sim?: SimForklift | null }) {
+/** Heftruck stelling → truck: twee stuks, elk speelt de laadacties (ship) na die op hem vallen (zie loaderOf). */
+export function LoaderForklift({
+  logistics,
+  transit,
+  sim,
+  index = 0,
+}: {
+  logistics: Logistics;
+  transit: Transit;
+  sim?: SimForklift | null;
+  index?: 0 | 1;
+}) {
   const { palette } = useTwin();
   return (
     <RouteForklift
-      name="forklift-loader"
+      name={index === 0 ? "forklift-loader" : "forklift-loader-2"}
       pick={forkPick(sim)}
-      move={logistics.lastLoad}
-      park={PARK_LOADER}
+      move={logistics.lastLoads?.[index] ?? (index === 0 ? logistics.lastLoad : null)}
+      park={index === 0 ? PARK_LOADER : PARK_LOADER_2}
       plan={loadPlan}
       color={palette["truck-cab"]}
       transit={transit}

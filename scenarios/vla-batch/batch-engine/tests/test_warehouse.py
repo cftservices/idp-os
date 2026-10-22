@@ -101,3 +101,15 @@ def test_full_rack_holds_pallets_at_palletiser(monkeypatch):
     _run(sim, db, 60, monkey=monkeypatch)
     assert len(_hus(db, M.HU_AWAITING)) <= 1
     assert len(_hus(db, M.HU_WRAPPED)) >= 1
+
+
+def test_each_line_palletises_into_its_own_rack_zone(monkeypatch):
+    """Twee palletisers: een L2-batch krijgt HU's met line L2, in de noordelijke helft van de stelling."""
+    db, sim, (a, b) = _setup(n_batches=2)
+    db.dw_batches.update_one({"batch_id": b}, {"$set": {"line": "L2"}})
+    _run(sim, db, 90, monkey=monkeypatch)
+    stored = _hus(db, M.HU_AWAITING)
+    assert {h["line"] for h in stored if h["batch_id"] == a} == {"L1"}
+    assert {h["line"] for h in stored if h["batch_id"] == b} == {"L2"}
+    assert all(h["slot"] < W.ZONE_SLOTS for h in stored if h["line"] == "L1")
+    assert all(h["slot"] >= W.ZONE_SLOTS for h in stored if h["line"] == "L2")

@@ -29,6 +29,8 @@ export type SimShipment = {
 export type SimForklift = {
   id: string;
   role: "putaway" | "loader";
+  /** Putaway-truck: de lijn waarvan hij de palletiser leegrijdt. */
+  line?: "L1" | "L2";
   state: "busy" | "idle" | "charging";
   battery_pct: number;
   trips_today: number;
@@ -213,17 +215,17 @@ const TANKER_APPROACH_S = 90;
 const TANKER_LEAVE_S = 60;
 const TANKER_GONE_S = 480;
 /** Losplaats bij de silo's; de tankwagen staat met de cabine naar de weg. */
-export const TANKER_BAY = { x: -19.5, z: 6.2 };
+export const TANKER_BAY = { x: -25.5, z: 6.2 };
 /** Losplaats per grondstof, naast elkaar langs het siloplein. */
 export const INBOUND_BAYS: Record<string, { x: number; z: number }> = {
   milk: TANKER_BAY,
-  sugar: { x: -23, z: 6.2 },
-  starch: { x: -26.5, z: 6.2 },
-  cocoa: { x: -16, z: 6.2 },
+  sugar: { x: -29, z: 6.2 },
+  starch: { x: -32.5, z: 6.2 },
+  cocoa: { x: -22, z: 6.2 },
 };
 
 export function inboundBay(i: SimInbound | null | undefined): { x: number; z: number } {
-  return INBOUND_BAYS[i?.material_id ?? "milk"] ?? { x: -30, z: 6.2 };
+  return INBOUND_BAYS[i?.material_id ?? "milk"] ?? { x: -36, z: 6.2 };
 }
 
 /** "Bulkwagen suiker SUI-123": de soort met hoofdletter en het kenteken. */
@@ -232,7 +234,7 @@ export function inboundName(i: SimInbound): string {
   return `${k.charAt(0).toUpperCase()}${k.slice(1)} ${i.id}`;
 }
 const LANE_IN = 11.6;
-const ROAD_W = -34;
+const ROAD_W = -40;
 
 function along(a: number, b: number, f: number) {
   return a + (b - a) * clamp01(f);
