@@ -73,8 +73,9 @@ def stale_threshold_s(model: Optional[dict] = None) -> float:
         return STALE_DEFAULT_S
 
 
-def _probe(target: Optional[str]) -> Optional[bool]:
-    """True/False voor host:poort, None als er niets te proberen valt."""
+def _probe(target: Optional[str]) -> object:
+    """True/False voor host:poort, None als er niets te proberen valt,
+    "absent" als de hostnaam niet bestaat (dienst niet uitgerold)."""
     if not target or ":" not in target:
         return None
     now = time.monotonic()
@@ -83,10 +84,12 @@ def _probe(target: Optional[str]) -> Optional[bool]:
         if hit and now - hit[0] < PROBE_TTL_S:
             return hit[1]
     host, port = target.rsplit(":", 1)
-    ok = False
+    ok: object = False
     try:
         with socket.create_connection((host, int(port)), timeout=0.6):
             ok = True
+    except socket.gaierror:
+        ok = "absent"
     except (OSError, ValueError):
         ok = False
     with _probe_lock:
@@ -222,8 +225,11 @@ def layer_map(buses: dict, db=None, extra: Optional[dict] = None) -> dict:
             on = bool((extra or {}).get(svc["id"]))
             status, detail = ("ok" if on else "off"), None
         else:
-            status = "unknown" if up is None else ("ok" if up else "down")
-            detail = None
+            if up == "absent":
+                status, detail = "off", "niet uitgerold"
+            else:
+                status = "unknown" if up is None else ("ok" if up else "down")
+                detail = None
         services.append({"id": svc["id"], "kind": svc["kind"], "name": svc["name"],
                          "role": svc["role"], "status": status, "detail": detail})
 

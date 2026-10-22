@@ -105,6 +105,7 @@ function Node({ n }: { n: LayerNode }) {
         <small>
           {n.protocol ? `${n.protocol} · ` : ""}
           {STATUS_WORD[n.status] ?? n.status}
+          {n.detail && ` (${n.detail})`}
           {counts && ` · ${n.topics} topics`}
           {n.last_age_s != null && ` · ${ago(n.last_age_s)} geleden`}
         </small>
