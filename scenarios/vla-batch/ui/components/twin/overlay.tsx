@@ -17,6 +17,7 @@ import { delta, sparkPath, type Sample } from "@/lib/twin/history";
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { EMPTY, compact, num, shortTime } from "@/lib/format";
 import { useForkliftHistory } from "@/lib/queries";
+import { EquipmentDatalayer } from "./datalayer";
 import { GROUPS, describe, type TwinGroup, type TwinItem } from "./selection";
 
 export function VisualPill({ v }: { v: Visual }) {
@@ -48,6 +49,8 @@ export function TopBar({
   onPresent,
   onDrawer,
   drawerOpen,
+  lens,
+  onLens,
 }: {
   m: TwinModel;
   items: TwinItem[];
@@ -57,6 +60,8 @@ export function TopBar({
   onPresent: () => void;
   onDrawer: () => void;
   drawerOpen: boolean;
+  lens?: boolean;
+  onLens?: () => void;
 }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -188,6 +193,11 @@ export function TopBar({
         <button type="button" className="wt-btn wt-drawer-btn" aria-expanded={drawerOpen} aria-controls="wt-panel" onClick={onDrawer}>
           Objecten
         </button>
+        {onLens && (
+          <button type="button" className="wt-btn" aria-pressed={!!lens} onClick={onLens} title="De datalaag (D)" data-twin-lens-btn="">
+            Datalaag
+          </button>
+        )}
         <button type="button" className="wt-btn" aria-pressed={presenting} onClick={onPresent} title="Presentatie (P)">
           <span aria-hidden="true">⛶</span>
           <span className="sr-only">Presentatie (P)</span>
@@ -578,6 +588,7 @@ export function DetailCard({
   onClose,
   following,
   onFollow,
+  onSelect,
 }: {
   id: string;
   m: TwinModel;
@@ -585,6 +596,7 @@ export function DetailCard({
   onClose: () => void;
   following?: boolean;
   onFollow?: () => void;
+  onSelect?: (id: string) => void;
 }) {
   const d = describe(id, m);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -655,6 +667,7 @@ export function DetailCard({
       </dl>
       {d.timeline && d.timeline.index >= 0 && <MiniSteps steps={d.timeline.steps} index={d.timeline.index} />}
       {id.startsWith("forklift:") && <ForkliftActivity id={id.slice("forklift:".length)} />}
+      {id.startsWith("equipment:") && <EquipmentDatalayer eq={id.slice("equipment:".length)} onSelect={onSelect} />}
       <ul className="wt-links">
         {d.links.map((l) => (
           <li key={l.href}>

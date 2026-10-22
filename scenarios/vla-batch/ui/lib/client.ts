@@ -32,6 +32,12 @@ export async function post<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+export async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) throw await toRefusal(res, "DELETE", path);
+  return (await res.json()) as T;
+}
+
 /**
  * Voert de actie uit die een weigering zelf voorstelt (vandaag: "Run CIP op X").
  * Het pad uit de server bevat al het /api/v1-prefix, dus dat gaat er eerst af.

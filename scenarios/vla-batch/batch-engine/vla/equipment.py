@@ -144,6 +144,60 @@ class EquipmentMonitor:
 
     # --------------------------------------------------------------- snapshot
 
+    # ------------------------------------------------------------ stilstand
+    # Een storing zet de machine op Down in de toestandshistorie, en herstel
+    # zet hem terug. Zonder dat valt availability altijd terug op 1,0 en
+    # bestaat stilstand alleen op papier.
+
+    def down_info(self, equipment_id: str) -> Optional[dict]:
+        meta = self.db.dw_equipment_meta.find_one({"equipment_id": equipment_id})
+        return (meta or {}).get("down") or None
+
+    def is_down(self, equipment_id: str) -> bool:
+        return self.down_info(equipment_id) is not None
+
+    def line_down(self, line: Optional[str]) -> list[str]:
+        return [eq for eq in _ids(line) if self.is_down(eq)]
+
+    def set_down(self, equipment_id: str, cause: str,
+                 work_order_id: Optional[str] = None) -> dict:
+        if equipment_id not in EQUIPMENT_IDS:
+            raise ValueError(f"unknown equipment: {equipment_id}")
+        self.ensure_meta(equipment_id)
+        info = self.down_info(equipment_id)
+        if info:
+            return info
+        info = {"since": _iso(), "cause": cause, "work_order_id": work_order_id}
+        self.db.dw_equipment_meta.update_one(
+            {"equipment_id": equipment_id}, {"$set": {"down": info}})
+        self.db.dw_equipment_state.insert_one({
+            "equipment_id": equipment_id, "area": M.area_of(equipment_id),
+            "state": "Down", "reason": cause, "ts": _iso()})
+        self.on_state_change(equipment_id, "Down")
+        log.info("%s Down: %s", equipment_id, cause)
+        return info
+
+    def attach_work_order(self, equipment_id: str, work_order_id: str) -> None:
+        info = self.down_info(equipment_id)
+        if info:
+            info = dict(info, work_order_id=work_order_id)
+            self.db.dw_equipment_meta.update_one(
+                {"equipment_id": equipment_id}, {"$set": {"down": info}})
+
+    def clear_down(self, equipment_id: str) -> bool:
+        if not self.is_down(equipment_id):
+            return False
+        self.db.dw_equipment_meta.update_one(
+            {"equipment_id": equipment_id}, {"$set": {"down": None}})
+        self.db.dw_equipment_state.insert_one({
+            "equipment_id": equipment_id, "area": M.area_of(equipment_id),
+            "state": "Idle", "reason": "hersteld", "ts": _iso()})
+        self.on_state_change(equipment_id, "Idle")
+        log.info("%s hersteld", equipment_id)
+        return True
+
+    # --------------------------------------------------------------- snapshot
+
     def snapshot(self, line: Optional[str] = None) -> list[dict]:
         out = []
         for eq in _ids(line):
@@ -152,6 +206,8 @@ class EquipmentMonitor:
             latest = hist[-1]["state"] if hist else "Idle"
             if meta.get("dirty"):
                 latest = "Dirty"
+            if meta.get("down"):
+                latest = "Down"
             out.append({
                 "equipment_id": eq,
                 "line": M.line_of_equipment(eq),

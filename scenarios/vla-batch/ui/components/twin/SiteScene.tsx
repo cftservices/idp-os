@@ -6,6 +6,7 @@ import { Environment, Lightformer, OrbitControls } from "@react-three/drei";
 import { Box3, Vector3 } from "three";
 import { trackedObject } from "./objects/Pickable";
 import { OrderPath } from "./objects/OrderPath";
+import { LensMarkers, type LensMarker } from "./objects/LensMarkers";
 import type { ActiveOrder } from "./overlay";
 import { CAMERA_HOME, CAMERA_TARGET, HALL2_Z, LINE_EQUIPMENT, MAX_DOCKS, type Vec3 } from "@/lib/twin/layout";
 import { flavourKey } from "@/lib/twin/lines";
@@ -162,6 +163,7 @@ export default function SiteScene({
   follow = null,
   order = null,
   showPath = false,
+  lens = null,
 }: {
   model: TwinModel;
   ctx: TwinCtx;
@@ -171,6 +173,7 @@ export default function SiteScene({
   follow?: string | null;
   order?: ActiveOrder | null;
   showPath?: boolean;
+  lens?: LensMarker[] | null;
 }) {
   const { palette, reducedMotion } = ctx;
   const flowing = model.batch ? ACTIVE_STATES.has(model.batch.state) : false;
@@ -298,6 +301,7 @@ export default function SiteScene({
           autoRotateSpeed={0.6}
         />
         {showPath && order && <OrderPath order={order} model={model} />}
+        {lens && <LensMarkers markers={lens} onSelect={ctx.select} />}
         <CameraRig focus={focus} follow={follow} resetSignal={resetSignal} zoom={zoom} />
       </FlavourContext.Provider>
       </TwinContext.Provider>
