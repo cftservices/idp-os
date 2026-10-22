@@ -1,4 +1,4 @@
-# Industrial Data Platform (IDP-OS)
+# 🏭 Industrial Data Platform (IDP-OS)
 
 > **The missing AI data layer — reference implementation.**
 >
@@ -6,11 +6,13 @@
 
 Open-source reference implementation of the missing AI data layer for industrial factories. Connects PLC, SCADA, MES, and ERP into one semantic layer (ISA-95 ontology + event-driven architecture) so raw machine data becomes AI-ready information.
 
-Live demo: **[techflow24.com](https://techflow24.com)** — the dashboard you see there is this stack, running on an €8/month VPS.
+🌐 Live demo: **[techflow24.com](https://techflow24.com)** — the dashboard you see there is this stack, running on an €8/month VPS.
+
+🥛 Scenario demo: **DairyWorks vla-batch** with a 3D site-twin — see [Scenarios](#-scenarios).
 
 ---
 
-## Why this exists
+## 🎯 Why this exists
 
 Factories run dozens of disconnected systems — PLC, SCADA, MES, ERP, historian — that don't talk to each other. That's why every AI initiative stalls. What's missing is one semantic data layer that connects them and gives raw machine data context.
 
@@ -20,77 +22,77 @@ This repo is the **technical proof** behind the **Build Your AI Data Layer** pro
 
 ---
 
-## Documentation
+## 📚 Documentation
 
 Full reference docs live in [`docs/`](./docs/):
 
 | Doc | For |
 |-----|-----|
-| [docs/architecture.md](./docs/architecture.md) | Layering, the dual-broker design, v2 → v3 |
-| [docs/seven-step-build.md](./docs/seven-step-build.md) | Connect → Distribute, plus Solve and DataOps |
-| [docs/data-modeling.md](./docs/data-modeling.md) | ISA-95 / UNS + the 3-layer staging → warehouse → marts discipline |
-| [docs/store-layer.md](./docs/store-layer.md) | MongoDB vs TDengine, and the OT-connector paywall |
-| [docs/dataops-for-ot.md](./docs/dataops-for-ot.md) | The five production-grade disciplines |
-| [docs/operations.md](./docs/operations.md) | Deploy, env vars, sizing, troubleshooting |
-| [docs/adr/](./docs/adr/) | Architecture Decision Records |
+| 🏗️ [docs/architecture.md](./docs/architecture.md) | Layering, the dual-broker design, v2 → v3 |
+| 🪜 [docs/seven-step-build.md](./docs/seven-step-build.md) | Connect → Distribute, plus Solve and DataOps |
+| 🧬 [docs/data-modeling.md](./docs/data-modeling.md) | ISA-95 / UNS + the 3-layer staging → warehouse → marts discipline |
+| 🗄️ [docs/store-layer.md](./docs/store-layer.md) | MongoDB vs TDengine, and the OT-connector paywall |
+| 🔁 [docs/dataops-for-ot.md](./docs/dataops-for-ot.md) | The five production-grade disciplines |
+| 🛠️ [docs/operations.md](./docs/operations.md) | Deploy, env vars, sizing, troubleshooting |
+| 📝 [docs/adr/](./docs/adr/) | Architecture Decision Records |
 
-## The 7-step build framework
+## 🪜 The 7-step build framework
 
 The layer is built in seven stages — no more, no less. Each stage maps to a module in the program, and every component in this repo belongs to one of them.
 
 | # | Stage | What it does | Components |
 |---|-------|--------------|------------|
-| 1 | **Connect** | Pull raw values from OPC-UA / MQTT / REST historians | `opcua-sim`, `dairy-sim`, `ip21-stub`, `iot-publisher`, NiFi `GetOPCData` |
-| 2 | **Condition** | Cleansing, throttling, deadbands, tag-alias normalisation | NiFi processors + tag-alias table |
-| 3 | **Model** | ISA-95 hierarchy / semantic topics / UNS — *the heart of the layer* | RabbitMQ topic structure, Neo4j knowledge graph, MongoDB `warehouse.*` |
-| 4 | **Store** | Time-series + structured archive (staging → warehouse → marts) | MongoDB collections, Neo4j relationships |
-| 5 | **Orchestrate** | Event-driven workflows — work orders, alarms, shift reports | N8N workflows `wf-001..006` over RabbitMQ AMQP |
-| 6 | **Visualize** | Dashboards + ad-hoc queries | Grafana (time-series), Next.js webapp (live tags) |
-| 7 | **Distribute** | REST / GraphQL APIs for downstream AI, BI, apps | FastAPI (REST + ISA-95 endpoints), MonsterMQ GraphQL |
+| 1 | 🔌 **Connect** | Pull raw values from OPC-UA / MQTT / REST historians | `opcua-sim`, `dairy-sim`, `ip21-stub`, `iot-publisher`, NiFi `GetOPCData` |
+| 2 | 🧹 **Condition** | Cleansing, throttling, deadbands, tag-alias normalisation | NiFi processors + tag-alias table |
+| 3 | 🧬 **Model** | ISA-95 hierarchy / semantic topics / UNS — *the heart of the layer* | RabbitMQ topic structure, Neo4j knowledge graph, MongoDB `warehouse.*` |
+| 4 | 🗄️ **Store** | Time-series + structured archive (staging → warehouse → marts) | MongoDB collections, Neo4j relationships |
+| 5 | ⚙️ **Orchestrate** | Event-driven workflows — work orders, alarms, shift reports | N8N workflows `wf-001..006` over RabbitMQ AMQP |
+| 6 | 📊 **Visualize** | Dashboards + ad-hoc queries | Grafana (time-series), Next.js webapp (live tags) |
+| 7 | 🚀 **Distribute** | REST / GraphQL APIs for downstream AI, BI, apps | FastAPI (REST + ISA-95 endpoints), MonsterMQ GraphQL |
 
-### Solve is the test, not an 8th step
+### ✅ Solve is the test, not an 8th step
 
 The seven stages tell you **how** to build the layer. Whether it's worth building is decided by an outcome test we call **Solve**: does raw data, all the way through the pipeline, lead to a real decision or action? You can ship all seven stages and still fail at Solve — that's when the layer ends up "trapped in the middle" and every downstream AI initiative stalls.
 
 > Don't rename to "8 steps". Solve is the outcome-toets, not a build stage.
 
-### DataOps for OT — horizontal layer
+### 🔁 DataOps for OT — horizontal layer
 
 Five disciplines run *parallel* to the seven stages — version control, isolated DEV/CI/PROD environments, automated data quality, refresh schedule, tag/topic change review. None of them is a step in the build; together they're what separates a hobby-grade stack from a production-grade data layer. The whole repo is infra-as-code-first: `docker-compose.v3.yml` + `.env` + git is the foundation, not an afterthought.
 
 ---
 
-## Stack — v3 (current)
+## 🧱 Stack — v3 (current)
 
 The active stack file is [`docker-compose.v3.yml`](./docker-compose.v3.yml). Older files (`docker-compose.yml`, `docker-compose.idp.yml`) are kept for the v2 baseline and dev environments — refer to v3 for anything you publish.
 
-### Core data plane
+### 📡 Core data plane
 
 | Service | Image | Role | Step(s) |
 |---------|-------|------|---------|
-| **RabbitMQ** | `rabbitmq:3.13-management` | Message broker (AMQP + MQTT). Exchanges: `raw-data`, `events`, `commands` | 1, 3, 5 |
-| **Apache NiFi 2.0** | `apache/nifi:2.0.0` | Dataflow + ISA-95 rule engine — added May 2026 | 1, 2, 3 |
-| **MonsterMQ** | `rocworks/monstermq:latest` | All-in-one alternative: MQTT (port 1884) + OPC-UA client + GraphQL + flow engine | 1, 7 |
-| **MongoDB** | `mongo:7` | Document + time-series store. Collections: `staging.*` → `warehouse.*` → `marts.*` | 4 |
-| **Neo4j** | `neo4j:5-community` | Knowledge graph — ISA-95 equipment hierarchy, P&ID topology, root-cause paths | 3, 4 |
+| 🐇 **RabbitMQ** | `rabbitmq:3.13-management` | Message broker (AMQP + MQTT). Exchanges: `raw-data`, `events`, `commands` | 1, 3, 5 |
+| 🌊 **Apache NiFi 2.0** | `apache/nifi:2.0.0` | Dataflow + ISA-95 rule engine — added May 2026 | 1, 2, 3 |
+| 👾 **MonsterMQ** | `rocworks/monstermq:latest` | All-in-one alternative: MQTT (port 1884) + OPC-UA client + GraphQL + flow engine | 1, 7 |
+| 🍃 **MongoDB** | `mongo:7` | Document + time-series store. Collections: `staging.*` → `warehouse.*` → `marts.*` | 4 |
+| 🕸️ **Neo4j** | `neo4j:5-community` | Knowledge graph — ISA-95 equipment hierarchy, P&ID topology, root-cause paths | 3, 4 |
 
-> **Both brokers run side-by-side on purpose.** RabbitMQ + NiFi is the MDH-style microservices path; MonsterMQ is the all-in-one path. Same data, two architectures — the program teaches both so engineers can pick what fits their plant.
+> ⚖️ **Both brokers run side-by-side on purpose.** RabbitMQ + NiFi is the MDH-style microservices path; MonsterMQ is the all-in-one path. Same data, two architectures — the program teaches both so engineers can pick what fits their plant.
 
-### Workflows + APIs
-
-| Service | Image | Role | Step(s) |
-|---------|-------|------|---------|
-| **N8N** | `n8nio/n8n:latest` | ISA-95 Definition→Demand→Result workflows (work orders, fault detection, shift reports) | 5 |
-| **FastAPI** | custom (`./fastapi`) | REST API on top of MongoDB + Neo4j; Grafana JSON datasource | 7 |
-
-### Visualisation
+### ⚙️ Workflows + APIs
 
 | Service | Image | Role | Step(s) |
 |---------|-------|------|---------|
-| **Grafana** | `grafana/grafana:latest` | Time-series dashboards (JSON datasource on FastAPI) | 6 |
-| **Webapp** | Next.js (custom) | Live PLC dashboard — queries MongoDB every 5s | 6 |
+| 🔄 **N8N** | `n8nio/n8n:latest` | ISA-95 Definition→Demand→Result workflows (work orders, fault detection, shift reports) | 5 |
+| ⚡ **FastAPI** | custom (`./fastapi`) | REST API on top of MongoDB + Neo4j; Grafana JSON datasource | 7 |
 
-### Simulators (so the demo runs without a real plant)
+### 📊 Visualisation
+
+| Service | Image | Role | Step(s) |
+|---------|-------|------|---------|
+| 📈 **Grafana** | `grafana/grafana:latest` | Time-series dashboards (JSON datasource on FastAPI) | 6 |
+| 🖥️ **Webapp** | Next.js (custom) | Live PLC dashboard — queries MongoDB every 5s | 6 |
+
+### 🧪 Simulators (so the demo runs without a real plant)
 
 | Service | What it simulates |
 |---------|-------------------|
@@ -100,34 +102,34 @@ The active stack file is [`docker-compose.v3.yml`](./docker-compose.v3.yml). Old
 | `iot-publisher` | Direct MQTT publisher — proves you don't always need OPC-UA |
 | `packml-*` (4 lines) | PackML ISA-88 state machine + Sim3Tanks 3-tank physics (Assembly L1/L2, Packaging, CNC) |
 
-### Infrastructure
+### 🏗️ Infrastructure
 
 | Service | Image | Role |
 |---------|-------|------|
-| **Traefik** | `traefik:v3` | Reverse proxy + automatic Let's Encrypt SSL |
-| **Portainer** | `portainer/portainer-ce:latest` | Container management UI |
+| 🚦 **Traefik** | `traefik:v3` | Reverse proxy + automatic Let's Encrypt SSL |
+| 🐳 **Portainer** | `portainer/portainer-ce:latest` | Container management UI |
 
-> **Stale references to watch for.** Older docs may mention **Mosquitto** or **SQL Server** — those are not part of v3. Mosquitto was replaced by MonsterMQ (and then by RabbitMQ alongside it); the time-series + structured store is MongoDB + Neo4j, not SQL Server. Always verify against `docker-compose.v3.yml` before publishing facts.
+> ⚠️ **Stale references to watch for.** Older docs may mention **Mosquitto** or **SQL Server** — those are not part of v3. Mosquitto was replaced by MonsterMQ (and then by RabbitMQ alongside it); the time-series + structured store is MongoDB + Neo4j, not SQL Server. Always verify against `docker-compose.v3.yml` before publishing facts.
 
 ---
 
-## The €8/month proof point
+## 💶 The €8/month proof point
 
 The full stack above runs on an **€8/month VPS** (Hostinger KVM2 / Hetzner CX22 class — 2 vCPU, 8 GB RAM). NiFi is the heaviest component (set `NIFI_JVM_HEAP_MAX=512m` for that class; 2 GB on bigger boxes).
 
-> **The price tag is proof, not the pitch.** €8/month doesn't make this work — DataOps discipline does. AVEVA Connect at €40K isn't the villain either; it's a symptom of vendor lock-in around a problem (the missing layer) that no amount of money can buy your way out of. *"€8/mo with the discipline of a €40K stack"* — that's the actual claim.
+> 💡 **The price tag is proof, not the pitch.** €8/month doesn't make this work — DataOps discipline does. AVEVA Connect at €40K isn't the villain either; it's a symptom of vendor lock-in around a problem (the missing layer) that no amount of money can buy your way out of. *"€8/mo with the discipline of a €40K stack"* — that's the actual claim.
 
 ---
 
-## Run it locally
+## 💻 Run it locally
 
-### 1. Prerequisites
+### 1️⃣ Prerequisites
 
 - Docker + Docker Compose v2 (`docker compose`, not `docker-compose`)
 - ~4 GB free RAM for the full v3 stack (NiFi alone wants 512 MB – 2 GB)
 - Optional: a domain pointed at the host for Traefik SSL
 
-### 2. Clone + configure
+### 2️⃣ Clone + configure
 
 ```bash
 git clone https://github.com/cftservices/idp-os.git
@@ -138,7 +140,7 @@ cp .env.example .env
 chmod 600 traefik/acme.json
 ```
 
-### 3. Bring it up
+### 3️⃣ Bring it up
 
 ```bash
 docker compose -f docker-compose.v3.yml up -d
@@ -146,14 +148,14 @@ docker compose -f docker-compose.v3.yml up -d
 
 First boot takes 2-3 minutes — NiFi and RabbitMQ have generous start-periods on their healthchecks.
 
-### 4. Verify
+### 4️⃣ Verify
 
 ```bash
 docker compose -f docker-compose.v3.yml ps
 docker compose -f docker-compose.v3.yml logs -f nifi rabbitmq monstermq
 ```
 
-### 5. Access
+### 5️⃣ Access
 
 | UI | URL (with DOMAIN configured) | Local fallback |
 |----|------------------------------|-----------------|
@@ -169,7 +171,24 @@ docker compose -f docker-compose.v3.yml logs -f nifi rabbitmq monstermq
 
 ---
 
-## Skills (TechFlow-OS hub commands)
+## 🎬 Scenarios
+
+Workshop and demo scenarios live in [`scenarios/`](./scenarios/). Each one is a fictional, anonymised plant on the same layer.
+
+| Scenario | What it shows |
+|----------|---------------|
+| 🥛 [`vla-batch`](./scenarios/vla-batch/) | **DairyWorks** chocolate-vla line, end-to-end: OPC-UA factory → MonsterMQ/UNS → MongoDB + TDengine → batch engine (MES layer, EBR report) → Grafana + Next.js. Includes a 12-machine park with six protocols and fault injection. |
+| 🧊 [`vla-batch` → `/site`](./scenarios/vla-batch/README.md) | **3D site-twin** of the whole plant (React Three Fiber): silos, process line, warehouse with racks and forklifts, docks and trucks. An autopilot runs batches, suppliers deliver per raw material (milk tanker, sugar and starch bulk trucks, cocoa pallet truck) and book real goods receipts, and a glass overlay shows stock, batches and logistics live. |
+| 🧀 [`dairy-plant`](./scenarios/dairy-plant/) / [`dairyworks`](./scenarios/dairyworks/) | Earlier dairy scenarios and their ISA-95 models |
+| 🥖 [`bakery-works-utrecht`](./scenarios/bakery-works-utrecht/) | Bakery workshop scenario |
+
+> 🔒 **Anonymisation is a hard rule.** Scenarios use fictional names (DairyWorks, …) only — no real customer, vendor or employer names, IPs or vendor schemas.
+>
+> 🌐 The vla-batch demo runs on its own VPS host behind basic auth; access on request. Deploy: [`scenarios/vla-batch/DEPLOY.md`](./scenarios/vla-batch/DEPLOY.md).
+
+---
+
+## 🤖 Skills (TechFlow-OS hub commands)
 
 When this repo is checked out as part of the parent TechFlow-OS workspace, two Claude Code skills become available from the hub:
 
@@ -178,7 +197,7 @@ When this repo is checked out as part of the parent TechFlow-OS workspace, two C
 
 ---
 
-## Boundaries
+## 🧭 Boundaries
 
 IDP-OS owns the **implementation** of the missing data layer. It does **not** own:
 
@@ -194,15 +213,15 @@ If you're looking for "how do I learn this?" → that's the program. This repo i
 
 ---
 
-## Tooling rules
+## 📏 Tooling rules
 
-- **Never** Node-RED. MonsterMQ has its own flow engine; NiFi does the heavier dataflow.
-- N8N is for **workflows** (production orders, alarms, shift reports) — **not** for data routing. Data routing is RabbitMQ + NiFi (or MonsterMQ, depending on path).
-- Open source first: RabbitMQ, NiFi, MonsterMQ, MongoDB, Neo4j, Grafana, FastAPI, Next.js, Traefik. No cloud historian.
+- 🚫 **Never** Node-RED. MonsterMQ has its own flow engine; NiFi does the heavier dataflow.
+- 🔄 N8N is for **workflows** (production orders, alarms, shift reports) — **not** for data routing. Data routing is RabbitMQ + NiFi (or MonsterMQ, depending on path).
+- 🔓 Open source first: RabbitMQ, NiFi, MonsterMQ, MongoDB, Neo4j, Grafana, FastAPI, Next.js, Traefik. No cloud historian.
 
 ---
 
-## Repo layout
+## 🗂️ Repo layout
 
 ```
 .
@@ -223,17 +242,17 @@ If you're looking for "how do I learn this?" → that's the program. This repo i
 ├── grafana/                   # provisioning + dashboards
 ├── webapp/                    # Next.js live dashboard
 ├── factory-model/             # ISA-95 model definitions
-├── scenarios/                 # Workshop scenarios (bakery, dairy, …)
+├── scenarios/                 # Workshop scenarios (vla-batch + 3D site-twin, bakery, dairy, …)
 ├── research/                  # Architecture research notes
 └── lead-magnet/               # Lead-magnet build (Build Your AI Data Layer)
 ```
 
 ---
 
-## License
+## 📄 License
 
 Open source. No vendor lock-in. The whole point is that you can rebuild this on your own plant without asking anyone for permission.
 
-## Parent project
+## 🏠 Parent project
 
 [`cftservices/techflow-os`](https://github.com/cftservices/techflow-os) — the master control room for TechFlow's industrial education business. IDP-OS is one of 13 sub-OS units, each with a single responsibility.
