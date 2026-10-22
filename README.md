@@ -177,8 +177,8 @@ Workshop and demo scenarios live in [`scenarios/`](./scenarios/). Each one is a 
 
 | Scenario | What it shows |
 |----------|---------------|
-| 🥛 [`vla-batch`](./scenarios/vla-batch/) | **DairyWorks** chocolate-vla line, end-to-end: OPC-UA factory → MonsterMQ/UNS → MongoDB + TDengine → batch engine (MES layer, EBR report) → Grafana + Next.js. Includes a 12-machine park with six protocols and fault injection. |
-| 🧊 [`vla-batch` → `/site`](./scenarios/vla-batch/README.md) | **3D site-twin** of the whole plant (React Three Fiber): silos, process line, warehouse with racks and forklifts, docks and trucks. An autopilot runs batches, suppliers deliver per raw material (milk tanker, sugar and starch bulk trucks, cocoa pallet truck) and book real goods receipts, and a glass overlay shows stock, batches and logistics live. |
+| 🥛 [`vla-batch`](./scenarios/vla-batch/) | **DairyWorks** vla plant with **two lines and five end products** (L1 chocolate; L2 vanilla, banana, caramel, strawberry) and a shared preparation room, end-to-end: OPC-UA factory → MonsterMQ/UNS → MongoDB + TDengine → batch engine (MES layer, EBR report) → Grafana + Next.js. Includes a 12-machine park with six protocols and fault injection. |
+| 🧊 [`vla-batch` → `/site`](./scenarios/vla-batch/README.md) | **3D site-twin** of the whole plant (React Three Fiber): silos, process line, warehouse with racks and forklifts, docks and trucks. An autopilot runs batches, suppliers deliver per raw material (milk tanker, sugar and starch bulk trucks, cocoa pallet truck) and book real goods receipts, and a glass overlay shows stock, batches and logistics live. Hall 2 (line L2) and the preparation room are in the twin too; pallets and cartons carry the colour of their flavour, and every order is traceable from preparation set to truck. |
 | 🧀 [`dairy-plant`](./scenarios/dairy-plant/) / [`dairyworks`](./scenarios/dairyworks/) | Earlier dairy scenarios and their ISA-95 models |
 | 🥖 [`bakery-works-utrecht`](./scenarios/bakery-works-utrecht/) | Bakery workshop scenario |
 
