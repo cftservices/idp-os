@@ -49,6 +49,7 @@ export const keys = {
   alarms: (filter: string) => ["alarms", filter] as const,
   kpi: (window: string, compare: boolean) => ["kpi", window, compare] as const,
   model: ["ui", "model"] as const,
+  logistics: ["logistics"] as const,
 };
 
 type Extra<T> = Omit<UseQueryOptions<T, Refusal, T>, "queryKey" | "queryFn">;
@@ -178,4 +179,18 @@ export function useHandlingUnits<T = unknown[]>(batchId: string | null, extra?: 
     POLL.lists,
     { enabled: Boolean(batchId), ...extra },
   );
+}
+
+/**
+ * Alle HU's over alle batches: zonder batch_id geeft de engine de hele lijst.
+ * Eigen key ("*"), zodat hij nooit botst met een batch die toevallig zo heet
+ * of met de uitgeschakelde "geen"-query hierboven.
+ */
+export function useAllHandlingUnits<T = unknown[]>(extra?: Extra<T>) {
+  return usePolled<T>(keys.hu("*"), "/hu", POLL.lists, extra);
+}
+
+/** Demo-logistiek (zendingen, heftrucks, tankwagen): `source: "demo-sim"`, geen transportsysteem. */
+export function useLogistics<T = Record<string, unknown>>(extra?: Extra<T>) {
+  return usePolled<T>(keys.logistics, "/logistics", POLL.lists, extra);
 }

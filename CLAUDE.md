@@ -163,7 +163,34 @@ Deze stack is de technische basis voor het online programma **Build Your AI Data
 
 ---
 
+## Scenario vla-batch: 3D site-twin
+
+`scenarios/vla-batch/` is de DairyWorks vla-demo, live op `milkdemo.techflow24.com` (basic-auth).
+De route `/site` is een 3D site-twin: lijn, silo's met leveranciers per grondstof, magazijn met
+palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Details:
+`scenarios/vla-batch/README.md` (sectie *3D site-twin*) en `DEPLOY.md` §5b.
+
+- **De twin verzint niets.** Elke voorraad, rit of status komt uit de batch-engine. De logistiek-sim
+  (`batch-engine/vla/logistics_sim.py`) boekt echte goederenontvangsten; de silo's lopen dus alleen
+  vol als er een voertuig lost.
+- **Constanten staan op twee plekken** en moeten gelijk blijven: stellingvakken
+  (`warehouse.py` ↔ `ui/lib/twin/layout.ts`) en de rijtijden van de leveranciers
+  (`logistics_sim.py` ↔ `tankerPose` in `ui/lib/twin/flow.ts`).
+- **Kleuren alleen uit palette-tokens** (`npm run lint:tokens`), geen hex in TSX.
+- **Uitrol:** gewijzigde bestanden als tar naar `/root/idp-os`, dan
+  `docker compose -p idp-os -f docker-compose.slim.yml -f scenarios/vla-batch/docker-compose.vla.yml -f scenarios/vla-batch/docker-compose.vps-shared.yml up -d --build vla-ui vla-batch-engine`.
+  Altijd `-p idp-os`; een ongefilterde `down` legt de demo plat.
+- **Tests:** `pytest tests/test_logistics_sim.py tests/test_warehouse.py` (de API-tests hangen zonder
+  Mongo), `npx tsc --noEmit`, `npx playwright test e2e/twin-flow.spec.ts e2e/twin-derive.spec.ts`.
+
+---
+
 ## Changelog
+
+### 2026-10-21: vla-batch site-twin
+- **Nieuw:** 3D site-twin op `/site` met WareTrack-overlay, autopilot-magazijn en OIP-modellen (MIT)
+- **Nieuw:** logistiek-sim met een leverancier per grondstof (tankwagen, bulkwagens, palletwagen) die
+  echte goederenontvangsten boekt, en doorzichtige trailers die de geladen pallets tonen
 
 ### v2 (2026-04-24)
 - **Vervangen:** Mosquitto → MonsterMQ (native OPC-UA client + MongoDB storage)

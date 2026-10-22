@@ -1,0 +1,872 @@
+# GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN
+# bron: factory-model/isa95-vla.json + signal-template.json + vendor-profiles.json
+#
+# Unit-config voor palletiser-01. De container mount dit read-only en leest verder
+# NIETS uit het enterprise-model: een PLC doet dat ook niet.
+#
+# Het distort-blok per signaal is LETTERLIJK dezelfde regel als in
+# factory-model/park-conditioning.json. De sim past hem VOORWAARTS toe
+# (canoniek -> native), de conditioner draait hem TERUG. Uit een bron
+# gegenereerd, dus de twee kanten kunnen niet uiteenlopen; dat de wiskunde
+# ook echt omkeerbaar is bewijst de round-trip-selftest.
+
+unit_id: palletiser-01
+equipment: palletiser-01
+name: Palletiser 01
+type: palletizer
+area: Packaging
+line: Vla-B
+site: DairyWorks
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 120.0
+  auto_start: true
+
+surface: sql
+protocol: sql
+vendor_profile: vendor-e
+machine_ordinal: 2
+raw_root: raw/vla-park/palletiser-01
+extended_pvs: true
+
+sim:
+  step_s: 0.2
+  sampling_classes:
+    fast: 1000
+    normal: 5000
+    slow: 30000
+    onchange: null
+  keepalive_s: 60
+
+# Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen
+# tweede fabriek: de monoliet-waarden zijn stuurwaarden, en de eigen
+# fysica bepaalt met welke traagheid, ruis en storing hij ze haalt.
+follow:
+  mode: follow
+  batch_state_topic: DairyWorks/Vla/Batch/Status/state
+  batch_id_topic: DairyWorks/Vla/Batch/Status/batch_id
+  active_phases:
+    - FILLING
+  drivers:
+    - topic: DairyWorks/Vla/Filling/filler-01/Status/packs_total
+      target: physics.upstream_packs
+      unit: st
+  fallback:
+    mode: free
+    after_silence_s: 90
+    announce_topic: DairyWorks/Vla-B/DataQuality/follow-01/Status/palletiser-01_mode
+
+physics:
+  cip_cycle_limit: 50
+  design_speed: 120.0
+  nominal_current_a: 26.0
+  packs_per_layer: 8
+  packs_per_pallet: 96
+
+faults:
+  - f8
+  - f13
+
+# 30 slots. Elke regel: canonieke naam, wat de leverancier ervan maakt,
+# en hoe hij hem verminkt. De sim past dit VOORWAARTS toe; de conditioner
+# draait het terug. Die round-trip is de belangrijkste offline test.
+signals:
+  - slot: 1
+    group: A
+    name: StateCurrent
+    display_name: PackML-toestand
+    native_name: VLA.PAL01.STATE_CURRENT
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.value
+    eu_min: 1
+    eu_max: 17
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 2
+    group: A
+    name: StateCurrentStr
+    display_name: Toestand (tekst)
+    native_name: VLA.PAL01.STATE_CURRENT_STR
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.name
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 3
+    group: A
+    name: UnitMode
+    display_name: Bedrijfsmodus
+    native_name: VLA.PAL01.UNIT_MODE
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.unit_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 4
+    group: A
+    name: MachSpeed
+    display_name: Ontwerpsnelheid
+    native_name: VLA.PAL01.MACH_SPEED
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: onchange
+    source: state_machine.mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 5
+    group: A
+    name: CurMachSpeed
+    display_name: Actuele snelheid
+    native_name: VLA.PAL01.CUR_MACH_SPEED
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: state_machine.cur_mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 6
+    group: B
+    name: pallet_seq
+    display_name: Palletnummer
+    native_name: VLA.PAL01.PALLET_SEQ
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: fast
+    source: physics.pallet_seq
+    eu_min: 0
+    eu_max: 100000
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 7
+    group: B
+    name: packs_on_pallet
+    display_name: Pakken op pallet
+    native_name: VLA.PAL01.PACKS_ON_PALLET
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: fast
+    source: physics.packs_on_pallet
+    eu_min: 0
+    eu_max: 200
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 8
+    group: B
+    name: packs_per_pallet
+    display_name: Pakken per pallet
+    native_name: VLA.PAL01.PACKS_PER_PALLET
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: fast
+    source: physics.packs_per_pallet
+    eu_min: 0
+    eu_max: 200
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 9
+    group: B
+    name: layer_index
+    display_name: Laag
+    native_name: VLA.PAL01.LAYER_INDEX
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: fast
+    source: physics.layer_index
+    eu_min: 0
+    eu_max: 20
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 10
+    group: B
+    name: gripper_press_bar
+    display_name: Grijperdruk
+    native_name: VLA.PAL01.GRIPPER_PRESS_BAR
+    canonical_unit: bar
+    native_unit: bar
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.gripper_press_bar
+    eu_min: 0
+    eu_max: 8
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 11
+    group: B
+    name: wrap_cycles
+    display_name: Wikkelcycli
+    native_name: VLA.PAL01.WRAP_CYCLES
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: normal
+    source: physics.wrap_cycles
+    eu_min: 0
+    eu_max: 100000
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 12
+    group: B
+    name: infeed_rate_ph
+    display_name: Aanvoer
+    native_name: VLA.PAL01.INFEED_RATE_PH
+    canonical_unit: st
+    native_unit: st
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.infeed_rate_ph
+    eu_min: 0
+    eu_max: 20000
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 13
+    group: B
+    name: hu_complete_pulse
+    display_name: Pallet gereed
+    native_name: VLA.PAL01.HU_COMPLETE_PULSE
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.hu_complete_pulse
+    eu_min: 0
+    eu_max: 1
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 14
+    group: C
+    name: sp_primary
+    display_name: Pakken per pallet
+    native_name: VLA.PAL01.SP_PRIMARY
+    canonical_unit: st
+    native_unit: st
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.packs_per_pallet
+    eu_min: 0
+    eu_max: 200
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 15
+    group: C
+    name: sp_secondary
+    display_name: Aanvoer-setpoint
+    native_name: VLA.PAL01.SP_SECONDARY
+    canonical_unit: st
+    native_unit: st
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.target_rate_ph
+    eu_min: 0
+    eu_max: 20000
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 16
+    group: C
+    name: sp_speed_pct
+    display_name: Snelheids-setpoint
+    native_name: VLA.PAL01.SP_SPEED_PCT
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: state_machine.speed_setpoint_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 17
+    group: C
+    name: sp_product_mode
+    display_name: Productmodus
+    native_name: VLA.PAL01.SP_PRODUCT_MODE
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: true
+    sampling_class: onchange
+    source: physics.product_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 18
+    group: D
+    name: valve_pos_pct
+    display_name: Klepstand
+    native_name: VLA.PAL01.VALVE_POS_PCT
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.valve_pos_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 19
+    group: D
+    name: drive_out_pct
+    display_name: Aandrijfsturing
+    native_name: VLA.PAL01.DRIVE_OUT_PCT
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.drive_out_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 20
+    group: E
+    name: units_total
+    display_name: Eenheden totaal
+    native_name: VLA.PAL01.UNITS_TOTAL
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.units_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 21
+    group: E
+    name: reject_total
+    display_name: Afkeur totaal
+    native_name: VLA.PAL01.REJECT_TOTAL
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.reject_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 22
+    group: E
+    name: mass_total_kg
+    display_name: Massa totaal
+    native_name: VLA.PAL01.MASS_TOTAL_KG
+    canonical_unit: kg
+    native_unit: kg
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.mass_total_kg
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 23
+    group: E
+    name: runtime_hours
+    display_name: Draaiuren
+    native_name: VLA.PAL01.RUNTIME_HOURS
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.runtime_hours
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 24
+    group: F
+    name: motor_current_A
+    display_name: Motorstroom
+    native_name: VLA.PAL01.MOTOR_CURRENT_A
+    canonical_unit: A
+    native_unit: A
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.motor_current_a
+    eu_min: 0
+    eu_max: 80
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 25
+    group: F
+    name: vibration_mm_s
+    display_name: Trilling
+    native_name: VLA.PAL01.VIBRATION_MM_S
+    canonical_unit: mm/s
+    native_unit: mm/s
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.vibration_mm_s
+    eu_min: 0
+    eu_max: 11.2
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 26
+    group: F
+    name: bearing_temp_C
+    display_name: Lagertemperatuur
+    native_name: VLA.PAL01.BEARING_TEMP_C
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.bearing_temp_c
+    eu_min: 0
+    eu_max: 95
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 27
+    group: F
+    name: energy_kWh
+    display_name: Energie cumulatief
+    native_name: VLA.PAL01.ENERGY_K_WH
+    canonical_unit: kWh
+    native_unit: Wh
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.energy_kwh
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: integer_milli_on
+      scale: 0.001
+      unit_conversion:
+        key: "Wh->kWh"
+        formula: linear
+        scale: 0.001
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 28
+    group: F
+    name: cycles_since_cip
+    display_name: Cycli sinds CIP
+    native_name: VLA.PAL01.CYCLES_SINCE_CIP
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: slow
+    source: health.cycles_since_cip
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 29
+    group: F
+    name: hours_since_service
+    display_name: Uren sinds onderhoud
+    native_name: VLA.PAL01.HOURS_SINCE_SERVICE
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.hours_since_service
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1
+  - slot: 30
+    group: G
+    name: alarm_word
+    display_name: Alarmwoord
+    native_name: VLA.PAL01.ALARM_WORD
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: health.alarm_word
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: String
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: text-enum
+      quality_encoding:
+        Good: GOOD
+        Suspect: UNCERTAIN
+        Bad: BAD
+      timestamp_source: local-wallclock-dst-broken
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+      fixed_offset_hours: 1

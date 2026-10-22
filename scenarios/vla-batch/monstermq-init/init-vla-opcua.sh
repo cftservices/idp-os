@@ -57,6 +57,7 @@ esac
 
 # 2) Addresses — NodeId scheme: $NS;s=DairyWorks.Vla.{Area}.{Equipment}.{tag}
 #    Topic scheme:  {Area}/{Equipment}/Status/{tag}  (Batch -> Batch/Status/{tag})
+# BEGIN GENERATED (tools/gen-park.py) — uit isa95-vla.json, lijn Vla
 TAGS="
 Receiving.receiving-tank-01.level_L|Receiving/receiving-tank-01/Status/level_L
 Receiving.receiving-tank-01.temp_C|Receiving/receiving-tank-01/Status/temp_C
@@ -69,6 +70,10 @@ Mixing.process-tank-01.dose_sugar_actual_kg|Mixing/process-tank-01/Status/dose_s
 Mixing.process-tank-01.dose_starch_actual_kg|Mixing/process-tank-01/Status/dose_starch_actual_kg
 Mixing.process-tank-01.dose_cocoa_actual_kg|Mixing/process-tank-01/Status/dose_cocoa_actual_kg
 Mixing.process-tank-01.phase|Mixing/process-tank-01/Status/phase
+Mixing.process-tank-01.dose_milk_setpoint_kg|Mixing/process-tank-01/Status/dose_milk_setpoint_kg
+Mixing.process-tank-01.dose_sugar_setpoint_kg|Mixing/process-tank-01/Status/dose_sugar_setpoint_kg
+Mixing.process-tank-01.dose_starch_setpoint_kg|Mixing/process-tank-01/Status/dose_starch_setpoint_kg
+Mixing.process-tank-01.dose_cocoa_setpoint_kg|Mixing/process-tank-01/Status/dose_cocoa_setpoint_kg
 Cook.cook-unit-01.temp_C|Cook/cook-unit-01/Status/temp_C
 Cook.cook-unit-01.setpoint_C|Cook/cook-unit-01/Status/setpoint_C
 Cook.cook-unit-01.hold_sec|Cook/cook-unit-01/Status/hold_sec
@@ -83,6 +88,7 @@ Batch.state|Batch/Status/state
 Batch.batch_id|Batch/Status/batch_id
 Batch.active_recipe|Batch/Status/active_recipe
 "
+# END GENERATED
 
 OK=0; FAIL=0
 for LINE in $TAGS; do

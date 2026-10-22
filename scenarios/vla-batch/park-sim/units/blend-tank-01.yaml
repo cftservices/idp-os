@@ -1,0 +1,1113 @@
+# GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN
+# bron: factory-model/isa95-vla.json + signal-template.json + vendor-profiles.json
+#
+# Unit-config voor blend-tank-01. De container mount dit read-only en leest verder
+# NIETS uit het enterprise-model: een PLC doet dat ook niet.
+#
+# Het distort-blok per signaal is LETTERLIJK dezelfde regel als in
+# factory-model/park-conditioning.json. De sim past hem VOORWAARTS toe
+# (canoniek -> native), de conditioner draait hem TERUG. Uit een bron
+# gegenereerd, dus de twee kanten kunnen niet uiteenlopen; dat de wiskunde
+# ook echt omkeerbaar is bewijst de round-trip-selftest.
+
+unit_id: blend-tank-01
+equipment: blend-tank-01
+name: Blend tank 01
+type: batch-mixer
+area: Mixing
+line: Vla-B
+site: DairyWorks
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 120.0
+  auto_start: true
+
+surface: modbus
+protocol: modbus-tcp
+vendor_profile: vendor-c
+machine_ordinal: 1
+raw_root: raw/vla-park/blend-tank-01
+extended_pvs: true
+
+sim:
+  step_s: 0.2
+  sampling_classes:
+    fast: 1000
+    normal: 5000
+    slow: 30000
+    onchange: null
+  keepalive_s: 60
+
+# Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen
+# tweede fabriek: de monoliet-waarden zijn stuurwaarden, en de eigen
+# fysica bepaalt met welke traagheid, ruis en storing hij ze haalt.
+follow:
+  mode: follow
+  batch_state_topic: DairyWorks/Vla/Batch/Status/state
+  batch_id_topic: DairyWorks/Vla/Batch/Status/batch_id
+  active_phases:
+    - DOSING
+  drivers:
+    - topic: DairyWorks/Vla/Mixing/process-tank-01/Status/level_L
+      target: physics.throughput_ref_L
+      unit: L
+    - topic: DairyWorks/Vla/Mixing/process-tank-01/Status/temp_C
+      target: physics.target_dough_temp_c
+      unit: °C
+  fallback:
+    mode: free
+    after_silence_s: 90
+    announce_topic: DairyWorks/Vla-B/DataQuality/follow-01/Status/blend-tank-01_mode
+
+physics:
+  ambient_temp_c: 8.0
+  capacity_kg: 5850.0
+  cip_cycle_limit: 4
+  design_speed: 120.0
+  nominal_current_a: 22.0
+  product_density_kg_L: 1.04
+  target_dough_temp_c: 25.0
+  throughput_ref_L: 5000.0
+
+faults:
+  - f8
+  - f13
+
+quality_companion:
+  suffix: .Q
+  sampling_class: slow
+  encoding:
+    0: GOOD
+    1: BAD
+    2: UNCERTAIN
+
+# 30 slots. Elke regel: canonieke naam, wat de leverancier ervan maakt,
+# en hoe hij hem verminkt. De sim past dit VOORWAARTS toe; de conditioner
+# draait het terug. Die round-trip is de belangrijkste offline test.
+signals:
+  - slot: 1
+    group: A
+    name: StateCurrent
+    display_name: PackML-toestand
+    native_name: 40101
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.value
+    eu_min: 1
+    eu_max: 17
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40101
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 2
+    group: A
+    name: StateCurrentStr
+    display_name: Toestand (tekst)
+    native_name: 40103
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.name
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40103
+      modbus_width: 8
+      modbus_encoding: ascii_packed
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 3
+    group: A
+    name: UnitMode
+    display_name: Bedrijfsmodus
+    native_name: 40111
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.unit_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40111
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 4
+    group: A
+    name: MachSpeed
+    display_name: Ontwerpsnelheid
+    native_name: 40113
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: onchange
+    source: state_machine.mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40113
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 5
+    group: A
+    name: CurMachSpeed
+    display_name: Actuele snelheid
+    native_name: 40114
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: state_machine.cur_mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40114
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 6
+    group: B
+    name: level_L
+    display_name: Niveau
+    native_name: 40115
+    canonical_unit: L
+    native_unit: L
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.level_L
+    eu_min: 0
+    eu_max: 6000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 6000
+      eu_min_native: 0
+      eu_max_native: 6000
+      modbus_addr: 40115
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 7
+    group: B
+    name: temp_C
+    display_name: Temperatuur
+    native_name: 40116
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.temp_C
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40116
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 8
+    group: B
+    name: agitator_rpm
+    display_name: Roerwerk
+    native_name: 40117
+    canonical_unit: rpm
+    native_unit: rpm
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.agitator_rpm
+    eu_min: 0
+    eu_max: 150
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 150
+      eu_min_native: 0
+      eu_max_native: 150
+      modbus_addr: 40117
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 9
+    group: B
+    name: dose_milk_kg
+    display_name: Dosering melk
+    native_name: 40118
+    canonical_unit: kg
+    native_unit: g
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.dose_milk_kg
+    eu_min: 0
+    eu_max: 6000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 6000
+      eu_min_native: 0.0
+      eu_max_native: 6000000.0
+      modbus_addr: 40118
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      unit_conversion:
+        key: "g->kg"
+        formula: linear
+        scale: 0.001
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 10
+    group: B
+    name: dose_sugar_kg
+    display_name: Dosering suiker
+    native_name: 40119
+    canonical_unit: kg
+    native_unit: g
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.dose_sugar_kg
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 1000
+      eu_min_native: 0.0
+      eu_max_native: 1000000.0
+      modbus_addr: 40119
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      unit_conversion:
+        key: "g->kg"
+        formula: linear
+        scale: 0.001
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 11
+    group: B
+    name: dose_starch_kg
+    display_name: Dosering zetmeel
+    native_name: 40120
+    canonical_unit: kg
+    native_unit: g
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.dose_starch_kg
+    eu_min: 0
+    eu_max: 400
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 400
+      eu_min_native: 0.0
+      eu_max_native: 400000.0
+      modbus_addr: 40120
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      unit_conversion:
+        key: "g->kg"
+        formula: linear
+        scale: 0.001
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 12
+    group: B
+    name: dose_cocoa_kg
+    display_name: Dosering cacao
+    native_name: 40121
+    canonical_unit: kg
+    native_unit: g
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.dose_cocoa_kg
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0.0
+      eu_max_native: 100000.0
+      modbus_addr: 40121
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      unit_conversion:
+        key: "g->kg"
+        formula: linear
+        scale: 0.001
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 13
+    group: B
+    name: phase_code
+    display_name: Fase
+    native_name: 40122
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: normal
+    source: physics.phase_code
+    eu_min: 0
+    eu_max: 4
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40122
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 14
+    group: C
+    name: sp_primary
+    display_name: Temperatuur-setpoint
+    native_name: 40124
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.target_dough_temp_c
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40124
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 15
+    group: C
+    name: sp_secondary
+    display_name: Batchgrootte
+    native_name: 40125
+    canonical_unit: L
+    native_unit: L
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.throughput_ref_L
+    eu_min: 0
+    eu_max: 6000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 6000
+      eu_min_native: 0
+      eu_max_native: 6000
+      modbus_addr: 40125
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 16
+    group: C
+    name: sp_speed_pct
+    display_name: Snelheids-setpoint
+    native_name: 40126
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: state_machine.speed_setpoint_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40126
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 17
+    group: C
+    name: sp_product_mode
+    display_name: Productmodus
+    native_name: 40127
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: true
+    sampling_class: onchange
+    source: physics.product_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40127
+      modbus_width: 8
+      modbus_encoding: ascii_packed
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 18
+    group: D
+    name: valve_pos_pct
+    display_name: Klepstand
+    native_name: 40135
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.valve_pos_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40135
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 19
+    group: D
+    name: drive_out_pct
+    display_name: Aandrijfsturing
+    native_name: 40136
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.drive_out_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40136
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 20
+    group: E
+    name: units_total
+    display_name: Eenheden totaal
+    native_name: 40137
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.units_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40137
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 21
+    group: E
+    name: reject_total
+    display_name: Afkeur totaal
+    native_name: 40139
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.reject_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40139
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 22
+    group: E
+    name: mass_total_kg
+    display_name: Massa totaal
+    native_name: 40141
+    canonical_unit: kg
+    native_unit: g
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.mass_total_kg
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0.0
+      eu_max_native: 100000.0
+      modbus_addr: 40141
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      unit_conversion:
+        key: "g->kg"
+        formula: linear
+        scale: 0.001
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 23
+    group: E
+    name: runtime_hours
+    display_name: Draaiuren
+    native_name: 40142
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.runtime_hours
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40142
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 24
+    group: F
+    name: motor_current_A
+    display_name: Motorstroom
+    native_name: 40143
+    canonical_unit: A
+    native_unit: A
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.motor_current_a
+    eu_min: 0
+    eu_max: 80
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 80
+      eu_min_native: 0
+      eu_max_native: 80
+      modbus_addr: 40143
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 25
+    group: F
+    name: vibration_mm_s
+    display_name: Trilling
+    native_name: 40144
+    canonical_unit: mm/s
+    native_unit: mm/s
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.vibration_mm_s
+    eu_min: 0
+    eu_max: 11.2
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 11.2
+      eu_min_native: 0
+      eu_max_native: 11.2
+      modbus_addr: 40144
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 26
+    group: F
+    name: bearing_temp_C
+    display_name: Lagertemperatuur
+    native_name: 40145
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.bearing_temp_c
+    eu_min: 0
+    eu_max: 95
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 95
+      eu_min_native: 0
+      eu_max_native: 95
+      modbus_addr: 40145
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 27
+    group: F
+    name: energy_kWh
+    display_name: Energie cumulatief
+    native_name: 40146
+    canonical_unit: kWh
+    native_unit: kWh
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.energy_kwh
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40146
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 28
+    group: F
+    name: cycles_since_cip
+    display_name: Cycli sinds CIP
+    native_name: 40147
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: slow
+    source: health.cycles_since_cip
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40147
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 29
+    group: F
+    name: hours_since_service
+    display_name: Uren sinds onderhoud
+    native_name: 40149
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.hours_since_service
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      modbus_addr: 40149
+      modbus_width: 1
+      modbus_encoding: int16
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 30
+    group: G
+    name: alarm_word
+    display_name: Alarmwoord
+    native_name: 40150
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: health.alarm_word
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      modbus_addr: 40150
+      modbus_width: 2
+      modbus_encoding: int32_hi_lo
+      modbus_status_addr: 40152
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"

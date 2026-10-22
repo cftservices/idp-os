@@ -30,11 +30,13 @@ const OPS: Item[] = [
   { href: "/alarms", label: "Alarmen", hint: "Bevestigen en parkeren" },
   { href: "/shopfloor", label: "Werkvloer", hint: "Scannen, wegen, boeken, verzenden" },
   { href: "/scada", label: "SCADA", hint: "Setpoints, batches, simulatie" },
+  { href: "/storingen", label: "Storingen", hint: "Storingen inschieten op lijn Vla-B" },
 ];
 
 const MGMT: Item[] = [
   { href: "/", label: "Plant", hint: "Ligt de dienst op plan" },
   { href: "/management", label: "Management", hint: "KPI's en verliesblok" },
+  { href: "/site", label: "3D Site", hint: "Hele site in één beeld, klik voor status" },
   { href: "/orders", label: "Orders", hint: "Aanmaken, batchen, sluiten" },
   { href: "/batches", label: "Batches", hint: "Verloop en verdict" },
   { href: "/equipment", label: "Equipment", hint: "CIP, draaiuren, OEE" },

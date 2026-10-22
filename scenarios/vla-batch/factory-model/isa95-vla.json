@@ -438,6 +438,1853 @@
                 }
               ]
             }
+          },
+{
+            "id": "LINE-VLA-B",
+            "name": "Vla-B",
+            "description": "Het machinepark: dezelfde vla, maar als realistische lijn van losse leveranciersmachines in plaats van een enkele lijn-PLC. Elke machine is een eigen container met 30 signalen, een eigen protocol en een eigen dialect. Lijn Vla (A) blijft onveranderd draaien.",
+            "namespace_convention": "DairyWorks/Vla-B/{Area}/{Equipment}/Status/{tag}",
+            "namespace_rationale": "Bewust NIET onder DairyWorks/Vla. Die subtree is dragend: batch-engine/vla/bus.py abonneert erop en cachet elke tag, de TDengine-bridge heeft MQTT_TOPICS DairyWorks/Vla/#, en archive group dw_uns_archive matcht hem. MQTT-wildcards werken per niveau, dus DairyWorks/Vla/# matcht DairyWorks/Vla-B/... niet. De bestaande milkdemo blijft ongemoeid door constructie, niet door oplettendheid.",
+            "raw_root": "raw/vla-park",
+            "signal_template": "signal-template.json",
+            "vendor_profiles": "vendor-profiles.json",
+            "tags_are_generated": true,
+            "tags_generated_note": "Park-work-centers hebben met opzet GEEN tags[] in dit model. 12 machines x 30 slots = 360 tags is niet met de hand te onderhouden. tools/gen-park.py expandeert signal-template.json over de pvs hieronder en genereert de adreslijsten, de conditioning-regels en de alias-tabel. `gen-park.py --check` faalt bij drift.",
+            "areas": [
+              {
+                "id": "AREA-B-RCV",
+                "name": "Receiving",
+                "description": "Ontvangst en buffering van rauwe melk.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-SIL-01",
+                    "name": "Intake silo 01",
+                    "equipment_id": "intake-silo-01",
+                    "physics_type": "storage-tank",
+                    "process_type": "continuous",
+                    "description": "Rauwmelksilo met roerwerk. Voedt de hele lijn; loopt hij leeg, dan stopt alles.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Receiving/intake-silo-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla-B.Receiving.intake-silo-01",
+                    "park": {
+                      "vendor_profile": "vendor-a",
+                      "protocol": "opc-da",
+                      "machine_ordinal": 2,
+                      "container_name": "vla-intake-silo-01",
+                      "opcua_endpoint": "opc.tcp://vla-intake-silo-01:4840/VendorA",
+                      "opcua_namespace_uri": "urn:vendor-a.intake-silo-01",
+                      "opcua_namespace_index": 2,
+                      "extended_pvs": true,
+                      "critical_tag": "level_L",
+                      "critical_tag_why": "Het silo-niveau is de goederenontvangst-kant van XC-INTAKE-MASS en hoort in het batchrapport.",
+                      "faults": [
+                        "f1",
+                        "f2",
+                        "f8"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "level_L",
+                          "display_name": "Niveau",
+                          "unit": "L",
+                          "datatype": "Double",
+                          "source": "physics.level_L",
+                          "eu_min": 0,
+                          "eu_max": 10000
+                        },
+                        {
+                          "name": "level_pct",
+                          "display_name": "Niveau",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.level_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "temp_C",
+                          "display_name": "Temperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.in_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 30
+                        },
+                        {
+                          "name": "inflow_L_min",
+                          "display_name": "Toevoer",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 900
+                        },
+                        {
+                          "name": "draw_L_min",
+                          "display_name": "Aftap",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.draw_L_min",
+                          "eu_min": 0,
+                          "eu_max": 900
+                        },
+                        {
+                          "name": "ullage_L",
+                          "display_name": "Vrije ruimte",
+                          "unit": "L",
+                          "datatype": "Double",
+                          "source": "physics.ullage_L",
+                          "eu_min": 0,
+                          "eu_max": 10000
+                        },
+                        {
+                          "name": "density_kg_L",
+                          "display_name": "Dichtheid",
+                          "unit": "kg",
+                          "datatype": "Double",
+                          "source": "physics.density_kg_L",
+                          "eu_min": 0,
+                          "eu_max": 2
+                        },
+                        {
+                          "name": "agitation_on",
+                          "display_name": "Roerwerk",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.agitation_on",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Niveau-setpoint",
+                          "source": "physics.target_level_L",
+                          "default": 8000.0,
+                          "unit_from_pv": 0
+                        },
+                        "sp_secondary": {
+                          "display_name": "Temperatuur-setpoint",
+                          "source": "physics.target_temp_C",
+                          "default": 4.0,
+                          "unit_from_pv": 2
+                        }
+                      },
+                      "physics": {
+                        "capacity_L": 10000.0,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 12.0,
+                        "cip_cycle_limit": 8
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "DOSING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                            "target": "physics.draw_target_L",
+                            "unit": "L"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/intake-silo-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-STD",
+                "name": "Standardisation",
+                "description": "Afromen en standaardiseren van de melk op vetgehalte.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-SEP-01",
+                    "name": "Separator 01",
+                    "equipment_id": "separator-01",
+                    "physics_type": "separator",
+                    "process_type": "continuous",
+                    "description": "Centrifugale afromer. Splitst voeding in room en ondermelk; het toerental bepaalt het restvetgehalte.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Standardisation/separator-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla-B.Standardisation.separator-01",
+                    "park": {
+                      "vendor_profile": "vendor-b",
+                      "protocol": "opc-ua",
+                      "machine_ordinal": 1,
+                      "container_name": "vla-separator-01",
+                      "opcua_endpoint": "opc.tcp://vla-separator-01:4840/VendorB",
+                      "opcua_namespace_uri": "urn:vendor-b.separator-01",
+                      "opcua_namespace_index": 2,
+                      "extended_pvs": true,
+                      "critical_tag": "fat_pct",
+                      "critical_tag_why": "Het vetgehalte is de enige tag van deze machine die een batchrapport nodig heeft. De rest gaat naar TDengine.",
+                      "faults": [
+                        "f1",
+                        "f12",
+                        "f8"
+                      ],
+                      "why_this_profile": "vendor-b is met opzet het SCHOONSTE profiel: moderne OPC-UA-server, nette namen, echte tijdstempels, alles al in SI. En je hebt nog steeds een alias-tabel, een eenheidsdeclaratie en een deadband nodig voordat er iets bruikbaars staat. Dat is het bewijs dat OPC-UA niet de data layer is, en het is het lastigst weg te wuiven.",
+                      "pvs": [
+                        {
+                          "name": "rpm",
+                          "display_name": "Toerental",
+                          "unit": "rpm",
+                          "datatype": "Double",
+                          "source": "physics.RPM",
+                          "eu_min": 0,
+                          "eu_max": 6500
+                        },
+                        {
+                          "name": "fat_pct",
+                          "display_name": "Restvet",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.fat_pct",
+                          "eu_min": 0,
+                          "eu_max": 10
+                        },
+                        {
+                          "name": "feed_L_min",
+                          "display_name": "Voeding",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.feed_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "cream_L_min",
+                          "display_name": "Room",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.cream_L_min",
+                          "eu_min": 0,
+                          "eu_max": 150
+                        },
+                        {
+                          "name": "skim_L_min",
+                          "display_name": "Ondermelk",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.skim_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "bowl_dp_bar",
+                          "display_name": "Drukval trommel",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.bowl_dp_bar",
+                          "eu_min": 0,
+                          "eu_max": 5
+                        },
+                        {
+                          "name": "discharge_count",
+                          "display_name": "Zelflossingen",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.discharge_count",
+                          "eu_min": 0,
+                          "eu_max": 100000
+                        },
+                        {
+                          "name": "solids_pct",
+                          "display_name": "Droge stof",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.solids_pct",
+                          "eu_min": 0,
+                          "eu_max": 20
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Vet-setpoint",
+                          "source": "physics.target_fat_pct",
+                          "default": 3.5,
+                          "unit_from_pv": 1
+                        },
+                        "sp_secondary": {
+                          "display_name": "Doorzet-referentie",
+                          "source": "physics.throughput_ref_L",
+                          "default": 5000.0,
+                          "unit_from_pv": 2
+                        }
+                      },
+                      "physics": {
+                        "target_fat_pct": 3.5,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 48.0,
+                        "cip_cycle_limit": 6,
+                        "throughput_ref_L": 5000.0
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "DOSING",
+                          "COOKING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Receiving/receiving-tank-01/Status/fat_setpoint_pct",
+                            "target": "physics.target_fat_pct",
+                            "unit": "%"
+                          },
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                            "target": "physics.throughput_ref_L",
+                            "unit": "L"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/separator-01_mode"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "id": "WC-B-HOM-01",
+                    "name": "Homogeniser 01",
+                    "equipment_id": "homogeniser-01",
+                    "physics_type": "homogenizer",
+                    "process_type": "continuous",
+                    "description": "Tweetraps-homogenisator. Zet drukverschil om in warmte; de uitlaat-temperatuur hangt daardoor aan de druk.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Standardisation/homogeniser-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla-B.Standardisation.homogeniser-01",
+                    "park": {
+                      "vendor_profile": "vendor-b",
+                      "protocol": "opc-ua",
+                      "machine_ordinal": 2,
+                      "container_name": "vla-homogeniser-01",
+                      "opcua_endpoint": "opc.tcp://vla-homogeniser-01:4840/VendorB",
+                      "opcua_namespace_uri": "urn:vendor-b.homogeniser-01",
+                      "opcua_namespace_index": 2,
+                      "extended_pvs": true,
+                      "critical_tag": "stage1_bar",
+                      "critical_tag_why": "De homogenisatiedruk bepaalt de textuur en hoort in het batchrapport.",
+                      "faults": [
+                        "f8",
+                        "f12",
+                        "f13"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "stage1_bar",
+                          "display_name": "Druk trap 1",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.pressure_bar",
+                          "eu_min": 0,
+                          "eu_max": 250
+                        },
+                        {
+                          "name": "stage2_bar",
+                          "display_name": "Druk trap 2",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.stage2_bar",
+                          "eu_min": 0,
+                          "eu_max": 50
+                        },
+                        {
+                          "name": "flow_L_min",
+                          "display_name": "Debiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "inlet_temp_C",
+                          "display_name": "Intrede",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.inlet_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "outlet_temp_C",
+                          "display_name": "Uittrede",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.outlet_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "piston_load_pct",
+                          "display_name": "Zuigerbelasting",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.piston_load_pct",
+                          "eu_min": 0,
+                          "eu_max": 140
+                        },
+                        {
+                          "name": "oil_temp_C",
+                          "display_name": "Olietemperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.oil_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "oil_press_bar",
+                          "display_name": "Oliedruk",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.oil_press_bar",
+                          "eu_min": 0,
+                          "eu_max": 5
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Drukt-setpoint",
+                          "source": "physics.target_pressure_bar",
+                          "default": 180.0,
+                          "unit_from_pv": 0
+                        },
+                        "sp_secondary": {
+                          "display_name": "Debiet-setpoint",
+                          "source": "physics.target_flow_L_min",
+                          "default": 800.0,
+                          "unit_from_pv": 2
+                        }
+                      },
+                      "physics": {
+                        "target_pressure_bar": 180.0,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 75.0,
+                        "cip_cycle_limit": 6
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "COOKING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                            "target": "physics.throughput_ref_L",
+                            "unit": "L"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/homogeniser-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-MIX",
+                "name": "Mixing",
+                "description": "Doseren en mengen van melk, suiker, zetmeel en cacao.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-BLD-01",
+                    "name": "Blend tank 01",
+                    "equipment_id": "blend-tank-01",
+                    "physics_type": "batch-mixer",
+                    "process_type": "batch",
+                    "description": "Mengtank met roerwerk en vier doseringen volgens recept.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Mixing/blend-tank-01/Status",
+                    "opcua_node_base": "n.v.t. (Modbus TCP)",
+                    "park": {
+                      "vendor_profile": "vendor-c",
+                      "protocol": "modbus-tcp",
+                      "machine_ordinal": 1,
+                      "container_name": "vla-blend-tank-01",
+                      "modbus": {
+                        "host": "vla-blend-tank-01",
+                        "port": 5020,
+                        "unit_id": 1,
+                        "register_base": 40101
+                      },
+                      "extended_pvs": true,
+                      "critical_tag": "dose_milk_kg",
+                      "critical_tag_why": "De gedoseerde melk is de grootheid die in het batchrapport moet staan en die tegen de silo-totalisator wordt gelegd.",
+                      "faults": [
+                        "f8",
+                        "f13"
+                      ],
+                      "why_this_profile": "Een holding register heeft geen naam, geen eenheid, geen kwaliteit, geen tijdstempel en geen datatype. Register 40101 is zestien bits en verder helemaal niets. Alle betekenis moet van buiten komen. Als iemand na de demo nog vraagt waarom je een modellaag nodig hebt, zet je dit register op het scherm.",
+                      "pvs": [
+                        {
+                          "name": "level_L",
+                          "display_name": "Niveau",
+                          "unit": "L",
+                          "datatype": "Double",
+                          "source": "physics.level_L",
+                          "eu_min": 0,
+                          "eu_max": 6000
+                        },
+                        {
+                          "name": "temp_C",
+                          "display_name": "Temperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.temp_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "agitator_rpm",
+                          "display_name": "Roerwerk",
+                          "unit": "rpm",
+                          "datatype": "Double",
+                          "source": "physics.agitator_rpm",
+                          "eu_min": 0,
+                          "eu_max": 150
+                        },
+                        {
+                          "name": "dose_milk_kg",
+                          "display_name": "Dosering melk",
+                          "unit": "kg",
+                          "datatype": "Double",
+                          "source": "physics.dose_milk_kg",
+                          "eu_min": 0,
+                          "eu_max": 6000
+                        },
+                        {
+                          "name": "dose_sugar_kg",
+                          "display_name": "Dosering suiker",
+                          "unit": "kg",
+                          "datatype": "Double",
+                          "source": "physics.dose_sugar_kg",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "dose_starch_kg",
+                          "display_name": "Dosering zetmeel",
+                          "unit": "kg",
+                          "datatype": "Double",
+                          "source": "physics.dose_starch_kg",
+                          "eu_min": 0,
+                          "eu_max": 400
+                        },
+                        {
+                          "name": "dose_cocoa_kg",
+                          "display_name": "Dosering cacao",
+                          "unit": "kg",
+                          "datatype": "Double",
+                          "source": "physics.dose_cocoa_kg",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "phase_code",
+                          "display_name": "Fase",
+                          "unit": "",
+                          "datatype": "Int32",
+                          "source": "physics.phase_code",
+                          "eu_min": 0,
+                          "eu_max": 4
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Temperatuur-setpoint",
+                          "source": "physics.target_dough_temp_c",
+                          "default": 25.0,
+                          "unit_from_pv": 1
+                        },
+                        "sp_secondary": {
+                          "display_name": "Batchgrootte",
+                          "source": "physics.throughput_ref_L",
+                          "default": 5000.0,
+                          "unit_from_pv": 0
+                        }
+                      },
+                      "physics": {
+                        "capacity_kg": 5850.0,
+                        "ambient_temp_c": 8.0,
+                        "target_dough_temp_c": 25.0,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 22.0,
+                        "cip_cycle_limit": 4,
+                        "product_density_kg_L": 1.04,
+                        "throughput_ref_L": 5000.0
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "DOSING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                            "target": "physics.throughput_ref_L",
+                            "unit": "L"
+                          },
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/temp_C",
+                            "target": "physics.target_dough_temp_c",
+                            "unit": "°C"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/blend-tank-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-COOK",
+                "name": "Cook",
+                "description": "Warmtebehandeling: voorverwarmen, pasteuriseren en verstijfselen.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-PAS-01",
+                    "name": "Pasteuriser 01",
+                    "equipment_id": "pasteuriser-01",
+                    "physics_type": "pasteurizer",
+                    "process_type": "continuous",
+                    "description": "HTST-pasteur met regeneratieve platenwisselaar, holdbuis en divert-klep. Veiligheidskritisch: onder de holdtemperatuur divert de klep en aborteert de toestandsmachine.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Cook/pasteuriser-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla-B.Cook.pasteuriser-01",
+                    "park": {
+                      "vendor_profile": "vendor-a",
+                      "protocol": "opc-da",
+                      "machine_ordinal": 1,
+                      "container_name": "vla-pasteuriser-01",
+                      "opcua_endpoint": "opc.tcp://vla-pasteuriser-01:4840/VendorA",
+                      "opcua_namespace_uri": "urn:vendor-a.pasteuriser-01",
+                      "opcua_namespace_index": 2,
+                      "namespace_index_note": "Elke machine registreert een eigen namespace-URI en landt toch op ns=2. Dat is geen botsing maar het punt: indices zijn per server, dus ns=2;s=X is geen identiteit. Dezelfde string adresseert twaalf losstaande dingen, afhankelijk van welk endpoint je hem stuurde. Daarom moet de Model-stap een eigen stabiele identiteit uitgeven. Deze sim WEIGERT te starten als register_namespace() iets anders teruggeeft dan 2.",
+                      "extended_pvs": true,
+                      "critical_tag": "hold_temp_C",
+                      "critical_tag_why": "De enige tag van deze machine die naar Mongo wordt gearchiveerd (archive group dw_park_critical, 14 dagen). Holdbuis-uittrede is of record voor het pasteurisatiedossier: dat is wat een batchrapport of een auditvraag nodig heeft. De overige 29 signalen gaan naar TDengine, want dat is een historian en Mongo niet. Zou je hier alles archiveren, dan is dat ~1,1 GB per dag bij twaalf machines.",
+                      "faults": [
+                        "f1",
+                        "f8",
+                        "f12"
+                      ],
+                      "follow": {
+                        "mode": "follow",
+                        "why": "De machines van lijn Vla-B lopen MEE met de batch die op de monoliet draait. Ze zijn geen tweede fabriek. Zonder dit zouden twee losse fysica-engines naast elkaar draaien en zou een cross-check-afwijking niets bewijzen: dan verschillen twee simulaties, niet twee metingen van hetzelfde ding.",
+                        "how": "De monoliet-waarde is de STUURWAARDE van deze machine, niet zijn uitvoer. De pasteur jaagt de kooktemperatuur na met zijn eigen traagheid, ruis en storingsgedrag. Zonder storing lopen ze binnen de tolerantie gelijk; met een storing lopen ze uiteen, en dan is de afwijking ECHT door de storing veroorzaakt.",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "COOKING"
+                        ],
+                        "idle_phases": [
+                          "IDLE",
+                          "DOSING",
+                          "COOLING",
+                          "FILLING",
+                          "COMPLETE"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C",
+                            "target": "physics.setpoint_c",
+                            "unit": "°C",
+                            "note": "De pasteur volgt de kooktemperatuur van de monoliet. Dit is ook de andere helft van XC-COOK-TEMP."
+                          },
+                          {
+                            "topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/hold_sec",
+                            "target": "physics.hold_sec",
+                            "unit": "s"
+                          },
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                            "target": "physics.throughput_ref_L",
+                            "unit": "L",
+                            "note": "Tankniveau stuurt het debiet: een lege tank betekent geen doorzet."
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/pasteuriser-01_mode",
+                          "why": "Ligt de monoliet stil, dan draait de machine vrij door zodat het park niet zwart wordt. Maar hij ZEGT dat dan ook, op een eigen DataQuality-topic. Stilletjes doen alsof je nog meeloopt terwijl je iets verzint, is precies de leugen waar deze demo tegen is."
+                        }
+                      },
+                      "pvs": [
+                        {
+                          "name": "temp_in_C",
+                          "display_name": "Producttemperatuur in",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.temp_in_c",
+                          "eu_min": 0,
+                          "eu_max": 120,
+                          "extended": true
+                        },
+                        {
+                          "name": "temp_out_C",
+                          "display_name": "HTST-temperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.HTST_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 120
+                        },
+                        {
+                          "name": "hold_temp_C",
+                          "display_name": "Holdbuis-uittrede",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.hold_temp_c",
+                          "eu_min": 0,
+                          "eu_max": 120,
+                          "extended": true
+                        },
+                        {
+                          "name": "flow_L_min",
+                          "display_name": "Debiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1200
+                        },
+                        {
+                          "name": "hold_sec",
+                          "display_name": "Holdtijd",
+                          "unit": "s",
+                          "datatype": "Double",
+                          "source": "physics.hold_sec",
+                          "eu_min": 0,
+                          "eu_max": 60
+                        },
+                        {
+                          "name": "divert_position",
+                          "display_name": "Divert-klepstand",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.divert_valve_status",
+                          "eu_min": 0,
+                          "eu_max": 100,
+                          "bool_as_pct": true
+                        },
+                        {
+                          "name": "regen_eff_pct",
+                          "display_name": "Regeneratierendement",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.regen_efficiency_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "balance_level_pct",
+                          "display_name": "Balanstankniveau",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.balance_level_pct",
+                          "eu_min": 0,
+                          "eu_max": 100,
+                          "extended": true
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Temperatuur-setpoint",
+                          "source": "physics.setpoint_c",
+                          "default": 88.0,
+                          "unit_from_pv": 1
+                        },
+                        "sp_secondary": {
+                          "display_name": "Debiet-setpoint",
+                          "source": "physics.flow_sp",
+                          "default": 800.0,
+                          "unit_from_pv": 3
+                        }
+                      },
+                      "physics": {
+                        "setpoint_c": 88.0,
+                        "hold_min_c": 85.0,
+                        "hold_sec": 20,
+                        "regen_eff": 0.85,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 34.0,
+                        "cip_cycle_limit": 4
+                      },
+                      "cross_check_role": {
+                        "check_id": "XC-COOK-TEMP",
+                        "side": "a",
+                        "note": "hold_temp_C is of record voor het pasteurisatiedossier, preheater-01/temp_out_C is de procesmeting. Wijken ze meer dan 1,5 graad af, dan publiceert de cross-check beide getallen, het gat, de tolerantie en welke kant of record is. Geen stille keuze en geen gemiddelde: een gemiddelde is een getal dat geen enkel instrument ooit gemeten heeft."
+                      }
+                    }
+                  },
+                  {
+                    "id": "WC-B-PRE-01",
+                    "name": "Preheater 01",
+                    "equipment_id": "preheater-01",
+                    "physics_type": "preheater",
+                    "process_type": "continuous",
+                    "description": "Voorverwarmer. De approach-temperatuur is de vroegste indicator van vervuiling die deze lijn heeft.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Cook/preheater-01/Status",
+                    "opcua_node_base": "n.v.t. (modbus-tcp)",
+                    "park": {
+                      "vendor_profile": "vendor-c",
+                      "protocol": "modbus-tcp",
+                      "machine_ordinal": 2,
+                      "container_name": "vla-preheater-01",
+                      "modbus": {
+                        "host": "vla-preheater-01",
+                        "port": 5020,
+                        "unit_id": 1,
+                        "register_base": 40301
+                      },
+                      "extended_pvs": true,
+                      "critical_tag": "temp_out_C",
+                      "critical_tag_why": "De uittredetemperatuur is de b-kant van XC-COOK-TEMP en hoort in het batchrapport.",
+                      "faults": [
+                        "f1",
+                        "f8",
+                        "f12"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "temp_in_C",
+                          "display_name": "Intrede",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.temp_in_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "temp_out_C",
+                          "display_name": "Uittrede",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.temp_C",
+                          "eu_min": 0,
+                          "eu_max": 120
+                        },
+                        {
+                          "name": "flow_L_min",
+                          "display_name": "Debiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "steam_press_bar",
+                          "display_name": "Stoomdruk",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.steam_press_bar",
+                          "eu_min": 0,
+                          "eu_max": 6
+                        },
+                        {
+                          "name": "approach_dT_C",
+                          "display_name": "Approach",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.approach_dT_C",
+                          "eu_min": 0,
+                          "eu_max": 120
+                        },
+                        {
+                          "name": "condensate_L_min",
+                          "display_name": "Condensaat",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.condensate_L_min",
+                          "eu_min": 0,
+                          "eu_max": 60
+                        },
+                        {
+                          "name": "duty_kW",
+                          "display_name": "Vermogen",
+                          "unit": "kg",
+                          "datatype": "Double",
+                          "source": "physics.duty_kW",
+                          "eu_min": 0,
+                          "eu_max": 3000
+                        },
+                        {
+                          "name": "fouling_index",
+                          "display_name": "Vervuilingsindex",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.fouling_index",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Temperatuur-setpoint",
+                          "source": "physics.setpoint_C",
+                          "default": 65.0,
+                          "unit_from_pv": 1
+                        },
+                        "sp_secondary": {
+                          "display_name": "Debiet-setpoint",
+                          "source": "physics.target_flow_L_min",
+                          "default": 800.0,
+                          "unit_from_pv": 2
+                        }
+                      },
+                      "physics": {
+                        "setpoint_C": 65.0,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 18.0,
+                        "cip_cycle_limit": 4
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "COOKING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C",
+                            "target": "physics.setpoint_C",
+                            "unit": "°C"
+                          },
+                          {
+                            "topic": "DairyWorks/Vla/Mixing/process-tank-01/Status/level_L",
+                            "target": "physics.throughput_ref_L",
+                            "unit": "L"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/preheater-01_mode"
+                        }
+                      },
+                      "cross_check_role": {
+                        "check_id": "XC-COOK-TEMP",
+                        "side": "b"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-COOL",
+                "name": "Cooling",
+                "description": "Terugkoelen naar vultemperatuur.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-PCL-01",
+                    "name": "Plate cooler 01",
+                    "equipment_id": "plate-cooler-01",
+                    "physics_type": "plate-cooler",
+                    "process_type": "continuous",
+                    "description": "Platenwisselaar met product- en glycolcircuit. Bewust geen bandkoeler.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Cooling/plate-cooler-01/Status",
+                    "opcua_node_base": "n.v.t. (mqtt)",
+                    "park": {
+                      "vendor_profile": "vendor-c",
+                      "protocol": "mqtt",
+                      "machine_ordinal": 3,
+                      "container_name": "vla-plate-cooler-01",
+                      "extended_pvs": true,
+                      "critical_tag": "prod_out_C",
+                      "critical_tag_why": "De uittredetemperatuur bepaalt of het product de vuller in mag en hoort in het batchrapport.",
+                      "faults": [
+                        "f1",
+                        "f8",
+                        "f12"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "prod_in_C",
+                          "display_name": "Product in",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.prod_in_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "prod_out_C",
+                          "display_name": "Product uit",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.prod_out_C",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "glycol_in_C",
+                          "display_name": "Glycol in",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.glycol_in_C",
+                          "eu_min": -10,
+                          "eu_max": 30
+                        },
+                        {
+                          "name": "glycol_out_C",
+                          "display_name": "Glycol uit",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.glycol_out_C",
+                          "eu_min": -10,
+                          "eu_max": 40
+                        },
+                        {
+                          "name": "flow_L_min",
+                          "display_name": "Productdebiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "glycol_flow_L_min",
+                          "display_name": "Glycoldebiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.glycol_flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 1000
+                        },
+                        {
+                          "name": "approach_dT_C",
+                          "display_name": "Approach",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.approach_dT_C",
+                          "eu_min": 0,
+                          "eu_max": 60
+                        },
+                        {
+                          "name": "dp_bar",
+                          "display_name": "Drukval",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.dp_bar",
+                          "eu_min": 0,
+                          "eu_max": 5
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Uittrede-setpoint",
+                          "source": "physics.target_out_c",
+                          "default": 22.0,
+                          "unit_from_pv": 1
+                        },
+                        "sp_secondary": {
+                          "display_name": "Debiet-setpoint",
+                          "source": "physics.throughput_ref_L",
+                          "default": 5000.0,
+                          "unit_from_pv": 4
+                        }
+                      },
+                      "physics": {
+                        "target_out_c": 22.0,
+                        "prod_in_c": 88.0,
+                        "glycol_in_c": 2.0,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 20.0,
+                        "cip_cycle_limit": 4,
+                        "throughput_ref_L": 5000.0
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "COOLING",
+                          "FILLING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Cooling/cooler-01/Status/temp_C",
+                            "target": "physics.target_out_c",
+                            "unit": "°C"
+                          },
+                          {
+                            "topic": "DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C",
+                            "target": "physics.prod_in_nominal_c",
+                            "unit": "°C"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/plate-cooler-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-FILL",
+                "name": "Filling",
+                "description": "Vullen van 1L-pakken en tellen.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-FIL-01",
+                    "name": "Filler 01",
+                    "equipment_id": "filler-01",
+                    "physics_type": "fill-line",
+                    "process_type": "continuous",
+                    "description": "Vulmachine voor 1L-pakken met seal en dop.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Filling/filler-01/Status",
+                    "opcua_node_base": "n.v.t. (MQTT direct)",
+                    "park": {
+                      "vendor_profile": "vendor-d",
+                      "protocol": "mqtt",
+                      "machine_ordinal": 1,
+                      "container_name": "vla-filler-01",
+                      "extended_pvs": true,
+                      "critical_tag": "quality_pct",
+                      "critical_tag_why": "Het kwaliteitspercentage is wat een batchrapport nodig heeft; de vulvolumes per kop gaan naar TDengine.",
+                      "faults": [
+                        "f8",
+                        "f12",
+                        "f13"
+                      ],
+                      "why_this_profile": "Geen kwaliteitsindicatie, tijd in epoch-milliseconden, temperaturen in Fahrenheit terwijl het debiet gewoon in L/min staat, en waarden als string met af en toe een 'N/A'. Die laatste wordt GEWEIGERD en nooit naar nul geforceerd: een nul is een meting en een weigering is een gat.",
+                      "pvs": [
+                        {
+                          "name": "packs_per_min",
+                          "display_name": "Pakken per minuut",
+                          "unit": "u/min",
+                          "datatype": "Double",
+                          "source": "physics.packs_per_min",
+                          "eu_min": 0,
+                          "eu_max": 200
+                        },
+                        {
+                          "name": "fill_volume_mL",
+                          "display_name": "Vulvolume",
+                          "unit": "mL",
+                          "datatype": "Double",
+                          "source": "physics.fill_volume_mL",
+                          "eu_min": 0,
+                          "eu_max": 1200
+                        },
+                        {
+                          "name": "head_dev_mL",
+                          "display_name": "Spreiding vulkoppen",
+                          "unit": "mL",
+                          "datatype": "Double",
+                          "source": "physics.head_dev_mL",
+                          "eu_min": 0,
+                          "eu_max": 30
+                        },
+                        {
+                          "name": "seal_temp_C",
+                          "display_name": "Sealtemperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.seal_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 250
+                        },
+                        {
+                          "name": "cap_torque_Ncm",
+                          "display_name": "Dopkoppel",
+                          "unit": "Ncm",
+                          "datatype": "Double",
+                          "source": "physics.cap_torque_Ncm",
+                          "eu_min": 0,
+                          "eu_max": 80
+                        },
+                        {
+                          "name": "quality_pct",
+                          "display_name": "Kwaliteit",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.quality_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "film_remaining_pct",
+                          "display_name": "Filmvoorraad",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.film_remaining_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "pack_size_L",
+                          "display_name": "Pakgrootte",
+                          "unit": "L",
+                          "datatype": "Double",
+                          "source": "physics.pack_size_L",
+                          "eu_min": 0,
+                          "eu_max": 2
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Sealtemperatuur-setpoint",
+                          "source": "physics.target_seal_C",
+                          "default": 185.0,
+                          "unit_from_pv": 3
+                        },
+                        "sp_secondary": {
+                          "display_name": "Pakgrootte-setpoint",
+                          "source": "physics.pack_size_l",
+                          "default": 1.0,
+                          "unit_from_pv": 7
+                        }
+                      },
+                      "physics": {
+                        "pack_size_l": 1.0,
+                        "nominal_ppm": 120.0,
+                        "reject_base_pct": 0.4,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 16.0,
+                        "cip_cycle_limit": 4,
+                        "target_seal_C": 185.0
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "FILLING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Cooling/cooler-01/Status/temp_C",
+                            "target": "physics.inlet_temp_c",
+                            "unit": "°C"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/filler-01_mode"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "id": "WC-B-BOT-01",
+                    "name": "Bottle filler 01",
+                    "equipment_id": "bottle-filler-01",
+                    "physics_type": "bottler",
+                    "process_type": "continuous",
+                    "description": "Flessenvuller met eigen REST-API. Schrijft DAARNAAST rechtstreeks line protocol naar de historian, langs de modellaag heen. Dat tweede pad is het anti-patroon en staat er met opzet.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Filling/bottle-filler-01/Status",
+                    "opcua_node_base": "n.v.t. (rest)",
+                    "park": {
+                      "vendor_profile": "vendor-d",
+                      "protocol": "rest",
+                      "machine_ordinal": 2,
+                      "container_name": "vla-bottle-filler-01",
+                      "rest": {
+                        "port": 8000,
+                        "path": "/tags/{name}/current"
+                      },
+                      "tdengine_bypass": {
+                        "enabled": true,
+                        "database": "idp_bypass",
+                        "url": "http://vla-tdengine:6041/influxdb/v1/write",
+                        "why": "Deze machine staat AL in de historian, en juist daarom is hij het tegenvoorbeeld: geen eenheid, geen kwaliteit, geen asset, geen signal_uuid, en niet te koppelen aan een batch. Landt in idp_bypass en NOOIT in idp_park, anders is de demo zijn eigen tegenvoorbeeld kwijt."
+                      },
+                      "extended_pvs": true,
+                      "critical_tag": "quality_pct",
+                      "critical_tag_why": "Het kwaliteitspercentage hoort in het batchrapport.",
+                      "faults": [
+                        "f8",
+                        "f12",
+                        "f13"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "bottles_per_min",
+                          "display_name": "Flessen per minuut",
+                          "unit": "u/min",
+                          "datatype": "Double",
+                          "source": "physics.bottles_per_min",
+                          "eu_min": 0,
+                          "eu_max": 300
+                        },
+                        {
+                          "name": "fill_volume_mL",
+                          "display_name": "Vulvolume",
+                          "unit": "mL",
+                          "datatype": "Double",
+                          "source": "physics.fill_volume_mL",
+                          "eu_min": 0,
+                          "eu_max": 1500
+                        },
+                        {
+                          "name": "fill_press_bar",
+                          "display_name": "Vuldruk",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.fill_press_bar",
+                          "eu_min": 0,
+                          "eu_max": 6
+                        },
+                        {
+                          "name": "rinse_flow_L_min",
+                          "display_name": "Spoeldebiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.rinse_flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "cap_torque_Ncm",
+                          "display_name": "Dopkoppel",
+                          "unit": "Ncm",
+                          "datatype": "Double",
+                          "source": "physics.cap_torque_Ncm",
+                          "eu_min": 0,
+                          "eu_max": 80
+                        },
+                        {
+                          "name": "carousel_rpm",
+                          "display_name": "Carrousel",
+                          "unit": "rpm",
+                          "datatype": "Double",
+                          "source": "physics.carousel_rpm",
+                          "eu_min": 0,
+                          "eu_max": 60
+                        },
+                        {
+                          "name": "quality_pct",
+                          "display_name": "Kwaliteit",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.quality_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "preform_level_pct",
+                          "display_name": "Preform-voorraad",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.preform_level_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Vulvolume-setpoint",
+                          "source": "physics.target_fill_mL",
+                          "default": 1000.0,
+                          "unit_from_pv": 1
+                        },
+                        "sp_secondary": {
+                          "display_name": "Snelheids-setpoint",
+                          "source": "physics.target_bpm",
+                          "default": 240.0,
+                          "unit_from_pv": 0
+                        }
+                      },
+                      "physics": {
+                        "design_speed": 120.0,
+                        "nominal_current_a": 21.0,
+                        "cip_cycle_limit": 4
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "FILLING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Cooling/cooler-01/Status/temp_C",
+                            "target": "physics.inlet_temp_c",
+                            "unit": "°C"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/bottle-filler-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-PACK",
+                "name": "Packaging",
+                "description": "Omdozen en palletiseren.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-CPK-01",
+                    "name": "Case packer 01",
+                    "equipment_id": "case-packer-01",
+                    "physics_type": "packaging-line",
+                    "process_type": "continuous",
+                    "description": "Omdoosmachine. De infeed-wachtrij loopt op voordat de doorzet zakt.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Packaging/case-packer-01/Status",
+                    "opcua_node_base": "n.v.t. (sql)",
+                    "park": {
+                      "vendor_profile": "vendor-e",
+                      "protocol": "sql",
+                      "machine_ordinal": 1,
+                      "container_name": "vla-case-packer-01",
+                      "sql": {
+                        "engine": "postgres",
+                        "host": "vla-park-db",
+                        "port": 5432,
+                        "database": "vendor_e",
+                        "table": "tag_history"
+                      },
+                      "extended_pvs": true,
+                      "critical_tag": "output_rate_ph",
+                      "critical_tag_why": "De doorzet is de b-kant van XC-PACK-COUNT.",
+                      "faults": [
+                        "f8",
+                        "f12",
+                        "f13"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "output_rate_ph",
+                          "display_name": "Doorzet",
+                          "unit": "st",
+                          "datatype": "Double",
+                          "source": "physics.output_rate_ph",
+                          "eu_min": 0,
+                          "eu_max": 20000
+                        },
+                        {
+                          "name": "packs_per_case",
+                          "display_name": "Pakken per doos",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.packs_per_case",
+                          "eu_min": 0,
+                          "eu_max": 48
+                        },
+                        {
+                          "name": "case_count_rate",
+                          "display_name": "Dozen per uur",
+                          "unit": "st",
+                          "datatype": "Double",
+                          "source": "physics.case_count_rate",
+                          "eu_min": 0,
+                          "eu_max": 2000
+                        },
+                        {
+                          "name": "infeed_backlog",
+                          "display_name": "Infeed-wachtrij",
+                          "unit": "st",
+                          "datatype": "Double",
+                          "source": "physics.infeed_backlog",
+                          "eu_min": 0,
+                          "eu_max": 200
+                        },
+                        {
+                          "name": "glue_temp_C",
+                          "display_name": "Lijmtemperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.glue_temp_C",
+                          "eu_min": 0,
+                          "eu_max": 220
+                        },
+                        {
+                          "name": "glue_level_pct",
+                          "display_name": "Lijmvoorraad",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.glue_level_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "jam_count_rate",
+                          "display_name": "Vastlopers per uur",
+                          "unit": "st",
+                          "datatype": "Double",
+                          "source": "physics.jam_count_rate",
+                          "eu_min": 0,
+                          "eu_max": 50
+                        },
+                        {
+                          "name": "lane_balance_pct",
+                          "display_name": "Baanverdeling",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.lane_balance_pct",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Doorzet-setpoint",
+                          "source": "physics.target_rate_ph",
+                          "default": 14400.0,
+                          "unit_from_pv": 0
+                        },
+                        "sp_secondary": {
+                          "display_name": "Pakken per doos",
+                          "source": "physics.packs_per_case",
+                          "default": 12.0,
+                          "unit_from_pv": 1
+                        }
+                      },
+                      "physics": {
+                        "design_speed": 120.0,
+                        "nominal_current_a": 14.0,
+                        "cip_cycle_limit": 20
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "FILLING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Filling/filler-01/Status/packs_total",
+                            "target": "physics.upstream_packs",
+                            "unit": "st"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/case-packer-01_mode"
+                        }
+                      },
+                      "cross_check_role": {
+                        "check_id": "XC-PACK-COUNT",
+                        "side": "b"
+                      }
+                    }
+                  },
+                  {
+                    "id": "WC-B-PAL-01",
+                    "name": "Palletiser 01",
+                    "equipment_id": "palletiser-01",
+                    "physics_type": "palletizer",
+                    "process_type": "continuous",
+                    "description": "Palletiseerrobot met laagvorming en wikkelaar.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Packaging/palletiser-01/Status",
+                    "opcua_node_base": "n.v.t. (sql)",
+                    "park": {
+                      "vendor_profile": "vendor-e",
+                      "protocol": "sql",
+                      "machine_ordinal": 2,
+                      "container_name": "vla-palletiser-01",
+                      "sql": {
+                        "engine": "postgres",
+                        "host": "vla-park-db",
+                        "port": 5432,
+                        "database": "vendor_e",
+                        "table": "tag_history"
+                      },
+                      "extended_pvs": true,
+                      "critical_tag": "packs_on_pallet",
+                      "critical_tag_why": "Het aantal pakken op de pallet koppelt de handling unit aan de batch.",
+                      "faults": [
+                        "f8",
+                        "f13"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "pallet_seq",
+                          "display_name": "Palletnummer",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.pallet_seq",
+                          "eu_min": 0,
+                          "eu_max": 100000
+                        },
+                        {
+                          "name": "packs_on_pallet",
+                          "display_name": "Pakken op pallet",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.packs_on_pallet",
+                          "eu_min": 0,
+                          "eu_max": 200
+                        },
+                        {
+                          "name": "packs_per_pallet",
+                          "display_name": "Pakken per pallet",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.packs_per_pallet",
+                          "eu_min": 0,
+                          "eu_max": 200
+                        },
+                        {
+                          "name": "layer_index",
+                          "display_name": "Laag",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.layer_index",
+                          "eu_min": 0,
+                          "eu_max": 20
+                        },
+                        {
+                          "name": "gripper_press_bar",
+                          "display_name": "Grijperdruk",
+                          "unit": "bar",
+                          "datatype": "Double",
+                          "source": "physics.gripper_press_bar",
+                          "eu_min": 0,
+                          "eu_max": 8
+                        },
+                        {
+                          "name": "wrap_cycles",
+                          "display_name": "Wikkelcycli",
+                          "unit": "st",
+                          "datatype": "Int32",
+                          "source": "physics.wrap_cycles",
+                          "eu_min": 0,
+                          "eu_max": 100000
+                        },
+                        {
+                          "name": "infeed_rate_ph",
+                          "display_name": "Aanvoer",
+                          "unit": "st",
+                          "datatype": "Double",
+                          "source": "physics.infeed_rate_ph",
+                          "eu_min": 0,
+                          "eu_max": 20000
+                        },
+                        {
+                          "name": "hu_complete_pulse",
+                          "display_name": "Pallet gereed",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.hu_complete_pulse",
+                          "eu_min": 0,
+                          "eu_max": 1
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Pakken per pallet",
+                          "source": "physics.packs_per_pallet",
+                          "default": 96.0,
+                          "unit_from_pv": 2
+                        },
+                        "sp_secondary": {
+                          "display_name": "Aanvoer-setpoint",
+                          "source": "physics.target_rate_ph",
+                          "default": 14400.0,
+                          "unit_from_pv": 6
+                        }
+                      },
+                      "physics": {
+                        "packs_per_pallet": 96,
+                        "packs_per_layer": 8,
+                        "design_speed": 120.0,
+                        "nominal_current_a": 26.0,
+                        "cip_cycle_limit": 50
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "FILLING"
+                        ],
+                        "drivers": [
+                          {
+                            "topic": "DairyWorks/Vla/Filling/filler-01/Status/packs_total",
+                            "target": "physics.upstream_packs",
+                            "unit": "st"
+                          }
+                        ],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/palletiser-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "AREA-B-UTIL",
+                "name": "Utilities",
+                "description": "Reiniging en nutsvoorzieningen.",
+                "work_centers": [
+                  {
+                    "id": "WC-B-CIP-01",
+                    "name": "CIP skid 01",
+                    "equipment_id": "cip-skid-01",
+                    "physics_type": "cip-station",
+                    "process_type": "continuous",
+                    "description": "Reinigingsskid. De retourgeleidbaarheid bewijst dat een spoeling klaar is; een sensorbias laat de lijn schoon lijken terwijl dat niet zo is.",
+                    "mqtt_namespace": "DairyWorks/Vla-B/Utilities/cip-skid-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla-B.Utilities.cip-skid-01",
+                    "park": {
+                      "vendor_profile": "vendor-a",
+                      "protocol": "opc-ua",
+                      "machine_ordinal": 3,
+                      "container_name": "vla-cip-skid-01",
+                      "opcua_endpoint": "opc.tcp://vla-cip-skid-01:4840/VendorA",
+                      "opcua_namespace_uri": "urn:vendor-a.cip-skid-01",
+                      "opcua_namespace_index": 2,
+                      "extended_pvs": true,
+                      "critical_tag": "return_cond_mS",
+                      "critical_tag_why": "De retourgeleidbaarheid is het bewijs dat een spoeling klaar is, en dat is een auditvraag.",
+                      "faults": [
+                        "f1",
+                        "f8",
+                        "f12"
+                      ],
+                      "pvs": [
+                        {
+                          "name": "phase_code",
+                          "display_name": "Fase",
+                          "unit": "",
+                          "datatype": "Int32",
+                          "source": "physics.phase_code",
+                          "eu_min": 0,
+                          "eu_max": 6
+                        },
+                        {
+                          "name": "cycle_elapsed_s",
+                          "display_name": "Cyclustijd",
+                          "unit": "s",
+                          "datatype": "Double",
+                          "source": "physics.cycle-elapsed-s",
+                          "eu_min": 0,
+                          "eu_max": 7200
+                        },
+                        {
+                          "name": "caustic_temp_C",
+                          "display_name": "Loogtemperatuur",
+                          "unit": "°C",
+                          "datatype": "Double",
+                          "source": "physics.caustic-temp",
+                          "eu_min": 0,
+                          "eu_max": 100
+                        },
+                        {
+                          "name": "caustic_conc_pct",
+                          "display_name": "Loogconcentratie",
+                          "unit": "%",
+                          "datatype": "Double",
+                          "source": "physics.caustic_conc_pct",
+                          "eu_min": 0,
+                          "eu_max": 5
+                        },
+                        {
+                          "name": "flow_L_min",
+                          "display_name": "Debiet",
+                          "unit": "L/min",
+                          "datatype": "Double",
+                          "source": "physics.flow_L_min",
+                          "eu_min": 0,
+                          "eu_max": 600
+                        },
+                        {
+                          "name": "return_cond_mS",
+                          "display_name": "Retourgeleidbaarheid",
+                          "unit": "mS/cm",
+                          "datatype": "Double",
+                          "source": "physics.return_cond_mS",
+                          "eu_min": 0,
+                          "eu_max": 20
+                        },
+                        {
+                          "name": "cycle_stale_min",
+                          "display_name": "Cyclus stil",
+                          "unit": "h",
+                          "datatype": "Double",
+                          "source": "physics.cycle-stale-min",
+                          "eu_min": 0,
+                          "eu_max": 600
+                        },
+                        {
+                          "name": "last_completed_ago_min",
+                          "display_name": "Laatste spoeling geleden",
+                          "unit": "h",
+                          "datatype": "Double",
+                          "source": "physics.last-completed-ago-min",
+                          "eu_min": 0,
+                          "eu_max": 10000
+                        }
+                      ],
+                      "setpoints": {
+                        "sp_primary": {
+                          "display_name": "Loogtemperatuur-setpoint",
+                          "source": "physics.target_caustic_C",
+                          "default": 78.0,
+                          "unit_from_pv": 2
+                        },
+                        "sp_secondary": {
+                          "display_name": "Debiet-setpoint",
+                          "source": "physics.target_flow_L_min",
+                          "default": 400.0,
+                          "unit_from_pv": 4
+                        }
+                      },
+                      "physics": {
+                        "design_speed": 120.0,
+                        "nominal_current_a": 30.0,
+                        "cip_cycle_limit": 100
+                      },
+                      "follow": {
+                        "mode": "follow",
+                        "batch_state_topic": "DairyWorks/Vla/Batch/Status/state",
+                        "batch_id_topic": "DairyWorks/Vla/Batch/Status/batch_id",
+                        "active_phases": [
+                          "IDLE",
+                          "COMPLETE"
+                        ],
+                        "drivers": [],
+                        "fallback": {
+                          "mode": "free",
+                          "after_silence_s": 90,
+                          "announce_topic": "DairyWorks/Vla-B/DataQuality/follow-01/Status/cip-skid-01_mode"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       }

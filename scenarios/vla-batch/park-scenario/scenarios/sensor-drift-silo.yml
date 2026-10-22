@@ -1,0 +1,25 @@
+# Een sensor die langzaam wegloopt, over vier batches.
+#
+# De vervelendste storing die er is, want er gaat geen alarm af en de waarde
+# blijft plausibel. Je ziet hem alleen doordat de silo-totalisator en de
+# gedoseerde melk uit elkaar lopen, en dat is precies wat XC-INTAKE-MASS
+# publiceert: het verschil, zonder alarm, omdat het geen alarm VERDIENT.
+#
+# Gebruik hem om te laten zien waarom een cross-check bestaat.
+
+id: SCN-DRIFT-SILO
+title: "Wegdrijvende niveaumeting op de melksilo"
+
+trigger:
+  on: uns_transition
+  topic: "DairyWorks/Vla/Batch/Status/state"
+  to: COMPLETE
+
+loop: true
+clear_on_finish: true
+
+steps:
+  - { at_trigger: 1, machine: intake-silo-01, fault: f2, magnitude: 0.20 }
+  - { at_trigger: 2, machine: intake-silo-01, fault: f2, magnitude: 0.45 }
+  - { at_trigger: 3, machine: intake-silo-01, fault: f2, magnitude: 0.70 }
+  - { at_trigger: 4, machine: intake-silo-01, fault: f2, magnitude: 0.90 }

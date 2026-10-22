@@ -1,0 +1,140 @@
+{
+  "batch-mixer": [
+    "batch-counter",
+    "batch-id",
+    "dough-temp",
+    "load",
+    "phase",
+    "power",
+    "recipe-id"
+  ],
+  "bottler": [
+    "bottles_per_min",
+    "bottles_total",
+    "fill_volume_mL",
+    "reject_count"
+  ],
+  "bulk-fermenter": [
+    "batch-counter",
+    "batch-elapsed-s",
+    "batch-id",
+    "batch-progress-pct",
+    "humidity",
+    "temperature"
+  ],
+  "cip-station": [
+    "allergen-mode",
+    "caustic-temp",
+    "cycle-elapsed-s",
+    "cycle-id",
+    "cycle-stale-min",
+    "flow_L_min",
+    "last-completed-ago-min",
+    "phase"
+  ],
+  "fermenter": [
+    "batch_counter",
+    "culture_id",
+    "ferment_elapsed_min",
+    "pH",
+    "phase",
+    "temp_C"
+  ],
+  "fill-line": [
+    "pack_count",
+    "pack_size_L",
+    "packs_per_min",
+    "quality_pct",
+    "reject_count"
+  ],
+  "former": [
+    "pieces-per-min",
+    "pieces-total",
+    "reject-count",
+    "scaler-weight"
+  ],
+  "homogenizer": [
+    "flow_L_min",
+    "pressure_bar"
+  ],
+  "packaging-line": [
+    "output-rate",
+    "recipe-id",
+    "reject-count",
+    "units-total"
+  ],
+  "palletizer": [
+    "hu_complete_pulse",
+    "packs_on_pallet",
+    "packs_per_pallet",
+    "pallet_count",
+    "pallet_seq"
+  ],
+  "pasteurizer": [
+    "HTST_temp_C",
+    "divert_valve_status",
+    "flow_L_min",
+    "hold_sec",
+    "regen_efficiency_pct"
+  ],
+  "plate-cooler": [
+    "approach_dT_C",
+    "dp_bar",
+    "flow_L_min",
+    "glycol_flow_L_min",
+    "glycol_in_C",
+    "glycol_out_C",
+    "prod_in_C",
+    "prod_out_C"
+  ],
+  "preheater": [
+    "flow_L_min",
+    "setpoint_C",
+    "temp_C"
+  ],
+  "proofer": [
+    "belt-speed",
+    "dwell-overshoot-min",
+    "dwell-spec-min",
+    "dwell-time-actual-min",
+    "humidity",
+    "temperature"
+  ],
+  "separator": [
+    "RPM",
+    "fat_pct",
+    "vibration_mm_s"
+  ],
+  "spiral-cooler": [
+    "ambient-temp",
+    "belt-speed",
+    "product-out-temp"
+  ],
+  "storage-tank": [
+    "draw_L_min",
+    "flow_L_min",
+    "in_temp_C",
+    "level_L",
+    "level_pct"
+  ],
+  "tunnel-oven": [
+    "belt-speed",
+    "power",
+    "zone-1/power",
+    "zone-1/product-present",
+    "zone-1/setpoint",
+    "zone-1/temperature",
+    "zone-2/power",
+    "zone-2/product-present",
+    "zone-2/setpoint",
+    "zone-2/temperature",
+    "zone-3/power",
+    "zone-3/product-present",
+    "zone-3/setpoint",
+    "zone-3/temperature",
+    "zone-4/power",
+    "zone-4/product-present",
+    "zone-4/setpoint",
+    "zone-4/temperature"
+  ]
+}

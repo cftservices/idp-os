@@ -289,6 +289,48 @@ alerts, OEE trend), both `?format=json|pdf`. Covered end-to-end by
 | `.env.example` | DOMAIN, DASHBOARD_AUTH, MONGO_*, TD_* with inline docs |
 | `README.md` | this file |
 
+### 3D site-twin (`/site`)
+
+A game-style 3D twin of the whole site (react-three-fiber), live at
+`https://milkdemo.${DOMAIN}/site`. Everything it shows comes from the batch engine; the scene never
+invents state.
+
+- **Line:** receiving tank, mixer, cooker, cooler and filler, each with its live process value and
+  status (running, idle, attention, alarm, stale, no data).
+- **Raw materials:** four silos (milk, sugar, starch, cocoa) filled to `stock / (4 × reorder level)`.
+  Each material has its own supplier vehicle: a stainless tanker for milk, bulk tankers for sugar
+  and starch, a pallet truck for cocoa. A silo below 50% places an order; while unloading the
+  vehicle books real goods receipts in chunks (`inventory.receive`), capped at silo capacity.
+  Each vehicle has its own unloading bay (`INBOUND_BAYS` in `ui/lib/twin/flow.ts`).
+- **Warehouse:** palletiser robot, cold store with 96 rack slots, forklifts with battery and trips,
+  four docks. Docked trailers are see-through and show the loaded pallets.
+- **WareTrack overlay:** glass panels with tabs per group, search (`/`), floating labels with
+  priority (selected, then alarm, within a label budget), a detail card with sparklines, and a batch
+  timeline.
+
+Driven by the autopilot (`DEMO_AUTOPILOT`, `DEMO_AUTOPILOT_LOGISTICS`): batches, warehouse moves and
+the logistics simulation (`vla/logistics_sim.py`, exposed at `GET /api/v1/logistics`). The pure rules
+are tested without a browser in `ui/e2e/twin-flow.spec.ts` and `twin-derive.spec.ts`, the engine side
+in `batch-engine/tests/test_logistics_sim.py`. Deployment notes: `DEPLOY.md` §5b.
+
+### 3D site-twin: borrowed models (Open-Industry-Project, MIT)
+
+The twin under `ui/components/twin/` borrows a handful of MIT-licensed models from
+[Open-Industry-Project](https://github.com/Open-Industry-Project/Open-Industry-Project). It uses only
+the assets, not the Godot engine or the PLC simulation. The models are optimised GLB files in
+`ui/public/models/oip/`, and their source commit, original names and optimisation are listed in `CREDITS.md`
+next to the licence (`LICENSE`).
+
+| Model | Used in |
+|-------|---------|
+| `robot.glb` (six-axis arm) | `objects/Robot.tsx`, palletiser |
+| `dockdeur.glb`, `leveller.glb` | `DockBay` in `objects/Logistics.tsx` |
+| `trailer.glb` | `TruckModel` (container + doors that open when docked) |
+| `tex/pallet-*.webp` | wood texture on `PalletModel` |
+
+Each model is loaded inside `<Suspense>`. For the dock and the truck, the old primitive geometry is the fallback. Colours
+come exclusively from palette tokens (`lint:tokens`).
+
 ---
 
 ## UNS topic tree (locked)

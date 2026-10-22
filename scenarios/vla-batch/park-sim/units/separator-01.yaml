@@ -1,0 +1,786 @@
+# GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN
+# bron: factory-model/isa95-vla.json + signal-template.json + vendor-profiles.json
+#
+# Unit-config voor separator-01. De container mount dit read-only en leest verder
+# NIETS uit het enterprise-model: een PLC doet dat ook niet.
+#
+# Het distort-blok per signaal is LETTERLIJK dezelfde regel als in
+# factory-model/park-conditioning.json. De sim past hem VOORWAARTS toe
+# (canoniek -> native), de conditioner draait hem TERUG. Uit een bron
+# gegenereerd, dus de twee kanten kunnen niet uiteenlopen; dat de wiskunde
+# ook echt omkeerbaar is bewijst de round-trip-selftest.
+
+unit_id: separator-01
+equipment: separator-01
+name: Separator 01
+type: separator
+area: Standardisation
+line: Vla-B
+site: DairyWorks
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 120.0
+  auto_start: true
+
+surface: opcua
+protocol: opc-ua
+vendor_profile: vendor-b
+machine_ordinal: 1
+raw_root: raw/vla-park/separator-01
+extended_pvs: true
+
+opcua:
+  endpoint: opc.tcp://vla-separator-01:4840/VendorB
+  namespace_uri: urn:vendor-b.separator-01
+  namespace_index: 2
+  # Weiger te starten als register_namespace() een andere index geeft:
+  # de gegenereerde adreslijst hardcodeert hem en zou er stil naast grijpen.
+  strict_namespace_index: true
+
+sim:
+  step_s: 0.2
+  sampling_classes:
+    fast: 1000
+    normal: 5000
+    slow: 30000
+    onchange: null
+  keepalive_s: 60
+
+# Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen
+# tweede fabriek: de monoliet-waarden zijn stuurwaarden, en de eigen
+# fysica bepaalt met welke traagheid, ruis en storing hij ze haalt.
+follow:
+  mode: follow
+  batch_state_topic: DairyWorks/Vla/Batch/Status/state
+  batch_id_topic: DairyWorks/Vla/Batch/Status/batch_id
+  active_phases:
+    - DOSING
+    - COOKING
+  drivers:
+    - topic: DairyWorks/Vla/Receiving/receiving-tank-01/Status/fat_setpoint_pct
+      target: physics.target_fat_pct
+      unit: "%"
+    - topic: DairyWorks/Vla/Mixing/process-tank-01/Status/level_L
+      target: physics.throughput_ref_L
+      unit: L
+  fallback:
+    mode: free
+    after_silence_s: 90
+    announce_topic: DairyWorks/Vla-B/DataQuality/follow-01/Status/separator-01_mode
+
+physics:
+  cip_cycle_limit: 6
+  design_speed: 120.0
+  nominal_current_a: 48.0
+  target_fat_pct: 3.5
+  throughput_ref_L: 5000.0
+
+faults:
+  - f1
+  - f12
+  - f8
+
+# 30 slots. Elke regel: canonieke naam, wat de leverancier ervan maakt,
+# en hoe hij hem verminkt. De sim past dit VOORWAARTS toe; de conditioner
+# draait het terug. Die round-trip is de belangrijkste offline test.
+signals:
+  - slot: 1
+    group: A
+    name: StateCurrent
+    display_name: PackML-toestand
+    native_name: Machine.State.StateCurrent
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.value
+    eu_min: 1
+    eu_max: 17
+    native_datatype: Int32
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 2
+    group: A
+    name: StateCurrentStr
+    display_name: Toestand (tekst)
+    native_name: Machine.State.StateCurrentStr
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.name
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 3
+    group: A
+    name: UnitMode
+    display_name: Bedrijfsmodus
+    native_name: Machine.State.UnitMode
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.unit_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 4
+    group: A
+    name: MachSpeed
+    display_name: Ontwerpsnelheid
+    native_name: Machine.State.MachSpeed
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: onchange
+    source: state_machine.mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 5
+    group: A
+    name: CurMachSpeed
+    display_name: Actuele snelheid
+    native_name: Machine.State.CurMachSpeed
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: state_machine.cur_mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 6
+    group: B
+    name: rpm
+    display_name: Toerental
+    native_name: Machine.Process.Rpm
+    canonical_unit: rpm
+    native_unit: rpm
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.RPM
+    eu_min: 0
+    eu_max: 6500
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 7
+    group: B
+    name: fat_pct
+    display_name: Restvet
+    native_name: Machine.Process.FatPct
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.fat_pct
+    eu_min: 0
+    eu_max: 10
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 8
+    group: B
+    name: feed_L_min
+    display_name: Voeding
+    native_name: Machine.Process.FeedLMin
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.feed_L_min
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 9
+    group: B
+    name: cream_L_min
+    display_name: Room
+    native_name: Machine.Process.CreamLMin
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.cream_L_min
+    eu_min: 0
+    eu_max: 150
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 10
+    group: B
+    name: skim_L_min
+    display_name: Ondermelk
+    native_name: Machine.Process.SkimLMin
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.skim_L_min
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 11
+    group: B
+    name: bowl_dp_bar
+    display_name: Drukval trommel
+    native_name: Machine.Process.BowlDpBar
+    canonical_unit: bar
+    native_unit: bar
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.bowl_dp_bar
+    eu_min: 0
+    eu_max: 5
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 12
+    group: B
+    name: discharge_count
+    display_name: Zelflossingen
+    native_name: Machine.Process.DischargeCount
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: normal
+    source: physics.discharge_count
+    eu_min: 0
+    eu_max: 100000
+    native_datatype: Int32
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 13
+    group: B
+    name: solids_pct
+    display_name: Droge stof
+    native_name: Machine.Process.SolidsPct
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.solids_pct
+    eu_min: 0
+    eu_max: 20
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 14
+    group: C
+    name: sp_primary
+    display_name: Vet-setpoint
+    native_name: Machine.Setpoint.SpPrimary
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.target_fat_pct
+    eu_min: 0
+    eu_max: 10
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 15
+    group: C
+    name: sp_secondary
+    display_name: Doorzet-referentie
+    native_name: Machine.Setpoint.SpSecondary
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.throughput_ref_L
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 16
+    group: C
+    name: sp_speed_pct
+    display_name: Snelheids-setpoint
+    native_name: Machine.Setpoint.SpSpeedPct
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: state_machine.speed_setpoint_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 17
+    group: C
+    name: sp_product_mode
+    display_name: Productmodus
+    native_name: Machine.Setpoint.SpProductMode
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: true
+    sampling_class: onchange
+    source: physics.product_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 18
+    group: D
+    name: valve_pos_pct
+    display_name: Klepstand
+    native_name: Machine.Actuator.ValvePosPct
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.valve_pos_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 19
+    group: D
+    name: drive_out_pct
+    display_name: Aandrijfsturing
+    native_name: Machine.Actuator.DriveOutPct
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.drive_out_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 20
+    group: E
+    name: units_total
+    display_name: Eenheden totaal
+    native_name: Machine.Counter.UnitsTotal
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.units_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 21
+    group: E
+    name: reject_total
+    display_name: Afkeur totaal
+    native_name: Machine.Counter.RejectTotal
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.reject_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 22
+    group: E
+    name: mass_total_kg
+    display_name: Massa totaal
+    native_name: Machine.Counter.MassTotalKg
+    canonical_unit: kg
+    native_unit: kg
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.mass_total_kg
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 23
+    group: E
+    name: runtime_hours
+    display_name: Draaiuren
+    native_name: Machine.Counter.RuntimeHours
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.runtime_hours
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 24
+    group: F
+    name: motor_current_A
+    display_name: Motorstroom
+    native_name: Machine.Diagnostics.MotorCurrentA
+    canonical_unit: A
+    native_unit: A
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.motor_current_a
+    eu_min: 0
+    eu_max: 80
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 25
+    group: F
+    name: vibration_mm_s
+    display_name: Trilling
+    native_name: Machine.Diagnostics.VibrationMmS
+    canonical_unit: mm/s
+    native_unit: mm/s
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.vibration_mm_s
+    eu_min: 0
+    eu_max: 11.2
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 26
+    group: F
+    name: bearing_temp_C
+    display_name: Lagertemperatuur
+    native_name: Machine.Diagnostics.BearingTempC
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.bearing_temp_c
+    eu_min: 0
+    eu_max: 95
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 27
+    group: F
+    name: energy_kWh
+    display_name: Energie cumulatief
+    native_name: Machine.Diagnostics.EnergyKWh
+    canonical_unit: kWh
+    native_unit: kWh
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.energy_kwh
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 28
+    group: F
+    name: cycles_since_cip
+    display_name: Cycli sinds CIP
+    native_name: Machine.Diagnostics.CyclesSinceCip
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: slow
+    source: health.cycles_since_cip
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 29
+    group: F
+    name: hours_since_service
+    display_name: Uren sinds onderhoud
+    native_name: Machine.Diagnostics.HoursSinceService
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.hours_since_service
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Double
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source
+  - slot: 30
+    group: G
+    name: alarm_word
+    display_name: Alarmwoord
+    native_name: Machine.Alarm.AlarmWord
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: health.alarm_word
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: UInt32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: opcua-statuscode
+      quality_encoding:
+        0: GOOD
+        1073741824: UNCERTAIN
+        2147483648: BAD
+      timestamp_source: opcua-source

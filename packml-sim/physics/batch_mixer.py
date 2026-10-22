@@ -32,6 +32,17 @@ _PHASE_REST = "rest"
 _PHASE_DISCHARGE = "discharge"
 _PHASE_IDLE = "idle"
 
+#: Fase als getal, voor het park. Een Modbus-register kan geen tekst dragen,
+#: dus vendor-c krijgt een code. De volgorde is de procesvolgorde; hem
+#: hernummeren breekt elk dashboard dat op het getal filtert.
+_PHASE_CODE = {
+    _PHASE_IDLE: 0,
+    _PHASE_LOAD: 1,
+    _PHASE_MIX: 2,
+    _PHASE_REST: 3,
+    _PHASE_DISCHARGE: 4,
+}
+
 _PHASE_DURATION = {
     _PHASE_LOAD: 15.0,
     _PHASE_MIX: 480.0,  # 8 min
@@ -42,6 +53,12 @@ _PHASE_DURATION = {
 
 @PhysicsRegistry.register("batch-mixer")
 class BatchMixer(PhysicsBase):
+    #: Wat deze module echt implementeert; gen-park.py leest dit uit.
+    FAULTS = {
+        "f8": "aankoeken en verstopte doseerklep, uitdoseren en lossen lopen terug",
+        "f13": "motorslip, het roerwerk haalt zijn toerental niet",
+    }
+
     def __init__(self, config, state_machine, fault_injector):
         super().__init__(config, state_machine, fault_injector)
 
@@ -58,6 +75,22 @@ class BatchMixer(PhysicsBase):
         self.batch_id = 0
         self.batch_counter = 0
 
+        # Zuivel-doseerkant voor lijn Vla-B. Deze module is van huis uit een
+        # bakkerij-deegmenger; voor het park is hij de mengtank waarin melk,
+        # suiker, zetmeel en cacao worden gedoseerd. Achter een vlag, want het
+        # bakkerij-scenario mag hier niets van merken.
+        self.extended_pvs = bool(config.get("extended_pvs", False))
+        self.recipe_kg = dict(config.get("recipe_kg") or {
+            "milk": 4854.0, "sugar": 700.0, "starch": 250.0, "cocoa": 46.0})
+        self.dose_milk_kg = 0.0
+        self.dose_sugar_kg = 0.0
+        self.dose_starch_kg = 0.0
+        self.dose_cocoa_kg = 0.0
+        self.level_L = 0.0
+        self.agitator_rpm = 0.0
+        self.product_density_kg_L = float(config.get("product_density_kg_L", 1.04))
+        self.throughput_ref_L = float(config.get("throughput_ref_L", 5000.0))
+
     def step(self, dt):
         sm = self.sm
         if sm.state == PackMLState.IDLE and self.phase != _PHASE_IDLE:
@@ -73,6 +106,9 @@ class BatchMixer(PhysicsBase):
         elif sm.state in (PackMLState.ABORTED, PackMLState.STOPPED):
             self._reset_to_idle()
             self.load_kg = max(0.0, self.load_kg - 30.0 * dt)  # dump
+
+        if self.extended_pvs:
+            self._step_extended(dt)
 
     # ----------------------------------------------------------------- phasing
 
@@ -128,7 +164,7 @@ class BatchMixer(PhysicsBase):
     # ------------------------------------------------------------------- read
 
     def read(self):
-        return {
+        base = {
             "recipe-id": self.recipe_id,
             "batch-id": self.batch_id,
             "batch-counter": self.batch_counter,
@@ -137,6 +173,54 @@ class BatchMixer(PhysicsBase):
             "power": round(self.power_kw, 2),
             "phase": self.phase,
         }
+        if not self.extended_pvs:
+            return base
+        base.update({
+            "level_L": round(self.level_L, 1),
+            "temp_C": round(self.dough_temp_c, 2),
+            "agitator_rpm": round(self.agitator_rpm, 1),
+            "dose_milk_kg": round(self.dose_milk_kg, 1),
+            "dose_sugar_kg": round(self.dose_sugar_kg, 1),
+            "dose_starch_kg": round(self.dose_starch_kg, 2),
+            "dose_cocoa_kg": round(self.dose_cocoa_kg, 2),
+            "phase_code": _PHASE_CODE.get(self.phase, 0),
+        })
+        return base
+
+    def _step_extended(self, dt):
+        """Doseren en mengen, alleen voor lijn Vla-B.
+
+        De doseringen lopen mee met de LOAD-fase van de bestaande fasemachine,
+        zodat er niet twee onafhankelijke tijdlijnen ontstaan. Het niveau volgt
+        uit de gedoseerde massa gedeeld door de dichtheid; als je dat los
+        modelleert, klopt de massabalans niet en is dat het eerste wat opvalt.
+        """
+        sm = self.sm
+        total_kg = sum(self.recipe_kg.values())
+
+        if sm.is_running():
+            # De LOAD-fase doseert; daarna blijft de inhoud staan. Fasen zijn
+            # STRINGS in deze module, geen nummers; vergelijken tegen een getal
+            # levert een doseerkant op die nooit aangaat en niets meldt.
+            if self.phase == _PHASE_LOAD:
+                frac = min(1.0, self.phase_elapsed_s
+                           / max(_PHASE_DURATION[_PHASE_LOAD], 0.1))
+                f_dose = self.faults.magnitude("f8") if self.faults.is_active("f8") else 0.0
+                # Verstopte doseerklep levert te weinig. Dat is precies de
+                # dose_off-storing van de monoliet, hier mechanisch gemodelleerd.
+                self.dose_milk_kg = self.recipe_kg["milk"] * frac * (1.0 - 0.25 * f_dose)
+                self.dose_sugar_kg = self.recipe_kg["sugar"] * frac
+                self.dose_starch_kg = self.recipe_kg["starch"] * frac * (1.0 - 0.4 * f_dose)
+                self.dose_cocoa_kg = self.recipe_kg["cocoa"] * frac
+            dosed = (self.dose_milk_kg + self.dose_sugar_kg
+                     + self.dose_starch_kg + self.dose_cocoa_kg)
+            self.level_L = dosed / max(self.product_density_kg_L, 0.1)
+            f13 = self.faults.magnitude("f13") if self.faults.is_active("f13") else 0.0
+            want_rpm = (sm.cur_mach_speed * 0.9) * (1.0 - 0.5 * f13)
+            self.agitator_rpm += (want_rpm - self.agitator_rpm) * min(1.0 * dt, 1.0)
+        else:
+            self.agitator_rpm = max(0.0, self.agitator_rpm - 40.0 * dt)
+            self.level_L = max(0.0, self.level_L - (total_kg / 30.0) * dt)
 
     def on_command(self, cmd, payload):
         if cmd == "Recipe":

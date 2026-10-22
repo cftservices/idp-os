@@ -1,0 +1,622 @@
+# GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN
+#
+# Lijn Vla-B: het machinepark. Overlay op docker-compose.slim.yml, NAAST
+# docker-compose.vla.yml. De monoliet blijft ongemoeid draaien.
+#
+# Alles zit achter compose-profielen:
+#   park-slim   een machine per leveranciersprofiel, de staande configuratie
+#   park        het volledige park, omhoog voor een live demo
+# Zonder --profile start er niets van dit bestand. Dat is de belangrijkste
+# regressiebeveiliging: geen vlag, geen verandering.
+#
+# Geheugen- en CPU-limieten staan op ELKE machine. De VPS is 2 vCPU en
+# 8 GB en draait de monoliet al; een doorgeslagen sim mag de broker niet
+# kunnen uithongeren. Zie het VPS-hoofdstuk van het plan voor het budget.
+
+services:
+
+  # intake-silo-01 | vendor-a | opc-da
+  vla-intake-silo-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-intake-silo-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/intake-silo-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 192m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # separator-01 | vendor-b | opc-ua
+  vla-separator-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-separator-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/separator-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 192m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # homogeniser-01 | vendor-b | opc-ua
+  vla-homogeniser-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-homogeniser-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/homogeniser-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 192m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # blend-tank-01 | vendor-c | modbus-tcp
+  vla-blend-tank-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-blend-tank-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/blend-tank-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # pasteuriser-01 | vendor-a | opc-da
+  vla-pasteuriser-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-pasteuriser-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/pasteuriser-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 192m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # preheater-01 | vendor-c | modbus-tcp
+  vla-preheater-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-preheater-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/preheater-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # plate-cooler-01 | vendor-c | mqtt
+  vla-plate-cooler-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-plate-cooler-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/plate-cooler-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # filler-01 | vendor-d | mqtt
+  vla-filler-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-filler-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/filler-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # bottle-filler-01 | vendor-d | rest
+  vla-bottle-filler-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-bottle-filler-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/bottle-filler-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+      TD_BYPASS_USER: ${TD_USER:-root}
+      TD_BYPASS_PASSWORD: ${TD_PASS:-taosdata}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # case-packer-01 | vendor-e | sql
+  vla-case-packer-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-case-packer-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/case-packer-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # palletiser-01 | vendor-e | sql
+  vla-palletiser-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-palletiser-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/palletiser-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 96m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # cip-skid-01 | vendor-a | opc-ua
+  vla-cip-skid-01:
+    build:
+      context: ./packml-sim
+      dockerfile: Dockerfile
+    image: techflow/packml-sim:latest
+    container_name: vla-cip-skid-01
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["python", "park_runner.py"]
+    environment:
+      UNIT_CONFIG: /units/cip-skid-01.yaml
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+    volumes:
+      - ./scenarios/vla-batch/park-sim/units:/units:ro
+    mem_limit: 192m
+    cpus: 0.15
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # Modbus TCP en REST kennen geen push, dus iemand moet ze POLLEN.
+  # Bij die protocollen is de frequentie een keuze van de datalaag en
+  # niet van de machine, en het tijdstempel is per definitie
+  # aankomsttijd. Dat staat in de conditioning-regel en wordt niet
+  # verzwegen. Machines: blend-tank-01, preheater-01, bottle-filler-01
+  vla-park-poller:
+    build:
+      context: ./scenarios/vla-batch/park-poller
+      dockerfile: Dockerfile
+    image: techflow/vla-park-poller:latest
+    container_name: vla-park-poller
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MODEL_DIR: /model
+      RAW_ROOT: raw/vla-park
+      MODBUS_PORT: "5020"
+      POLL_INTERVAL_S: "1.0"
+      MODBUS_HOST_BLEND_TANK_01: vla-blend-tank-01
+      MODBUS_HOST_PREHEATER_01: vla-preheater-01
+      REST_URL_BOTTLE_FILLER_01: http://vla-bottle-filler-01:8000
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 128m
+    cpus: 0.20
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # De silo zonder technisch excuus. Twee machines loggen naar een
+  # Postgres-tabel; niemand heeft hem ooit aangesloten. Geen protocolgat,
+  # geen verouderd apparaat: gewoon een database die niemand leest.
+  #
+  # Postgres en GEEN SQL Server: die eist ~2 GB als ondergrens en die
+  # hebben we niet naast de rest op een 8 GB VPS. Het punt van dit
+  # eiland is niet het merk van de database.
+  vla-park-db:
+    image: postgres:16-alpine
+    container_name: vla-park-db
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      POSTGRES_DB: vendor_e
+      POSTGRES_USER: vendor_e
+      POSTGRES_PASSWORD: ${PARK_DB_PASSWORD:-vendor_e}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - park-db-data:/var/lib/postgresql/data
+    mem_limit: 192m
+    cpus: 0.20
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vendor_e -d vendor_e"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - idp-network
+    profiles: ["park"]
+
+  vla-park-gateway:
+    build:
+      context: ./scenarios/vla-batch/park-gateway
+      dockerfile: Dockerfile
+    image: techflow/vla-park-gateway:latest
+    container_name: vla-park-gateway
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MODEL_DIR: /model
+      RAW_ROOT: raw/vla-park
+      PG_HOST: vla-park-db
+      PG_DB: vendor_e
+      PG_USER: vendor_e
+      PG_PASSWORD: ${PARK_DB_PASSWORD:-vendor_e}
+      POLL_INTERVAL_S: "2.0"
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 128m
+    cpus: 0.20
+    networks:
+      - idp-network
+    depends_on:
+      vla-park-db:
+        condition: service_healthy
+      monstermq:
+        condition: service_healthy
+    profiles: ["park"]
+
+  # Registreert alleen de OPC-UA- en OPC-DA-machines bij MonsterMQ.
+  # Modbus, MQTT, REST en SQL lopen buiten de broker om.
+  vla-park-init:
+    image: curlimages/curl:latest
+    container_name: vla-park-init
+    restart: "no"
+    entrypoint: ["sh", "/init/init-park.sh"]
+    volumes:
+      - ./scenarios/vla-batch/monstermq-init:/init:ro
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # Connect -> Condition -> Model. Protocol-agnostisch: hij weet niet via
+  # welk protocol een waarde binnenkwam, en dat hoort ook zo.
+  vla-park-conditioner:
+    build:
+      context: ./scenarios/vla-batch/park-conditioner
+      dockerfile: Dockerfile
+    image: techflow/vla-park-conditioner:latest
+    container_name: vla-park-conditioner
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      MODEL_DIR: /model
+      CANONICAL_ROOT: DairyWorks/Vla-B
+      RAW_ROOT: raw/vla-park
+      HTTP_PORT: "8080"
+      TZ: Europe/Amsterdam
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 256m
+    cpus: 0.30
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # Storingsscenario's die vanzelf lopen, op BATCHOVERGANGEN en niet op een
+  # wandklok: een scenario dat op minuten tikt loopt uit de pas met een
+  # fabriek die je hebt versneld of stilgezet. De cursor staat in Mongo,
+  # zodat een herstart hervat in plaats van de curve opnieuw op te bouwen.
+  vla-park-scenario:
+    build:
+      context: ./scenarios/vla-batch/park-scenario
+      dockerfile: Dockerfile
+    image: techflow/vla-park-scenario:latest
+    container_name: vla-park-scenario
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      SCENARIO_DIR: /scenarios
+      BATCH_ENGINE_URL: http://vla-batch-engine:8000
+      MONGO_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      MONGO_DB: ${MONGO_DB:-idp}
+    volumes:
+      - ./scenarios/vla-batch/park-scenario/scenarios:/scenarios:ro
+    mem_limit: 128m
+    cpus: 0.10
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+  # Eigen database idp_park met KEEP 90d. Zonder retentie loopt 100 GB in
+  # ongeveer achttien maanden vol, en dat legt de demo op een zondag om.
+  vla-park-tdengine-bridge:
+    build:
+      context: ./tdengine-poc
+      dockerfile: Dockerfile
+    image: techflow/vla-tdengine-bridge:latest
+    container_name: vla-park-tdengine-bridge
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      # ALLEEN de canonieke UNS. raw/vla-park/# staat hier met opzet NIET:
+      # ongemodelleerde data wordt niet opgeslagen.
+      MQTT_TOPICS: "DairyWorks/Vla-B/#"
+      TD_URL: "http://vla-tdengine:6041"
+      TD_DB: ${TD_PARK_DB:-idp_park}
+      # Losse tags site/line/area/machine/tagname, zodat je PER MACHINE
+      # kunt queryen zonder LIKE op de topic-string:
+      #   select last(value) from idp_park.telemetry
+      #    where machine = 'pasteuriser-01' group by tagname;
+      # De bridge van de MONOLIET blijft op legacy: de tag-set bepaalt de
+      # sub-tabel-structuur van een bestaande super-tabel, en de Grafana-
+      # dashboards hangen daaraan. Vandaar een eigen database idp_park.
+      TAG_SCHEME: uns
+      TD_USER: ${TD_USER:-root}
+      TD_PASS: ${TD_PASS:-taosdata}
+      FLUSH_SECONDS: "1.0"
+      FLUSH_LINES: "200"
+    mem_limit: 128m
+    cpus: 0.20
+    networks:
+      - idp-network
+    depends_on:
+      vla-tdengine:
+        condition: service_healthy
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
+volumes:
+  park-db-data:
+    name: vla-park-db-data
+
+networks:
+  idp-network:
+    name: idp-network
+    external: true

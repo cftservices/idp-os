@@ -25,6 +25,15 @@ from .base import PhysicsBase, PhysicsRegistry
 
 @PhysicsRegistry.register("storage-tank")
 class StorageTank(PhysicsBase):
+    #: Wat deze module ECHT implementeert; gen-park.py leest dit uit
+    #: voor park-faults.json, zodat de catalogus geen storing kan
+    #: claimen die de fysica niet kent.
+    FAULTS = {
+        "f1": "sensorbias, het niveau leest te hoog",
+        "f2": "niveaudrift, de meting loopt langzaam weg",
+        "f8": "verstopte uitlaat, de tank loopt niet leeg",
+    }
+
     def __init__(self, config, state_machine, fault_injector):
         super().__init__(config, state_machine, fault_injector)
 
@@ -34,6 +43,20 @@ class StorageTank(PhysicsBase):
         self.target_temp_c = float(config.get("target_temp_c", 4.5))
         self.ambient_temp_c = float(config.get("ambient_temp_c", 18.0))
         self.temp_c = self.target_temp_c
+
+        # Uitgebreide procesvariabelen voor lijn Vla-B. Achter een
+        # vlag: zonder vlag publiceert deze module byte-voor-byte wat
+        # de bestaande scenario's al jaren zien, en dat wordt
+        # gearchiveerd. selftest_regression.py bewaakt dat.
+        # _inflow/_draw werden pas in step() gezet, dus read() vlak na de
+        # constructor gooide een AttributeError. Een echte unit is direct
+        # leesbaar; dit was een latente bug, geen testvolgorde-probleem.
+        self._inflow = 0.0
+        self._draw = 0.0
+        self.extended_pvs = bool(config.get("extended_pvs", False))
+        self.ullage_L = 0.0
+        self.density_kg_L = 1.031
+        self.agitation_on = 0.0
 
     def step(self, dt):
         sm = self.sm
@@ -58,14 +81,41 @@ class StorageTank(PhysicsBase):
         self._inflow = inflow
         self._draw = draw
 
+        if self.extended_pvs:
+            self._step_extended(dt)
+
+    def _step_extended(self, dt):
+        """Ullage, dichtheid en roerwerk, alleen voor lijn Vla-B.
+
+        Ullage is de vrije ruimte boven het product. Het is geen tweede meting
+        maar een AFGELEIDE van capaciteit min niveau; hem los simuleren zou een
+        tank opleveren waar de twee getallen niet bij elkaar optellen, en dat
+        is het eerste wat een procestechnoloog narekent.
+        """
+        import random as _r
+        cap = float(self.capacity_l)
+        self.ullage_L = max(0.0, cap - self.level_l)
+        # Dichtheid loopt licht met de temperatuur; melk is ~1,031 bij 4 graden.
+        self.density_kg_L = 1.033 - 0.0004 * max(self.temp_c - 4.0, 0.0)
+        self.density_kg_L += _r.gauss(0, 0.0002)
+        self.agitation_on = 100.0 if self.sm.is_running() else 0.0
+
     def read(self):
         level = self.level_l
         if self.faults.is_active("f1"):
             level += 500.0 * self.faults.magnitude("f1")
-        return {
+        base = {
             "level_L": round(level, 1),
             "level_pct": round(100.0 * level / self.capacity_l, 2),
             "in_temp_C": round(self.temp_c, 2),
             "flow_L_min": round(self._inflow, 1),
             "draw_L_min": round(self._draw, 1),
         }
+        if not self.extended_pvs:
+            return base
+        base.update({
+            "ullage_L": round(self.ullage_L, 1),
+            "density_kg_L": round(self.density_kg_L, 4),
+            "agitation_on": round(self.agitation_on, 1),
+        })
+        return base

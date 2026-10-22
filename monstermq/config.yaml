@@ -36,9 +36,38 @@ Archive:
     # DairyWorks — Milk Production Demo (generic anonymized batch-dairy).
     # packml-sim units publish DairyWorks/Plant/<Area>/<Unit>/Status/* directly
     # to MonsterMQ; the mes-engine adds Order/HU/Sample/OEE events on the same tree.
+    #
+    # ⚠ Was "DairyWorks/#", is nu "DairyWorks/Plant/#". Twee redenen, allebei
+    # concreet:
+    #   1. Het filter was breder dan zijn eigen doel. De enige consument is
+    #      fastapi/main.py (scenario "dairyworks") en die leest de Plant-boom.
+    #      Met "DairyWorks/#" werd de Vla-lijn DUBBEL gearchiveerd, want die
+    #      valt ook al onder dw_uns_archive hieronder. Halveert die schrijflast.
+    #   2. "DairyWorks/#" matcht ook "DairyWorks/Vla-B/#", het machinepark. Dat
+    #      zou bij twaalf machines ~4,3 miljoen documenten per dag opleveren,
+    #      ruwweg 1,1 GB per dag, en 100 GB disk in een maand opeten. Het park
+    #      heeft TDengine als historian; Mongo bewaart alleen wat een
+    #      batchrapport nodig heeft (zie dw_park_critical).
+    #
+    # ✅ GEMETEN op 2026-08-09 op de VPS, en de uitkomst was NIET wat hierboven
+    #    stond. Er werd NIETS dubbel gearchiveerd: `dairyworks_data` bestond
+    #    daar helemaal niet als actieve groep. De collectie
+    #    `idp.dairyworks_dataarchive` had nul documenten.
+    #
+    #    Reden: MonsterMQ bewaart zijn archive-config in MongoDB (collectie
+    #    `idp.archiveconfigs`) en leest dit YAML-bestand alleen bij een lege
+    #    installatie. Op de VPS stonden er maar TWEE groepen in: `Default`
+    #    (uit, sinds 2026-07-03) en `dw_uns_archive` (aan, sinds 2026-07-22).
+    #    De vier groepen hieronder horen bij scenario's die daar niet draaien:
+    #    geen bakkerij- of DairyPlant-containers, en nul verkeer op
+    #    bakery-works-utrecht/#, DairyPlant/#, idp/# en DairyWorks/Plant/#.
+    #
+    #    De versmalling blijft staan, want voor een VERSE installatie vanuit
+    #    deze repo is dit bestand wel leidend en is `DairyWorks/#` daar te
+    #    breed. Maar verwacht er op de VPS geen effect van.
     - Name: dairyworks_data
       Topics:
-        - "DairyWorks/#"
+        - "DairyWorks/Plant/#"
       Enabled: true
       RetentionDays: 30
     # Vla Batch v2 demo — generic anonymized batch-dairy line 'Vla'.
@@ -50,3 +79,41 @@ Archive:
         - "DairyWorks/Vla/#"
       Enabled: true
       RetentionDays: 30
+    # Lijn Vla-B, het machinepark. NIET de hele UNS: alleen wat een batchrapport
+    # of een auditvraag echt nodig heeft. De historian van het park is TDengine
+    # (database idp_park, KEEP 90d); Mongo bewaart bewijs, geen tijdreeksen.
+    # Kies je store per doel; dat is hier een ontwerpbeslissing en geen zuinigheid.
+    #
+    # ⚠ Deze groep wordt op een DRAAIENDE broker aangemaakt via GraphQL door
+    #   monstermq-init/init-park.sh, niet vanuit dit bestand. Zie de uitleg bij
+    #   dairyworks_data hierboven: MonsterMQ leest deze YAML alleen bij een lege
+    #   installatie. Hij staat hier omdat een verse installatie hem wel gebruikt
+    #   en omdat de topiclijst hier leesbaar hoort te zijn, maar hem alleen hier
+    #   zetten zou op de VPS niets doen.
+    # BEGIN GENERATED park-critical (tools/gen-park.py)
+    - Name: dw_park_critical
+      Topics:
+        - "DairyWorks/Vla-B/Receiving/intake-silo-01/Status/level_L"
+        - "DairyWorks/Vla-B/Standardisation/separator-01/Status/fat_pct"
+        - "DairyWorks/Vla-B/Standardisation/homogeniser-01/Status/stage1_bar"
+        - "DairyWorks/Vla-B/Mixing/blend-tank-01/Status/dose_milk_kg"
+        - "DairyWorks/Vla-B/Cook/pasteuriser-01/Status/hold_temp_C"
+        - "DairyWorks/Vla-B/Cook/preheater-01/Status/temp_out_C"
+        - "DairyWorks/Vla-B/Cooling/plate-cooler-01/Status/prod_out_C"
+        - "DairyWorks/Vla-B/Filling/filler-01/Status/quality_pct"
+        - "DairyWorks/Vla-B/Filling/bottle-filler-01/Status/quality_pct"
+        - "DairyWorks/Vla-B/Packaging/case-packer-01/Status/output_rate_ph"
+        - "DairyWorks/Vla-B/Packaging/palletiser-01/Status/packs_on_pallet"
+        - "DairyWorks/Vla-B/Utilities/cip-skid-01/Status/return_cond_mS"
+      Enabled: true
+      RetentionDays: 14
+    # END GENERATED park-critical
+    # De rommella, met opzet UIT. Zet hem negentig seconden aan om te laten zien
+    # hoe een lake zonder model eruitziet: duizenden reeksen met namen als
+    # Ch1.Dev1.TT_2049_PV, zonder eenheid, zonder kwaliteit, zonder verband.
+    # Kost niets zolang hij uit staat. Laat hem UIT staan.
+    - Name: dw_raw_swamp
+      Topics:
+        - "raw/vla-park/#"
+      Enabled: false
+      RetentionDays: 1

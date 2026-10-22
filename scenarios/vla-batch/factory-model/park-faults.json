@@ -1,0 +1,112 @@
+{
+  "_generated_by": "GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN",
+  "_note": "Per machine de storingen die de fysica ECHT implementeert. packml-sim/selftest_park.py vergelijkt dit met het FAULTS-attribuut op de physics-klasse, zodat de catalogus geen storing kan claimen die niet bestaat.",
+  "machines": {
+    "intake-silo-01": {
+      "physics_type": "storage-tank",
+      "vendor": "vendor-a",
+      "faults": [
+        "f1",
+        "f2",
+        "f8"
+      ]
+    },
+    "separator-01": {
+      "physics_type": "separator",
+      "vendor": "vendor-b",
+      "faults": [
+        "f1",
+        "f12",
+        "f8"
+      ]
+    },
+    "homogeniser-01": {
+      "physics_type": "homogenizer",
+      "vendor": "vendor-b",
+      "faults": [
+        "f8",
+        "f12",
+        "f13"
+      ]
+    },
+    "blend-tank-01": {
+      "physics_type": "batch-mixer",
+      "vendor": "vendor-c",
+      "faults": [
+        "f8",
+        "f13"
+      ]
+    },
+    "pasteuriser-01": {
+      "physics_type": "pasteurizer",
+      "vendor": "vendor-a",
+      "faults": [
+        "f1",
+        "f8",
+        "f12"
+      ]
+    },
+    "preheater-01": {
+      "physics_type": "preheater",
+      "vendor": "vendor-c",
+      "faults": [
+        "f1",
+        "f8",
+        "f12"
+      ]
+    },
+    "plate-cooler-01": {
+      "physics_type": "plate-cooler",
+      "vendor": "vendor-c",
+      "faults": [
+        "f1",
+        "f8",
+        "f12"
+      ]
+    },
+    "filler-01": {
+      "physics_type": "fill-line",
+      "vendor": "vendor-d",
+      "faults": [
+        "f8",
+        "f12",
+        "f13"
+      ]
+    },
+    "bottle-filler-01": {
+      "physics_type": "bottler",
+      "vendor": "vendor-d",
+      "faults": [
+        "f8",
+        "f12",
+        "f13"
+      ]
+    },
+    "case-packer-01": {
+      "physics_type": "packaging-line",
+      "vendor": "vendor-e",
+      "faults": [
+        "f8",
+        "f12",
+        "f13"
+      ]
+    },
+    "palletiser-01": {
+      "physics_type": "palletizer",
+      "vendor": "vendor-e",
+      "faults": [
+        "f8",
+        "f13"
+      ]
+    },
+    "cip-skid-01": {
+      "physics_type": "cip-station",
+      "vendor": "vendor-a",
+      "faults": [
+        "f1",
+        "f8",
+        "f12"
+      ]
+    }
+  }
+}

@@ -45,6 +45,12 @@ TD_USER = os.getenv("TD_USER", "root")
 TD_PASS = os.getenv("TD_PASS", "taosdata")
 TD_AUTH = (TD_USER, TD_PASS)
 
+# legacy = topic+src (bestaand gedrag, NIET wijzigen voor draaiende bridges).
+# uns    = site/line/area/machine/tagname als losse tags, zodat je per machine
+#          kunt queryen. Alleen voor nieuwe databases; een bestaande
+#          super-tabel kun je niet zomaar van tag-set wisselen.
+TAG_SCHEME = os.getenv("TAG_SCHEME", "legacy").strip().lower()
+
 FLUSH_SECONDS = float(os.getenv("FLUSH_SECONDS", "1.0"))
 FLUSH_LINES = int(os.getenv("FLUSH_LINES", "200"))
 
@@ -103,15 +109,55 @@ def _coerce_field(payload: str) -> str:
     return f'valuestr="{_escape_str_field(p)}"'
 
 
+def _uns_tags(topic: str) -> str:
+    """UNS-topic -> losse, indexeerbare tags.
+
+    DairyWorks/Vla-B/Cook/pasteuriser-01/Status/temp_out_C
+      -> site=DairyWorks, line=Vla-B, area=Cook,
+         machine=pasteuriser-01, tagname=temp_out_C
+
+    Zonder deze tags kun je in TDengine alleen per machine filteren met een LIKE
+    op de volledige topic-string. Dat werkt wel, maar het is traag en het maakt
+    elke query afhankelijk van de exacte topic-opbouw. Met losse tags is het:
+
+        select last(value) from idp_park.telemetry
+         where machine = 'pasteuriser-01' group by tagname;
+
+    TDengine indexeert tags, dus dit is de goedkope weg. Kwaliteit staat er MET
+    OPZET niet bij: tags bepalen de sub-tabel, dus een tag die per bericht kan
+    wisselen zou bij elke kwaliteitswissel een nieuwe sub-tabel aanmaken.
+    """
+    parts = topic.split("/")
+    site = parts[0] if len(parts) > 0 else ""
+    line = parts[1] if len(parts) > 1 else ""
+    area = parts[2] if len(parts) > 2 else ""
+    machine = parts[3] if len(parts) > 3 else ""
+    tagname = parts[-1] if len(parts) > 4 else ""
+    return (f"site={_escape_tag(site)},line={_escape_tag(line)},"
+            f"area={_escape_tag(area)},machine={_escape_tag(machine)},"
+            f"tagname={_escape_tag(tagname)}")
+
+
 def to_line(topic: str, payload: str, ts_ms: int) -> str:
     """Bouw 1 InfluxDB-line-protocol regel.
 
     super-table = telemetry
-    tags        = topic (volledig) + src (eerste segment)  -> sub-table per topic
     field       = value (double) of valuestr (string)
+
+    Twee tag-schema's, via TAG_SCHEME:
+
+      legacy  topic (volledig) + src (eerste segment). De STANDAARD, en wat de
+              bestaande bridges van de monoliet en de bakkerij gebruiken. Niet
+              wijzigen: de tag-set bepaalt de sub-tabel-structuur van een
+              bestaande super-tabel, en de Grafana-dashboards hangen eraan.
+      uns     site/line/area/machine/tagname als losse tags, zodat je per
+              machine kunt queryen zonder LIKE. Voor lijn Vla-B.
     """
-    src = topic.split("/", 1)[0]
-    tags = f"topic={_escape_tag(topic)},src={_escape_tag(src)}"
+    if TAG_SCHEME == "uns":
+        tags = _uns_tags(topic) + f",topic={_escape_tag(topic)}"
+    else:
+        src = topic.split("/", 1)[0]
+        tags = f"topic={_escape_tag(topic)},src={_escape_tag(src)}"
     field = _coerce_field(payload)
     return f"telemetry,{tags} {field} {ts_ms}"
 

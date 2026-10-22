@@ -7,7 +7,7 @@ with the same minimal API is used so demos and tests run fully offline.
 Domain collections (§05-Backend §3):
   dw_batches, dw_recipes, dw_materials, dw_doses, dw_production,
   dw_samples, dw_batch_events, dw_alarms, dw_orders, dw_equipment_state,
-  dw_handling_units, dw_equipment_meta, dw_cbm_alerts
+  dw_handling_units, dw_equipment_meta, dw_cbm_alerts, dw_autopilot
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ COLLECTIONS = [
     "dw_handling_units",
     "dw_equipment_meta",
     "dw_cbm_alerts",
+    "dw_autopilot",
 ]
 
 
@@ -89,6 +90,14 @@ class _MemCollection:
         query = query or {}
         self._docs = [d for d in self._docs if not _matches(d, query)]
 
+    def delete_older_than(self, field: str, cutoff: str,
+                          query: Optional[dict] = None) -> None:
+        """Delete docs matching `query` whose ISO-string `field` < cutoff."""
+        query = query or {}
+        self._docs = [d for d in self._docs
+                      if not (_matches(d, query) and d.get(field) is not None
+                              and d[field] < cutoff)]
+
 
 class _MongoCollectionWrapper:
     """Wraps a pymongo collection, stripping _id on reads for clean JSON."""
@@ -121,6 +130,10 @@ class _MongoCollectionWrapper:
 
     def delete_many(self, query: Optional[dict] = None) -> None:
         self._coll.delete_many(query or {})
+
+    def delete_older_than(self, field: str, cutoff: str,
+                          query: Optional[dict] = None) -> None:
+        self._coll.delete_many({**(query or {}), field: {"$lt": cutoff}})
 
 
 class Database:

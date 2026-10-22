@@ -15,6 +15,7 @@ import { test, expect } from "@playwright/test";
 const SCHERMEN = [
   { pad: "/", naam: "Plant" },
   { pad: "/management", naam: "Management" },
+  { pad: "/site", naam: "3D Site" },
   { pad: "/orders", naam: "Orders" },
   { pad: "/batches", naam: "Batches" },
   { pad: "/equipment", naam: "Equipment" },
@@ -25,6 +26,7 @@ const SCHERMEN = [
   { pad: "/alarms", naam: "Alarmen" },
   { pad: "/shopfloor", naam: "Werkvloer" },
   { pad: "/scada", naam: "SCADA" },
+  { pad: "/storingen", naam: "Storingen" },
 ];
 
 test("elk scherm staat in de zijbalk en is bereikbaar vanaf de landing", async ({ page }) => {

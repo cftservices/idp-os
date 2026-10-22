@@ -59,17 +59,23 @@ class HandlingUnitManager:
 
     # ----------------------------------------------------------------- putaway
 
-    def putaway(self, hu_id: str, operator_id: Optional[str] = None) -> dict:
+    def putaway(self, hu_id: str, operator_id: Optional[str] = None,
+                slot: Optional[int] = None) -> dict:
+        """`slot` is an optional rack position (used by the demo warehouse
+        flow so a pallet keeps its place in the 3D twin)."""
         hu = self._hu_or_reject(hu_id, operator_id)
         if hu["status"] != M.HU_WRAPPED:
             self._reject(hu["batch_id"], hu_id, "wrong_status", operator_id)
-        self.db.dw_handling_units.update_one(
-            {"hu_id": hu_id},
-            {"$set": {"location": M.LOC_COLDSTORE, "status": M.HU_AWAITING,
-                      "ts": _iso()}})
-        self._event(hu["batch_id"], "putaway_booked",
-                    {"hu_id": hu_id, "location": M.LOC_COLDSTORE,
-                     "operator_id": operator_id})
+        fields = {"location": M.LOC_COLDSTORE, "status": M.HU_AWAITING,
+                  "ts": _iso()}
+        if slot is not None:
+            fields["slot"] = int(slot)
+        self.db.dw_handling_units.update_one({"hu_id": hu_id}, {"$set": fields})
+        payload = {"hu_id": hu_id, "location": M.LOC_COLDSTORE,
+                   "operator_id": operator_id}
+        if slot is not None:
+            payload["slot"] = int(slot)
+        self._event(hu["batch_id"], "putaway_booked", payload)
         return self.db.dw_handling_units.find_one({"hu_id": hu_id})
 
     # -------------------------------------------------------------------- ship

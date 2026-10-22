@@ -19,5 +19,7 @@ from . import fermenter  # noqa: F401
 from . import fill_line  # noqa: F401
 from . import palletizer  # noqa: F401
 from . import preheater  # noqa: F401
+from . import plate_cooler  # noqa: F401  (lijn Vla-B: platenkoeler,
+#   bewust geen spiral_cooler; dat is een bakkerij-bandkoeler)
 
 __all__ = ["PhysicsBase", "PhysicsRegistry"]

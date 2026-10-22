@@ -20,6 +20,10 @@ Env:
     WRITE_INTERVAL   status write cadence in seconds (default 0.5)
     TICK_INTERVAL    physics tick cadence in seconds (default 0.2)
     AUTOSTART_RECIPE if set (e.g. chocolate-vla-1L) auto-start a batch at boot
+    AUTOSTART_DELAY_S seconds a COMPLETE batch waits before the factory chains
+                     its own next batch (default 0). Gives the batch-engine
+                     autopilot room to start the next batch itself, so the MES
+                     layer owns it; the self-chain stays the safety net.
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ ENDPOINT = os.environ.get("OPCUA_ENDPOINT", "opc.tcp://0.0.0.0:4840/DairyWorks")
 WRITE_INTERVAL = float(os.environ.get("WRITE_INTERVAL", "0.5"))
 TICK_INTERVAL = float(os.environ.get("TICK_INTERVAL", "0.2"))
 AUTOSTART_RECIPE = os.environ.get("AUTOSTART_RECIPE") or None
+AUTOSTART_DELAY_S = float(os.environ.get("AUTOSTART_DELAY_S", "0"))
 
 # ISA-95 tag map (LOCK — exact browsenames + OPC-UA types) per contract §ISA-95.
 # tuple: (tag, VariantType, writable)
@@ -321,6 +326,7 @@ class VlaServer:
                 log.info("autostart recipe %s -> rc=%d", AUTOSTART_RECIPE, rc)
             last_write = 0.0
             elapsed = 0.0
+            complete_since: float | None = None
             while True:
                 self.p.tick(TICK_INTERVAL)
                 elapsed += TICK_INTERVAL
@@ -328,9 +334,16 @@ class VlaServer:
                     await self._apply_writable_setpoints()
                     await self._write_status()
                     last_write = elapsed
-                # continuous demo: chain a fresh batch when one completes
-                if AUTOSTART_RECIPE and self.p.state == "COMPLETE":
-                    self.p.start_batch(AUTOSTART_RECIPE)
+                # continuous demo: chain a fresh batch when one completes,
+                # after AUTOSTART_DELAY_S so an engine StartBatch can win.
+                if self.p.state == "COMPLETE":
+                    if complete_since is None:
+                        complete_since = elapsed
+                    if AUTOSTART_RECIPE and elapsed - complete_since >= AUTOSTART_DELAY_S:
+                        self.p.start_batch(AUTOSTART_RECIPE)
+                        complete_since = None
+                else:
+                    complete_since = None
                 await asyncio.sleep(TICK_INTERVAL)
 
 

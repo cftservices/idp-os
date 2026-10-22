@@ -12,12 +12,16 @@ Verifies:
   9. orders + scan-flow end-to-end (fase 1: gate/label/weigh/report/close)
   10. stop rule (close w/o production) + scan rejection
   11. HU flow e2e (fase 2: wrap/putaway/ship, APPROVED-gate, report traceability)
+  12. CBM alert + Dirty gate + CIP recovery (fase 3)
+  13. OEE performance-drop + EBR + periode-rapport (fase 3)
+  14. gegenereerde park-artefacten in sync met isa95-vla.json (tools/gen-park.py --check)
 
 Run: python selftest.py   (exit 0 = all pass)
 """
 
 from __future__ import annotations
 
+import os
 import random
 import sys
 
@@ -382,6 +386,34 @@ try:
 except Exception as e:
     import traceback
     check("13. OEE + EBR + periode-rapport", False,
+          f"exception: {e}\n{traceback.format_exc()}")
+
+
+# --- 14. gegenereerde artefacten lopen niet achter op het model ---
+# Het park is 12 machines x 30 signalen. Die tags, alias-rijen, conditioning-
+# regels en adreslijsten worden gegenereerd uit isa95-vla.json; met de hand
+# bijhouden kan niet. Deze check is de enige bewaking dat het model en wat
+# ervan is afgeleid nog hetzelfde zeggen. Pure bestands-I/O: geen broker, geen
+# Mongo, geen netwerk, dus hij hoort thuis in een offline selftest.
+try:
+    import subprocess
+
+    _gen = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "tools", "gen-park.py")
+    if not os.path.exists(_gen):
+        check("14. gegenereerde artefacten in sync", False,
+              f"tools/gen-park.py ontbreekt op {_gen}")
+    else:
+        _p = subprocess.run([sys.executable, _gen, "--check"],
+                            capture_output=True, text=True,
+                            cwd=os.path.dirname(os.path.dirname(_gen)))
+        _out = (_p.stdout or "") + (_p.stderr or "")
+        check("14. gegenereerde artefacten in sync met isa95-vla.json",
+              _p.returncode == 0,
+              _out.strip()[:600] if _p.returncode else _out.strip())
+except Exception as e:
+    import traceback
+    check("14. gegenereerde artefacten in sync", False,
           f"exception: {e}\n{traceback.format_exc()}")
 
 

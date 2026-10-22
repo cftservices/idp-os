@@ -1,0 +1,833 @@
+# GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN
+# bron: factory-model/isa95-vla.json + signal-template.json + vendor-profiles.json
+#
+# Unit-config voor intake-silo-01. De container mount dit read-only en leest verder
+# NIETS uit het enterprise-model: een PLC doet dat ook niet.
+#
+# Het distort-blok per signaal is LETTERLIJK dezelfde regel als in
+# factory-model/park-conditioning.json. De sim past hem VOORWAARTS toe
+# (canoniek -> native), de conditioner draait hem TERUG. Uit een bron
+# gegenereerd, dus de twee kanten kunnen niet uiteenlopen; dat de wiskunde
+# ook echt omkeerbaar is bewijst de round-trip-selftest.
+
+unit_id: intake-silo-01
+equipment: intake-silo-01
+name: Intake silo 01
+type: storage-tank
+area: Receiving
+line: Vla-B
+site: DairyWorks
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 120.0
+  auto_start: true
+
+surface: opcua
+protocol: opc-da
+vendor_profile: vendor-a
+machine_ordinal: 2
+raw_root: raw/vla-park/intake-silo-01
+extended_pvs: true
+
+opcua:
+  endpoint: opc.tcp://vla-intake-silo-01:4840/VendorA
+  namespace_uri: urn:vendor-a.intake-silo-01
+  namespace_index: 2
+  # Weiger te starten als register_namespace() een andere index geeft:
+  # de gegenereerde adreslijst hardcodeert hem en zou er stil naast grijpen.
+  strict_namespace_index: true
+
+sim:
+  step_s: 0.2
+  sampling_classes:
+    fast: 1000
+    normal: 5000
+    slow: 30000
+    onchange: null
+  keepalive_s: 60
+
+# Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen
+# tweede fabriek: de monoliet-waarden zijn stuurwaarden, en de eigen
+# fysica bepaalt met welke traagheid, ruis en storing hij ze haalt.
+follow:
+  mode: follow
+  batch_state_topic: DairyWorks/Vla/Batch/Status/state
+  batch_id_topic: DairyWorks/Vla/Batch/Status/batch_id
+  active_phases:
+    - DOSING
+  drivers:
+    - topic: DairyWorks/Vla/Mixing/process-tank-01/Status/level_L
+      target: physics.draw_target_L
+      unit: L
+  fallback:
+    mode: free
+    after_silence_s: 90
+    announce_topic: DairyWorks/Vla-B/DataQuality/follow-01/Status/intake-silo-01_mode
+
+physics:
+  capacity_L: 10000.0
+  cip_cycle_limit: 8
+  design_speed: 120.0
+  nominal_current_a: 12.0
+
+faults:
+  - f1
+  - f2
+  - f8
+
+quality_companion:
+  suffix: .Q
+  sampling_class: slow
+  encoding:
+    192: GOOD
+    64: UNCERTAIN
+    0: BAD
+
+# 30 slots. Elke regel: canonieke naam, wat de leverancier ervan maakt,
+# en hoe hij hem verminkt. De sim past dit VOORWAARTS toe; de conditioner
+# draait het terug. Die round-trip is de belangrijkste offline test.
+signals:
+  - slot: 1
+    group: A
+    name: StateCurrent
+    display_name: PackML-toestand
+    native_name: Ch1.Dev2.XS_2007_PV
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.value
+    eu_min: 1
+    eu_max: 17
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 2
+    group: A
+    name: StateCurrentStr
+    display_name: Toestand (tekst)
+    native_name: Ch1.Dev2.XT_2014_PV
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.name
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 3
+    group: A
+    name: UnitMode
+    display_name: Bedrijfsmodus
+    native_name: Ch1.Dev2.XM_2021_PV
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.unit_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 4
+    group: A
+    name: MachSpeed
+    display_name: Ontwerpsnelheid
+    native_name: Ch1.Dev2.ST_2028_PV
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: onchange
+    source: state_machine.mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 5
+    group: A
+    name: CurMachSpeed
+    display_name: Actuele snelheid
+    native_name: Ch1.Dev2.ST_2035_PV
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: state_machine.cur_mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 6
+    group: B
+    name: level_L
+    display_name: Niveau
+    native_name: Ch1.Dev2.LT_2042_PV
+    canonical_unit: L
+    native_unit: L
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.level_L
+    eu_min: 0
+    eu_max: 10000
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 7
+    group: B
+    name: level_pct
+    display_name: Niveau
+    native_name: Ch1.Dev2.AT_2049_PV
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.level_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 8
+    group: B
+    name: temp_C
+    display_name: Temperatuur
+    native_name: Ch1.Dev2.TT_2056_PV
+    canonical_unit: °C
+    native_unit: degF
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.in_temp_C
+    eu_min: 0
+    eu_max: 30
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      unit_conversion:
+        key: "degF->°C"
+        formula: affine
+        scale: 0.5555555555555556
+        offset: -17.77777777777778
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 9
+    group: B
+    name: inflow_L_min
+    display_name: Toevoer
+    native_name: Ch1.Dev2.FT_2063_PV
+    canonical_unit: L/min
+    native_unit: gal/min
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.flow_L_min
+    eu_min: 0
+    eu_max: 900
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      unit_conversion:
+        key: "gal/min->L/min"
+        formula: linear
+        scale: 3.785411784
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 10
+    group: B
+    name: draw_L_min
+    display_name: Aftap
+    native_name: Ch1.Dev2.FT_2070_PV
+    canonical_unit: L/min
+    native_unit: gal/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.draw_L_min
+    eu_min: 0
+    eu_max: 900
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      unit_conversion:
+        key: "gal/min->L/min"
+        formula: linear
+        scale: 3.785411784
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 11
+    group: B
+    name: ullage_L
+    display_name: Vrije ruimte
+    native_name: Ch1.Dev2.LT_2077_PV
+    canonical_unit: L
+    native_unit: L
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.ullage_L
+    eu_min: 0
+    eu_max: 10000
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 12
+    group: B
+    name: density_kg_L
+    display_name: Dichtheid
+    native_name: Ch1.Dev2.WT_2084_PV
+    canonical_unit: kg
+    native_unit: kg
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.density_kg_L
+    eu_min: 0
+    eu_max: 2
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 13
+    group: B
+    name: agitation_on
+    display_name: Roerwerk
+    native_name: Ch1.Dev2.AT_2091_PV
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.agitation_on
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 14
+    group: C
+    name: sp_primary
+    display_name: Niveau-setpoint
+    native_name: Ch1.Dev2.LT_2098_PV
+    canonical_unit: L
+    native_unit: L
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.target_level_L
+    eu_min: 0
+    eu_max: 10000
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 15
+    group: C
+    name: sp_secondary
+    display_name: Temperatuur-setpoint
+    native_name: Ch1.Dev2.TT_2105_PV
+    canonical_unit: °C
+    native_unit: degF
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.target_temp_C
+    eu_min: 0
+    eu_max: 30
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      unit_conversion:
+        key: "degF->°C"
+        formula: affine
+        scale: 0.5555555555555556
+        offset: -17.77777777777778
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 16
+    group: C
+    name: sp_speed_pct
+    display_name: Snelheids-setpoint
+    native_name: Ch1.Dev2.AT_2112_PV
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: state_machine.speed_setpoint_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 17
+    group: C
+    name: sp_product_mode
+    display_name: Productmodus
+    native_name: Ch1.Dev2.XT_2119_PV
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: true
+    sampling_class: onchange
+    source: physics.product_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 18
+    group: D
+    name: valve_pos_pct
+    display_name: Klepstand
+    native_name: Ch1.Dev2.ZT_2126_PV
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.valve_pos_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 19
+    group: D
+    name: drive_out_pct
+    display_name: Aandrijfsturing
+    native_name: Ch1.Dev2.YT_2133_PV
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.drive_out_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 20
+    group: E
+    name: units_total
+    display_name: Eenheden totaal
+    native_name: Ch1.Dev2.KQ_2140_PV
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.units_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 21
+    group: E
+    name: reject_total
+    display_name: Afkeur totaal
+    native_name: Ch1.Dev2.KQ_2147_PV
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.reject_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 22
+    group: E
+    name: mass_total_kg
+    display_name: Massa totaal
+    native_name: Ch1.Dev2.WT_2154_PV
+    canonical_unit: kg
+    native_unit: kg
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.mass_total_kg
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 23
+    group: E
+    name: runtime_hours
+    display_name: Draaiuren
+    native_name: Ch1.Dev2.KT_2161_PV
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.runtime_hours
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 24
+    group: F
+    name: motor_current_A
+    display_name: Motorstroom
+    native_name: Ch1.Dev2.JT_2168_PV
+    canonical_unit: A
+    native_unit: A
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.motor_current_a
+    eu_min: 0
+    eu_max: 80
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 25
+    group: F
+    name: vibration_mm_s
+    display_name: Trilling
+    native_name: Ch1.Dev2.VT_2175_PV
+    canonical_unit: mm/s
+    native_unit: mm/s
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.vibration_mm_s
+    eu_min: 0
+    eu_max: 11.2
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 26
+    group: F
+    name: bearing_temp_C
+    display_name: Lagertemperatuur
+    native_name: Ch1.Dev2.TT_2182_PV
+    canonical_unit: °C
+    native_unit: degF
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.bearing_temp_c
+    eu_min: 0
+    eu_max: 95
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      unit_conversion:
+        key: "degF->°C"
+        formula: affine
+        scale: 0.5555555555555556
+        offset: -17.77777777777778
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 27
+    group: F
+    name: energy_kWh
+    display_name: Energie cumulatief
+    native_name: Ch1.Dev2.JQ_2189_PV
+    canonical_unit: kWh
+    native_unit: kWh
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.energy_kwh
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 28
+    group: F
+    name: cycles_since_cip
+    display_name: Cycli sinds CIP
+    native_name: Ch1.Dev2.KQ_2196_PV
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: slow
+    source: health.cycles_since_cip
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 29
+    group: F
+    name: hours_since_service
+    display_name: Uren sinds onderhoud
+    native_name: Ch1.Dev2.KT_2203_PV
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.hours_since_service
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: integer_tenths
+      scale: 0.1
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none
+  - slot: 30
+    group: G
+    name: alarm_word
+    display_name: Alarmwoord
+    native_name: Ch1.Dev2.XA_2210_PV
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: health.alarm_word
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int32
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: da-quality-word
+      quality_encoding:
+        192: GOOD
+        64: UNCERTAIN
+        0: BAD
+      timestamp_source: none

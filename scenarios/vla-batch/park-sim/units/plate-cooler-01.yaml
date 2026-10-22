@@ -1,0 +1,987 @@
+# GEGENEREERD DOOR tools/gen-park.py — NIET MET DE HAND BEWERKEN
+# bron: factory-model/isa95-vla.json + signal-template.json + vendor-profiles.json
+#
+# Unit-config voor plate-cooler-01. De container mount dit read-only en leest verder
+# NIETS uit het enterprise-model: een PLC doet dat ook niet.
+#
+# Het distort-blok per signaal is LETTERLIJK dezelfde regel als in
+# factory-model/park-conditioning.json. De sim past hem VOORWAARTS toe
+# (canoniek -> native), de conditioner draait hem TERUG. Uit een bron
+# gegenereerd, dus de twee kanten kunnen niet uiteenlopen; dat de wiskunde
+# ook echt omkeerbaar is bewijst de round-trip-selftest.
+
+unit_id: plate-cooler-01
+equipment: plate-cooler-01
+name: Plate cooler 01
+type: plate-cooler
+area: Cooling
+line: Vla-B
+site: DairyWorks
+
+packml:
+  mach_design_speed: 120.0
+  initial_mach_speed: 120.0
+  auto_start: true
+
+surface: mqtt
+protocol: mqtt
+vendor_profile: vendor-c
+machine_ordinal: 3
+raw_root: raw/vla-park/plate-cooler-01
+extended_pvs: true
+
+sim:
+  step_s: 0.2
+  sampling_classes:
+    fast: 1000
+    normal: 5000
+    slow: 30000
+    onchange: null
+  keepalive_s: 60
+
+# Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen
+# tweede fabriek: de monoliet-waarden zijn stuurwaarden, en de eigen
+# fysica bepaalt met welke traagheid, ruis en storing hij ze haalt.
+follow:
+  mode: follow
+  batch_state_topic: DairyWorks/Vla/Batch/Status/state
+  batch_id_topic: DairyWorks/Vla/Batch/Status/batch_id
+  active_phases:
+    - COOLING
+    - FILLING
+  drivers:
+    - topic: DairyWorks/Vla/Cooling/cooler-01/Status/temp_C
+      target: physics.target_out_c
+      unit: °C
+    - topic: DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C
+      target: physics.prod_in_nominal_c
+      unit: °C
+  fallback:
+    mode: free
+    after_silence_s: 90
+    announce_topic: DairyWorks/Vla-B/DataQuality/follow-01/Status/plate-cooler-01_mode
+
+physics:
+  cip_cycle_limit: 4
+  design_speed: 120.0
+  glycol_in_c: 2.0
+  nominal_current_a: 20.0
+  prod_in_c: 88.0
+  target_out_c: 22.0
+  throughput_ref_L: 5000.0
+
+faults:
+  - f1
+  - f8
+  - f12
+
+quality_companion:
+  suffix: .Q
+  sampling_class: slow
+  encoding:
+    0: GOOD
+    1: BAD
+    2: UNCERTAIN
+
+# 30 slots. Elke regel: canonieke naam, wat de leverancier ervan maakt,
+# en hoe hij hem verminkt. De sim past dit VOORWAARTS toe; de conditioner
+# draait het terug. Die round-trip is de belangrijkste offline test.
+signals:
+  - slot: 1
+    group: A
+    name: StateCurrent
+    display_name: PackML-toestand
+    native_name: DB13.DBD4
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.value
+    eu_min: 1
+    eu_max: 17
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 2
+    group: A
+    name: StateCurrentStr
+    display_name: Toestand (tekst)
+    native_name: DB13.DBD8
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: false
+    sampling_class: onchange
+    source: state_machine.current.name
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 3
+    group: A
+    name: UnitMode
+    display_name: Bedrijfsmodus
+    native_name: DB13.DBD12
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: state_machine.unit_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 4
+    group: A
+    name: MachSpeed
+    display_name: Ontwerpsnelheid
+    native_name: DB13.DBD16
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: onchange
+    source: state_machine.mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 5
+    group: A
+    name: CurMachSpeed
+    display_name: Actuele snelheid
+    native_name: DB13.DBD20
+    canonical_unit: u/min
+    native_unit: u/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: state_machine.cur_mach_speed
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 6
+    group: B
+    name: prod_in_C
+    display_name: Product in
+    native_name: DB13.DBD24
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.prod_in_C
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 7
+    group: B
+    name: prod_out_C
+    display_name: Product uit
+    native_name: DB13.DBD28
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.prod_out_C
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 8
+    group: B
+    name: glycol_in_C
+    display_name: Glycol in
+    native_name: DB13.DBD32
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.glycol_in_C
+    eu_min: -10
+    eu_max: 30
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: -10
+      eu_max: 30
+      eu_min_native: -10
+      eu_max_native: 30
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 9
+    group: B
+    name: glycol_out_C
+    display_name: Glycol uit
+    native_name: DB13.DBD36
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: fast
+    source: physics.glycol_out_C
+    eu_min: -10
+    eu_max: 40
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: -10
+      eu_max: 40
+      eu_min_native: -10
+      eu_max_native: 40
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 10
+    group: B
+    name: flow_L_min
+    display_name: Productdebiet
+    native_name: DB13.DBD40
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.flow_L_min
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 1000
+      eu_min_native: 0
+      eu_max_native: 1000
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 11
+    group: B
+    name: glycol_flow_L_min
+    display_name: Glycoldebiet
+    native_name: DB13.DBD44
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.glycol_flow_L_min
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 1000
+      eu_min_native: 0
+      eu_max_native: 1000
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 12
+    group: B
+    name: approach_dT_C
+    display_name: Approach
+    native_name: DB13.DBD48
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.approach_dT_C
+    eu_min: 0
+    eu_max: 60
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 60
+      eu_min_native: 0
+      eu_max_native: 60
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 13
+    group: B
+    name: dp_bar
+    display_name: Drukval
+    native_name: DB13.DBD52
+    canonical_unit: bar
+    native_unit: kPa
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: physics.dp_bar
+    eu_min: 0
+    eu_max: 5
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 5
+      eu_min_native: 0.0
+      eu_max_native: 500.0
+      unit_conversion:
+        key: "kPa->bar"
+        formula: linear
+        scale: 0.01
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 14
+    group: C
+    name: sp_primary
+    display_name: Uittrede-setpoint
+    native_name: DB13.DBD56
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.target_out_c
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 15
+    group: C
+    name: sp_secondary
+    display_name: Debiet-setpoint
+    native_name: DB13.DBD60
+    canonical_unit: L/min
+    native_unit: L/min
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: physics.throughput_ref_L
+    eu_min: 0
+    eu_max: 1000
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 1000
+      eu_min_native: 0
+      eu_max_native: 1000
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 16
+    group: C
+    name: sp_speed_pct
+    display_name: Snelheids-setpoint
+    native_name: DB13.DBD64
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: true
+    sampling_class: onchange
+    source: state_machine.speed_setpoint_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 17
+    group: C
+    name: sp_product_mode
+    display_name: Productmodus
+    native_name: DB13.DBD68
+    canonical_unit: ""
+    native_unit: ""
+    datatype: String
+    writable: true
+    sampling_class: onchange
+    source: physics.product_mode
+    eu_min: 0
+    eu_max: 100
+    native_datatype: String
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 18
+    group: D
+    name: valve_pos_pct
+    display_name: Klepstand
+    native_name: DB13.DBD72
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.valve_pos_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 19
+    group: D
+    name: drive_out_pct
+    display_name: Aandrijfsturing
+    native_name: DB13.DBD76
+    canonical_unit: "%"
+    native_unit: "%"
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.drive_out_pct
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 20
+    group: E
+    name: units_total
+    display_name: Eenheden totaal
+    native_name: DB13.DBD80
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.units_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 21
+    group: E
+    name: reject_total
+    display_name: Afkeur totaal
+    native_name: DB13.DBD84
+    canonical_unit: st
+    native_unit: st
+    datatype: Int64
+    writable: false
+    sampling_class: slow
+    source: health.reject_total
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int64
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 22
+    group: E
+    name: mass_total_kg
+    display_name: Massa totaal
+    native_name: DB13.DBD88
+    canonical_unit: kg
+    native_unit: g
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.mass_total_kg
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0.0
+      eu_max_native: 100000.0
+      unit_conversion:
+        key: "g->kg"
+        formula: linear
+        scale: 0.001
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 23
+    group: E
+    name: runtime_hours
+    display_name: Draaiuren
+    native_name: DB13.DBD92
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.runtime_hours
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 24
+    group: F
+    name: motor_current_A
+    display_name: Motorstroom
+    native_name: DB13.DBD96
+    canonical_unit: A
+    native_unit: A
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.motor_current_a
+    eu_min: 0
+    eu_max: 80
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 80
+      eu_min_native: 0
+      eu_max_native: 80
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 25
+    group: F
+    name: vibration_mm_s
+    display_name: Trilling
+    native_name: DB13.DBD100
+    canonical_unit: mm/s
+    native_unit: mm/s
+    datatype: Double
+    writable: false
+    sampling_class: normal
+    source: health.vibration_mm_s
+    eu_min: 0
+    eu_max: 11.2
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 11.2
+      eu_min_native: 0
+      eu_max_native: 11.2
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 26
+    group: F
+    name: bearing_temp_C
+    display_name: Lagertemperatuur
+    native_name: DB13.DBD104
+    canonical_unit: °C
+    native_unit: °C
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.bearing_temp_c
+    eu_min: 0
+    eu_max: 95
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 95
+      eu_min_native: 0
+      eu_max_native: 95
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 27
+    group: F
+    name: energy_kWh
+    display_name: Energie cumulatief
+    native_name: DB13.DBD108
+    canonical_unit: kWh
+    native_unit: kWh
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.energy_kwh
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 28
+    group: F
+    name: cycles_since_cip
+    display_name: Cycli sinds CIP
+    native_name: DB13.DBD112
+    canonical_unit: st
+    native_unit: st
+    datatype: Int32
+    writable: false
+    sampling_class: slow
+    source: health.cycles_since_cip
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 29
+    group: F
+    name: hours_since_service
+    display_name: Uren sinds onderhoud
+    native_name: DB13.DBD116
+    canonical_unit: h
+    native_unit: h
+    datatype: Double
+    writable: false
+    sampling_class: slow
+    source: health.hours_since_service
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int16
+    quality_datatype: Int16
+    distort:
+      scaling_kind: affine_span
+      raw_min: 0
+      raw_max: 27648
+      eu_min: 0
+      eu_max: 100
+      eu_min_native: 0
+      eu_max_native: 100
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"
+  - slot: 30
+    group: G
+    name: alarm_word
+    display_name: Alarmwoord
+    native_name: DB13.DBD120
+    canonical_unit: ""
+    native_unit: ""
+    datatype: Int32
+    writable: false
+    sampling_class: onchange
+    source: health.alarm_word
+    eu_min: 0
+    eu_max: 100
+    native_datatype: Int32
+    quality_datatype: Int16
+    distort:
+      scaling_kind: none
+      discrete: true
+      quality_source: status-word
+      quality_encoding:
+        0: GOOD
+        1: BAD
+        2: UNCERTAIN
+      timestamp_source: local-no-timezone
+      assume_tz: Europe/Amsterdam
+      timestamp_format: "%Y-%m-%d %H:%M:%S"

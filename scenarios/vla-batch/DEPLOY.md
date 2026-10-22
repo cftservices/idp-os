@@ -105,6 +105,48 @@ bezet (legacy mosquitto), gebruik dan de extra overlay
 - nginx-vhost + hardening + runbook: techflow-os hub-repo `infra/vps-techflow24/`
   (private).
 
+### Demo-autopilot (alleen in deze overlay)
+
+Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
+
+- `vla-batch-engine`: `DEMO_AUTOPILOT=1` start om de ~2 min een MES-batch
+  (`chocolate-vla-1L`, 10 s pauze na COMPLETE). Een CIP volgt vanzelf als de
+  kookunit vuil is. Alle batches komen op één staande order per dag, en
+  autopilot-batches ouder dan 24 uur worden elk uur opgeruimd.
+- `vla-factory`: `AUTOSTART_DELAY_S=30` ketent pas zelf als er 30 s geen
+  MES-batch kwam. Dat is het vangnet, zodat de bus nooit stilvalt.
+- Status: `GET /api/v1/autopilot` (`last_action`, `batches_started`, `cip_runs`).
+- Uitzetten: `DEMO_AUTOPILOT: "0"` in de overlay en `up -d vla-batch-engine`.
+- **Magazijnstroom** (`vla/warehouse.py`, `DEMO_AUTOPILOT_WAREHOUSE`, standaard
+  `1`): elke COMPLETE en APPROVED autopilot-batch van de laatste 15 min wordt
+  gepalletiseerd in pallets van 480 packs (de laatste is kleiner), en elke ~9 s
+  gaat er één pallet naar een willekeurig vrij vak (96 vakken; het `slot` staat
+  op de HU). Na 12 min laadt er één truck tegelijk, één pallet per 6 s. Bij
+  minder dan 12 vrije vakken laadt hij eerder, en een volle stelling houdt
+  pallets bij de palletiser. Geshipte autopilot-HU's verdwijnen na 30 min.
+  Steady state is ~65 van de 96 vakken. Na een uitrol vult de stelling zich
+  geleidelijk; de eerste truck vertrekt na ~12 min. De twin (`/site`) speelt
+  elke putaway en laadactie na met twee heftrucks. `RACK_SLOTS` staat in
+  `warehouse.py` én in `ui/lib/twin/layout.ts` en moet gelijk blijven.
+  Status: `warehouse_last` in `GET /api/v1/autopilot`.
+- **Logistiek-simulatie** (`vla/logistics_sim.py`, `DEMO_AUTOPILOT_LOGISTICS`,
+  standaard `1`): voegt aan elke zending een fictieve klant, bestemming en ETA
+  toe, en daarnaast accu en ritten per heftruck en per grondstof een
+  leverancier: een RVS-tankwagen voor melk, een bulkwagen voor suiker en
+  zetmeel, en een palletwagen voor cacao. Zakt een silo onder 50% van zijn
+  capaciteit (4× de bestelgrens), dan wordt er besteld; tijdens het lossen
+  boekt de leverancier in delen echte goederenontvangsten (`inventory.receive`),
+  begrensd op de capaciteit. Elke grondstof heeft een eigen losplaats
+  (`INBOUND_BAYS` in `ui/lib/twin/flow.ts`). Uitgaande trailers aan het dock
+  zijn doorzichtig en tonen de geladen pallets.
+  De ritten staan in geheugen en beginnen na een herstart opnieuw. De twin leest
+  ze via `GET /api/v1/logistics` (`shipments`, `forklifts`, `inbounds`,
+  `inbound` = alleen melk, voor oude clients, en `source`).
+  De sparklines in de overlay vullen zich in de browser; daar is geen
+  historie-endpoint voor.
+- Een batch die liep tijdens een engine-herstart heeft geen follow-thread meer.
+  Hij blijft in zijn fase staan, maar blokkeert de autopilot niet.
+
 ## 6. Beheer
 
 - [ ] Logs: `./scenarios/vla-batch/deploy.sh logs [service]`

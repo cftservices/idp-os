@@ -1,0 +1,38 @@
+# Vervuiling van de warmtewisselaar, over zes batches.
+#
+# Het verhaal dat deze demo moet vertellen, zonder dat iemand op een knop drukt.
+# Bij elke batch die op de monoliet afrondt gaat de vervuiling een stap omhoog:
+#
+#   batch 1-2   alleen energie en klepstand lopen op. De temperatuur is nog
+#               perfect. Dit is het CBM-argument: je ziet het aankomen op
+#               grootheden waar geen alarm op staat.
+#   batch 3-4   de approach-temperatuur van de voorverwarmer loopt weg en de
+#               cross-check met de pasteur begint uit de tolerantie te lopen.
+#   batch 5-6   de klep heeft geen regelmarge meer, de holdtemperatuur zakt
+#               eronder, de divert slaat om en het batchoordeel kantelt.
+#
+# Op batchovergangen en niet op een wandklok: een scenario dat op minuten tikt
+# loopt uit de pas met een fabriek die je hebt versneld of stilgezet.
+
+id: SCN-FOULING-HX
+title: "Vervuiling warmtewisselaar over zes batches"
+
+trigger:
+  on: uns_transition
+  topic: "DairyWorks/Vla/Batch/Status/state"
+  to: COMPLETE
+
+# Na de laatste stap opnieuw beginnen, met alles eerst schoon. Zo blijft een
+# demo die een uur draait bruikbaar zonder dat iemand hem reset.
+loop: true
+clear_on_finish: true
+
+steps:
+  - { at_trigger: 1, machine: pasteuriser-01, fault: f8, magnitude: 0.10 }
+  - { at_trigger: 2, machine: pasteuriser-01, fault: f8, magnitude: 0.22 }
+  - { at_trigger: 3, machine: pasteuriser-01, fault: f8, magnitude: 0.35 }
+  - { at_trigger: 3, machine: preheater-01,   fault: f8, magnitude: 0.25 }
+  - { at_trigger: 4, machine: pasteuriser-01, fault: f8, magnitude: 0.48 }
+  - { at_trigger: 5, machine: pasteuriser-01, fault: f8, magnitude: 0.60 }
+  - { at_trigger: 6, machine: pasteuriser-01, fault: f8, magnitude: 0.70 }
+  - { at_trigger: 6, machine: preheater-01,   fault: f8, magnitude: 0.55 }

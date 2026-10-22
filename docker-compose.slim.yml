@@ -27,11 +27,18 @@ volumes:
 
 services:
 
+  # Elke service heeft een expliciete log-cap (10 MB x 3). De daemon-default uit
+  # /etc/docker/daemon.json is op de VPS nooit ingelezen: dockerd draait sinds
+  # voor dat bestand geschreven werd, dus daar loggen containers ongelimiteerd.
+  # In augustus 2026 leverde dat 9 GB aan json-logs op, waarvan 4,6 GB van
+  # monstermq alleen. Deze regel maakt de cap onafhankelijk van de daemon.
+
   # ── TRAEFIK (TLS + routing → one secure URL) ─────────────────────────────
   traefik:
     image: traefik:v3
     container_name: traefik
     restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
     ports:
       - "80:80"
       - "443:443"
@@ -47,6 +54,20 @@ services:
     image: mongo:7
     container_name: mongo
     restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    # WiredTiger-cache aftoppen. Zonder deze vlag rekent Mongo zelf uit hoeveel
+    # hij pakt: 50% van (RAM - 1 GB). Op de 8 GB-VPS is dat 3,38 GB, en dat
+    # reserveert hij puur omdat de MACHINE zo groot is, niet omdat de data dat
+    # vraagt. Gemeten op 2026-08-09: de hele idp-database is 516 MB op schijf,
+    # dus meer dan ~0,5 GB cache kan hij nooit nuttig gebruiken.
+    #
+    # Effect van deze regel: mongod ging van ~3,5 GB resident naar ~1 GB, en dat
+    # is precies het verschil tussen alleen park-slim kunnen draaien en het
+    # volledige park van twaalf machines.
+    #
+    # Verhogen heeft pas zin als de database structureel boven ~800 MB komt.
+    # Controleer dat dan eerst met db.stats(), niet op gevoel.
+    command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -62,6 +83,7 @@ services:
     image: rocworks/monstermq:latest
     container_name: monstermq
     restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
     ports:
       - "1883:1883"
     volumes:
@@ -91,6 +113,7 @@ services:
     build: ./fastapi
     container_name: fastapi
     restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
     environment:
       MONGO_URL: ${MONGO_URL}
       MONGO_DB: ${MONGO_DB}
@@ -111,6 +134,7 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}

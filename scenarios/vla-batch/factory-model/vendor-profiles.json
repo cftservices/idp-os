@@ -1,0 +1,215 @@
+{
+  "schema_version": "1.0",
+  "title": "Vijf leveranciersdialecten voor lijn Vla-B",
+  "purpose": "Elke machine liegt anders. De sim past een profiel voorwaarts toe (canoniek -> native), de conditioner draait het terug (native -> canoniek). Die round-trip is de belangrijkste offline test van het hele park: hij vangt de conversiefout-klasse voordat er iets draait.",
+
+  "anonymization": "Uitsluitend vendor-a t/m vendor-e. Geen fabrikantnamen, modelnummers, echte IP's of tag-schema's die naar een werkgever of klant te herleiden zijn. tools/check-generated.sh faalt de build als hier iets anders in belandt.",
+
+  "distortion_unit_rule": "Elk getal in een distortion-blok staat in de CANONIEKE SI-eenheid van de doeltag, nooit in die van de leverancier. Converteren naar de leverancierseenheid en daarna schalen naar een register-integer gebeurt in die volgorde. Omdraaien levert een plausibel getal op dat een factor 3.8 fout is, en dat is precies de bugklasse waar deze demo over gaat.",
+
+  "refusal_rules": {
+    "non_numeric": "Weigeren en tellen in `refused`. NOOIT naar 0 forceren.",
+    "missing_quality": "UNCERTAIN. NOOIT een aangenomen GOOD.",
+    "silence": "stale na max(3 x expected_interval_s, stale_threshold_s). Stilte is geen nul.",
+    "unmapped_topic": "Tellen in `unmapped` en een keer per topic loggen. unmapped == 0 is een deploy-gate."
+  },
+
+  "instrument_codes": {
+    "_comment": "ISA-5.1-achtige meetcodes, gebruikt door vendor-a om platte ItemID's te bouwen. Afgeleid van de canonieke eenheid, met een naam-override waar de eenheid dubbelzinnig is.",
+    "by_unit": {
+      "°C": "TT", "L": "LT", "%": "AT", "L/min": "FT", "bar": "PT",
+      "rpm": "ST", "u/min": "ST", "kg": "WT", "A": "JT", "kWh": "JQ",
+      "mm/s": "VT", "h": "KT", "st": "KQ", "mS/cm": "CT", "s": "KT", "": "XT"
+    },
+    "by_name_override": {
+      "valve_pos_pct": "ZT", "drive_out_pct": "YT", "alarm_word": "XA",
+      "StateCurrent": "XS", "UnitMode": "XM", "cycles_since_cip": "KQ"
+    }
+  },
+
+  "unit_conversions": {
+    "_comment": "native -> canoniek. De conditioner past de inverse toe. Alleen deze zeven paren komen in het park voor; de tabel is met opzet klein en volledig, geen open bibliotheek.",
+    "degF->°C": { "formula": "affine", "scale": 0.5555555555555556, "offset": -17.77777777777778 },
+    "gal/min->L/min": { "formula": "linear", "scale": 3.785411784 },
+    "psi->bar": { "formula": "linear", "scale": 0.0689475729 },
+    "kPa->bar": { "formula": "linear", "scale": 0.01 },
+    "g->kg": { "formula": "linear", "scale": 0.001 },
+    "Wh->kWh": { "formula": "linear", "scale": 0.001 },
+    "in/s->mm/s": { "formula": "linear", "scale": 25.4 }
+  },
+
+  "profiles": {
+
+    "vendor-a": {
+      "label": "Platte DA-itemlijst achter een DA/UA-tunneller",
+      "machines": ["intake-silo-01", "pasteuriser-01", "cip-skid-01"],
+      "protocols": { "intake-silo-01": "opc-da", "pasteuriser-01": "opc-da", "cip-skid-01": "opc-ua" },
+      "honesty_note": "OPC-DA is DCOM, alleen Windows, en wij hebben het NIET geimplementeerd. Wat we simuleren is hoe je een DA-eiland in de praktijk bereikt vanaf een Linux-datalaag: een DA-server achter een DA/UA-tunneller, en wij verbinden met het UA-endpoint van die tunneller. Het transport is UA, de DATA is DA, en dat is wat telt. Zeg dit hardop in de demo.",
+
+      "naming": {
+        "pattern": "Ch1.Dev{dev}.{CODE}_{num}_PV",
+        "dev_from": "machine_ordinal_within_profile",
+        "num_from": "2000 + slot * 7",
+        "case": "asis",
+        "flat": true,
+        "flat_note": "Geen enkele hierarchie. Twaalf items van drie machines in een lijst zonder groepering: precies hoe een DA-browser eruitziet."
+      },
+      "units": { "°C": "degF", "L/min": "gal/min", "bar": "psi" },
+      "scaling": { "kind": "integer_tenths", "scale": 0.1, "datatype": "Int32" },
+      "quality": {
+        "source": "da-quality-word",
+        "carrier": "companion_item",
+        "companion_suffix": ".Q",
+        "encoding": { "192": "GOOD", "64": "UNCERTAIN", "0": "BAD" },
+        "missing_means": "UNCERTAIN"
+      },
+      "timestamp": { "source": "none", "ts_source_label": "receive" },
+      "proves": "Het klassieke DA-eiland: kwaliteit in een ander topic, geen meettijd, geschaalde integers en platte namen."
+    },
+
+    "vendor-b": {
+      "label": "Moderne, keurig gestructureerde OPC-UA-server",
+      "machines": ["separator-01", "homogeniser-01"],
+      "protocols": { "separator-01": "opc-ua", "homogeniser-01": "opc-ua" },
+
+      "naming": {
+        "pattern": "Machine.{Group}.{PascalName}",
+        "group_map": { "A": "State", "B": "Process", "C": "Setpoint", "D": "Actuator", "E": "Counter", "F": "Diagnostics", "G": "Alarm" },
+        "case": "pascal"
+      },
+      "units": {},
+      "scaling": { "kind": "none", "scale": 1.0, "datatype": "Double" },
+      "quality": {
+        "source": "opcua-statuscode",
+        "carrier": "on_value",
+        "encoding": { "0": "GOOD", "1073741824": "UNCERTAIN", "2147483648": "BAD" },
+        "encoding_note": "Severity-bits: 0x40000000 is UNCERTAIN, 0x80000000 is BAD. Een StatusCode is geen boolean, en de onderste bits zijn subcodes die je moet maskeren.",
+        "missing_means": "UNCERTAIN"
+      },
+      "timestamp": { "source": "opcua-source", "ts_source_label": "source", "tz": "UTC" },
+      "proves": "OPC-UA IS NIET DE DATA LAYER. Modern protocol, nette namen, echte tijdstempels, en je hebt nog steeds een alias-tabel, een eenheidsdeclaratie en een deadband nodig voordat er iets bruikbaars staat. Dit profiel is met opzet het schoonste van de vijf, want het is het lastigste om weg te wuiven."
+    },
+
+    "vendor-c": {
+      "label": "PLC-registerblok",
+      "machines": ["blend-tank-01", "preheater-01", "plate-cooler-01"],
+      "protocols": { "blend-tank-01": "modbus-tcp", "preheater-01": "modbus-tcp", "plate-cooler-01": "mqtt" },
+
+      "naming": {
+        "modbus-tcp": { "pattern": "{addr}", "addr_from": "40001 + machine_ordinal * 100 + slot", "note": "Een holding register heeft geen naam, geen eenheid, geen kwaliteit, geen tijdstempel en geen datatype. Register 40001 is zestien bits en verder helemaal niets. Alle betekenis moet van buiten komen. Dit is het sterkste Condition-argument in het hele park." },
+        "mqtt": { "pattern": "DB{db}.DBD{offset}", "db_from": "10 + machine_ordinal", "offset_from": "slot * 4" }
+      },
+      "units": { "bar": "kPa", "kg": "g" },
+      "scaling": {
+        "kind": "affine_span",
+        "datatype": "Int16",
+        "raw_min": 0,
+        "raw_max": 27648,
+        "note": "Ruwe counts over een engineering-bereik, dus offset + span en geen enkele schaalfactor. Het EU-bereik per tag komt uit normal_range in het signaalsjabloon of uit de PV-definitie. Nergens gedocumenteerd, altijd aanwezig."
+      },
+      "quality": {
+        "source": "status-word",
+        "carrier": "companion_item",
+        "companion_suffix": ".Q",
+        "encoding": { "0": "GOOD", "1": "BAD", "2": "UNCERTAIN" },
+        "encoding_note": "Eigen codering, en let op de valstrik: 0 betekent hier GOOD terwijl 0 bij vendor-a juist BAD betekent. Dezelfde integer, tegenovergestelde betekenis. Daarom mag kwaliteit nooit uit de waarde zelf worden afgeleid.",
+        "missing_means": "UNCERTAIN"
+      },
+      "timestamp": {
+        "source": "local-no-timezone",
+        "format": "%Y-%m-%d %H:%M:%S",
+        "assume_tz": "Europe/Amsterdam",
+        "ts_source_label": "source-assumed-tz",
+        "note": "De zone wordt GEDECLAREERD, nooit geraden. Een geraden zone is twee keer per jaar een uur fout en de rest van het jaar onzichtbaar."
+      },
+      "proves": "De affiene conversie die niemand documenteert, en lokale tijd zonder zone."
+    },
+
+    "vendor-d": {
+      "label": "OEM-machinegateway",
+      "machines": ["filler-01", "bottle-filler-01"],
+      "protocols": { "filler-01": "mqtt", "bottle-filler-01": "rest" },
+      "extra_path": {
+        "bottle-filler-01": {
+          "kind": "tdengine-ilp-direct",
+          "target_db": "idp_bypass",
+          "note": "Deze machine schrijft OOK rechtstreeks InfluxDB line protocol naar de historian, langs de bus en langs de modellaag heen. Met opzet. Het is het anti-patroon: de reeks staat in TDengine en verder niets. Geen eenheid, geen kwaliteit, geen asset, geen signal_uuid, niet te koppelen aan een batch. Landt in idp_bypass en NOOIT in idp_park, anders is de demo zijn eigen tegenvoorbeeld kwijt."
+        }
+      },
+
+      "naming": { "pattern": "sensors/{camelName}", "case": "camel" },
+      "units": { "°C": "degF" },
+      "units_note": "Gemengd BINNEN een machine: temperaturen in degF, debieten gewoon in L/min. Dat is realistischer dan een consequent fout systeem, en het breekt elke aanname dat je een eenheid per bron kunt vaststellen.",
+      "scaling": {
+        "kind": "string_values",
+        "datatype": "String",
+        "null_tokens": ["N/A", "", "###", "null"],
+        "null_behaviour": "refuse",
+        "null_rate": 0.02,
+        "note": "Waarden komen als JSON-strings binnen, en ongeveer een op de vijftig is geen getal. Die worden GEWEIGERD en geteld in refused, nooit naar 0 geforceerd. Een nul is een meting, een weigering is een gat, en dat verschil is in voedselproductie het verschil tussen een batchrapport en een auditbevinding."
+      },
+      "quality": {
+        "source": "none",
+        "carrier": null,
+        "missing_means": "UNCERTAIN",
+        "note": "Er is helemaal geen kwaliteitsindicatie. Alles van deze bron is UNCERTAIN totdat een cross-check hem bevestigt. Niet GOOD-bij-gebrek-aan-beter."
+      },
+      "timestamp": { "source": "epoch-ms", "ts_source_label": "source" },
+      "proves": "Geen kwaliteit, en het weigeren van een niet-numerieke waarde in plaats van hem stilletjes nul te maken."
+    },
+
+    "vendor-e": {
+      "label": "Legacy historian-export in een SQL-tabel",
+      "machines": ["case-packer-01", "palletiser-01"],
+      "protocols": { "case-packer-01": "sql", "palletiser-01": "sql" },
+      "database": {
+        "engine": "postgres",
+        "image": "postgres:16-alpine",
+        "why_not_sqlserver": "Het teruggedraaide werk gebruikte SQL Server met pymssql. SQL Server Express in Docker eist ~2 GB RAM als ondergrens en die hebben we niet op een 8 GB VPS. Postgres doet hetzelfde werk in ~60 MB. Het punt van dit eiland is niet het merk van de database maar dat er data in een prima database staat die niemand heeft aangesloten.",
+        "table": "tag_history",
+        "columns": { "tag": "text", "val": "double precision", "q": "text", "ts_local": "text" }
+      },
+
+      "naming": { "pattern": "VLA.{MACH}.{UPPER_SNAKE}", "mach_from": "machine_abbrev", "case": "upper_snake" },
+      "units": { "kWh": "Wh", "°C": "°C" },
+      "scaling": { "kind": "integer_milli_on", "applies_to_units": ["kWh"], "scale": 0.001, "datatype": "Int32" },
+      "quality": {
+        "source": "text-enum",
+        "carrier": "column",
+        "column": "q",
+        "encoding": { "Good": "GOOD", "Suspect": "UNCERTAIN", "Bad": "BAD" },
+        "missing_means": "UNCERTAIN"
+      },
+      "timestamp": {
+        "source": "local-wallclock-dst-broken",
+        "format": "%Y-%m-%d %H:%M:%S",
+        "fixed_offset_hours": 1,
+        "assume_tz": "Europe/Amsterdam",
+        "ts_source_label": "source-assumed-tz",
+        "note": "Vaste offset van +1 uur, dus in de zomertijd loopt hij een uur mis. Bewust: dit is de klassiekste historian-bug die er is, en hij is onzichtbaar tot je twee bronnen naast elkaar legt."
+      },
+      "proves": "Tekst-kwaliteit, een eenheidsprefix-fout die in het volle zicht verstopt zit (Wh vs kWh is een factor 1000), en een silo zonder enig technisch excuus: moderne database, prima query-interface, en niemand heeft hem gekoppeld."
+    }
+  },
+
+  "machine_abbrev": {
+    "intake-silo-01": "SIL01",
+    "separator-01": "SEP01",
+    "homogeniser-01": "HOM01",
+    "blend-tank-01": "BLD01",
+    "preheater-01": "PRE01",
+    "pasteuriser-01": "PAS01",
+    "plate-cooler-01": "PCL01",
+    "filler-01": "FIL01",
+    "bottle-filler-01": "BOT01",
+    "case-packer-01": "CPK01",
+    "palletiser-01": "PAL01",
+    "cip-skid-01": "CIP01"
+  },
+
+  "raw_root": "raw/vla-park",
+  "raw_root_rationale": "BUITEN DairyWorks/. Archive group dairyworks_data matcht DairyWorks/# en zou elke ongemodelleerde vendor-tag stil naar MongoDB schrijven: op ~80 msg/s is dat ~1,7 GB per dag aan rommel, een data-swamp binnen de demo die data-swamps veroordeelt. raw/vla-park/# matcht geen enkele archive group en staat in geen enkele MQTT_TOPICS. Retorisch telt het net zo hard: in een topic-browser wijst de presentator naar twee bomen, de ene een gemodelleerde fabriek en de andere een rommella. Dat contrast is de demo.",
+
+  "canonical_root": "DairyWorks/Vla-B",
+  "canonical_root_rationale": "NIET DairyWorks/Vla. Die subtree is dragend: batch-engine/vla/bus.py abonneert erop en cachet elke tag, de TDengine-bridge heeft MQTT_TOPICS DairyWorks/Vla/#, en archive group dw_uns_archive matcht hem. MQTT-wildcards werken per niveau, dus DairyWorks/Vla/# matcht DairyWorks/Vla-B/... niet. De bestaande milkdemo blijft daardoor ongemoeid door constructie en niet door oplettendheid."
+}

@@ -10,6 +10,12 @@ Env:
   MQTT_PORT   default 1883
   MQTT_WAIT_S default 3.0
   AUTO_START  default 1 -> POST /batches auto-starts the batch
+  DEMO_AUTOPILOT default 0 -> 1 keeps batches flowing unattended
+                 (see vla/autopilot.py for its DEMO_AUTOPILOT_* settings;
+                 DEMO_AUTOPILOT_WAREHOUSE=0 switches off the pallet flow
+                 DEMO_AUTOPILOT_LOGISTICS=0 switches off the simulated
+                 shipments/forklifts/tanker (GET /api/v1/logistics)
+                 of vla/warehouse.py)
 """
 
 from __future__ import annotations
@@ -18,24 +24,28 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from vla import alarms as A, inventory, kpi as K, line as L, model as M
+from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
 from vla.equipment import EQUIPMENT_IDS, CipRequired, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
+from vla.park_control import ParkControl
 from vla.orders import OrderManager
 from vla.period_reports import (assemble_equipment_report,
                                 assemble_period_report, render_equipment_pdf,
                                 render_period_pdf)
 from vla.report import render_json, render_pdf
 from vla.scan import ScanFlow, ScanRejected
+from vla.warehouse import WarehouseSim
+from vla.logistics_sim import LogisticsSim
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -215,19 +225,50 @@ def _startup() -> None:
         log.warning("bus start failed (%s) — continuing offline", e)
     # PRIMARY control path: direct OPC-UA to the factory (offline-safe no-op).
     control = OpcuaControl()
+    # Lijn Vla-B. Offline-veilig: zonder park-model blijft de catalogus leeg en
+    # geven de routes een nette 503 in plaats van een stacktrace.
+    park = ParkControl(
+        model_dir=os.environ.get("PARK_MODEL_DIR", "/model"),
+        mqtt_publish=(lambda t, p: bus.client.publish(t, p, qos=0))
+        if getattr(bus, "client", None) else None)
     seed_recipes(db)
     orders = OrderManager(db, bus)
     equipment = EquipmentMonitor(db, bus)
     runner = BatchRunner(db, bus, control=control, orders=orders, equipment=equipment)
-    STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
+    STATE.update({"db": db, "bus": bus, "control": control, "park": park,
+                  "orders": orders,
                   "runner": runner, "scan": ScanFlow(db, runner, orders),
                   "handling": HandlingUnitManager(db), "equipment": equipment})
+    if os.environ.get("DEMO_AUTOPILOT", "0").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            warehouse = None
+            if os.environ.get("DEMO_AUTOPILOT_WAREHOUSE", "1").strip().lower() \
+                    in ("1", "true", "yes", "on"):
+                warehouse = WarehouseSim(db, STATE["handling"], AUTOPILOT_OPERATOR)
+                if os.environ.get("DEMO_AUTOPILOT_LOGISTICS", "1").strip().lower() \
+                        in ("1", "true", "yes", "on"):
+                    warehouse.logistics = LogisticsSim(db, AUTOPILOT_OPERATOR,
+                                                       events=runner._event)
+                    STATE["logistics"] = warehouse.logistics
+            pilot = Autopilot(
+                db, runner, equipment=equipment, orders=orders, bus=bus,
+                recipe_id=os.environ.get("DEMO_AUTOPILOT_RECIPE", "chocolate-vla-1L"),
+                gap_s=float(os.environ.get("DEMO_AUTOPILOT_GAP_S", "10")),
+                keep_hours=float(os.environ.get("DEMO_AUTOPILOT_KEEP_HOURS", "24")),
+                warehouse=warehouse)
+            pilot.start()
+            STATE["autopilot"] = pilot
+        except ValueError as e:
+            log.error("autopilot not started: %s", e)
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
 
 @app.on_event("shutdown")
 def _shutdown() -> None:
+    pilot = STATE.get("autopilot")
+    if pilot is not None:
+        pilot.stop()
     bus = STATE.get("bus")
     if bus is not None:
         bus.stop()
@@ -238,6 +279,25 @@ def _shutdown() -> None:
 @app.get(f"{API}/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get(f"{API}/autopilot")
+def autopilot_status():
+    """Demo-autopilot status: off, or what it last did."""
+    pilot = STATE.get("autopilot")
+    return dict(pilot.status) if pilot is not None else {"enabled": False}
+
+
+@app.get(f"{API}/logistics")
+def logistics_overview():
+    """Shipments, forklifts and inbound milk for the 3D twin (source: demo-sim).
+
+    Only with the autopilot warehouse flow on; otherwise an empty, labelled
+    answer so the twin can say "no logistics data" instead of failing."""
+    sim = STATE.get("logistics")
+    if sim is None:
+        return {"source": None, "shipments": [], "forklifts": [], "inbound": None}
+    return sim.snapshot()
 
 
 @app.get(f"{API}/tags")
@@ -775,3 +835,59 @@ def ship_hu(hu_id: str, body: HuAction):
 @app.get(f"{API}/hu")
 def list_hus(batch_id: str | None = Query(default=None)):
     return _handling().list_hus(batch_id)
+
+
+# ── STORINGEN, lijn Vla-B ────────────────────────────────────────────────────
+#
+# Het convergentiepunt van drie van de vier ingangen: het UI-paneel en de
+# scenario-runner komen hier binnen, en MQTT gaat er met opzet omheen omdat een
+# MQTT-client moet werken zonder dat deze laag draait. Alle vier landen op
+# dezelfde FaultInjector in de machine.
+
+def _park():
+    p = STATE.get("park")
+    if p is None:
+        raise HTTPException(status_code=503, detail={
+            "message": "park-control niet beschikbaar (draait het park?)",
+            "reason": "park_unavailable"})
+    return p
+
+
+@app.get(f"{API}/park/faults")
+def park_faults():
+    """De storingscatalogus plus wat er nu actief staat.
+
+    De catalogus is gegenereerd uit het FAULTS-attribuut van de physics-klassen,
+    dus hij kan geen storing tonen die de fysica niet implementeert. Een knop
+    die niets doet is erger dan geen knop.
+    """
+    return _park().catalogue()
+
+
+@app.post(f"{API}/park/{{equipment_id}}/fault")
+def park_inject(equipment_id: str, body: dict = Body(...)):
+    fault_id = str(body.get("fault") or body.get("fault_id") or "").strip()
+    if not fault_id:
+        raise HTTPException(status_code=400, detail={
+            "message": "veld 'fault' ontbreekt", "reason": "missing_fault"})
+    try:
+        magnitude = float(body.get("magnitude", 1.0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={
+            "message": "magnitude moet een getal tussen 0 en 1 zijn",
+            "reason": "bad_magnitude"})
+    res = _park().inject(equipment_id, fault_id, magnitude)
+    if not res.get("ok") and res.get("error"):
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+@app.delete(f"{API}/park/{{equipment_id}}/fault/{{fault_id}}")
+def park_clear(equipment_id: str, fault_id: str):
+    return _park().clear(equipment_id, None if fault_id in ("all", "*") else fault_id)
+
+
+@app.post(f"{API}/park/clear-all")
+def park_clear_all():
+    """Alles uit. De knop die je na een demo wilt hebben."""
+    return _park().clear_all()
