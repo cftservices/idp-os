@@ -308,6 +308,52 @@ alerts, OEE trend), both `?format=json|pdf`. Covered end-to-end by
 `tests/test_cbm.py`, `tests/test_cip_gate.py`, `tests/test_oee_health.py`,
 `tests/test_ack.py`, `tests/test_ebr.py`, `tests/test_period_reports.py`.
 
+### Grip op je fabriek via de datalaag (the datalayer lens)
+
+The twin can now show the layer itself, not just the factory. Press **D** or
+the **Datalaag** button in the top bar (or open `/site?lens=1`). Every machine
+gets a marker with its signal quality and any open work order. The left panel
+switches to four tabs:
+
+- **Bronnen**: sources (both OPC UA lines, MES, warehouse), each with
+  good/stale/bad signal counts, flowing into the datalaag and on to its
+  consumers (historian, documents, dashboards, AI, twin, CMMS, agent). Demo
+  buttons simulate a breakdown or a 90 s signal dropout on any of the ten
+  machines.
+- **Onderhoud**: CMMS work orders (reported → assigned → in progress → done)
+  and MTBF/MTTR per machine over 24 h. A breakdown puts the machine on Down and
+  only the completed work order releases it.
+- **Euro's**: losses per machine in money, split into causal and resultant
+  cost, so a breakdown is not counted twice.
+- **DataOps**: build, tests, rules the layer enforces, and measured container
+  CPU/memory of the stack.
+
+The machine card shows the ISA-95 path, raw OPC UA node vs. contextualised
+topic, signal quality per topic, and an **Oorzaak** button per CBM alert that
+returns the cause chain with a local-model explanation.
+
+Guided tours for the video series: `/site?tour=ep1` … `ep4`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /datalayer/map` | sources, services and their status |
+| `GET /datalayer/quality` | signal quality per machine |
+| `GET /datalayer/context/{eq}` | ISA-95 context, topics, open alerts and work orders |
+| `POST /datalayer/dropout/{eq}?seconds=` / `DELETE /datalayer/dropout/{eq\|all}` | simulate signal loss |
+| `GET /cmms/work-orders` | work orders (adapter: built-in) |
+| `POST /equipment/{eq}/breakdown` | demo breakdown → work order |
+| `GET /reliability?hours=` | MTBF/MTTR per machine |
+| `GET /losses/equipment?hours=` | losses in euros, causal vs. resultant |
+| `GET /alarms/{id}/cause?ai=1` | root-cause chain (alarm or CBM alert) |
+| `POST /mcp` | read-only tool interface for agents |
+| `GET /dataops`, `GET /system/resources` | build/tests/rules, measured resources |
+
+Container resources come from a host cron (`scripts/hoststats.sh`, every
+minute, writes `/opt/hoststats/stats.json`); the engine mounts that read-only
+and never touches `docker.sock`. Engine env: `OLLAMA_URL`, `OLLAMA_MODEL`,
+`DEMO_BREAKDOWNS`, `GIT_SHA`, `HOSTSTATS_FILE`. Tests:
+`tests/test_datalayer.py`.
+
 ---
 
 ## Component map

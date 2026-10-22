@@ -49,6 +49,9 @@ from vla.logistics_sim import LogisticsSim
 from vla.trace import order_trace
 from vla import forklift_trace
 from vla.preparation import PrepManager
+from vla import datalayer as DL, dataops as DO, mcp as MCP, rca as RCA
+from vla.cmms import TECHNICIANS, CmmsConnector, reliability as cmms_reliability
+from vla.losses import losses_per_equipment
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -292,6 +295,18 @@ def _startup() -> None:
                   "controls": controls, "prep": prep,
                   "runner": runner, "scan": ScanFlow(db, runner, orders),
                   "handling": HandlingUnitManager(db), "equipment": equipment})
+    # Onderhoud aan de datalaag: werkorders uit storingen en CBM-alerts.
+    breakdowns = os.environ.get("DEMO_BREAKDOWNS", "0").strip().lower() \
+        in ("1", "true", "yes", "on")
+    cmms = CmmsConnector(
+        db, equipment, buses=buses, events=runner._event,
+        auto_breakdowns=breakdowns,
+        mean_breakdown_interval_s=float(os.environ.get(
+            "DEMO_BREAKDOWN_INTERVAL_S", "2700")))
+    if os.environ.get("CMMS_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on"):
+        cmms.start(poll_s=float(os.environ.get("CMMS_POLL_S", "3")))
+        STATE["cmms"] = cmms
+    STATE["mcp"] = _build_mcp()
     if os.environ.get("DEMO_AUTOPILOT", "0").strip().lower() in ("1", "true", "yes", "on"):
         try:
             warehouse = None
@@ -330,6 +345,8 @@ def _startup() -> None:
 
 @app.on_event("shutdown")
 def _shutdown() -> None:
+    if STATE.get("cmms") is not None:
+        STATE["cmms"].stop()
     for pilot in (STATE.get("autopilots") or {}).values():
         pilot.stop()
     if STATE.get("autopilot") is not None:
@@ -490,6 +507,205 @@ def equipment_cip(equipment_id: str, body: CipRequest):
         return eq.perform_cip(equipment_id, operator_id=body.operator_id)
     except ValueError as e:
         raise HTTPException(409, str(e))
+
+
+# ------------------------------------------------------------------ datalaag
+# Grip op je fabriek via de datalaag: wat zit erin, hoe goed is het, wat kost
+# het, en wat doet onderhoud ermee. Alles hieronder leest; de enige schrijvende
+# routes zijn demo-knoppen (storing, sensoruitval) die de video nodig heeft.
+
+def _extra() -> dict:
+    return {"logistics": STATE.get("logistics") is not None,
+            "cmms": STATE.get("cmms") is not None,
+            "agent": STATE.get("mcp") is not None}
+
+
+def _buses() -> dict:
+    buses = STATE.get("buses") or {}
+    if not buses:
+        raise HTTPException(503, "engine not initialized")
+    return buses
+
+
+@app.get(f"{API}/datalayer/map")
+def datalayer_map():
+    """Bronnen -> datalaag -> opslag en afnemers, met live status per schakel."""
+    return DL.layer_map(_buses(), STATE.get("db"), _extra())
+
+
+@app.get(f"{API}/datalayer/context/{{equipment_id}}")
+def datalayer_context(equipment_id: str):
+    """Eén machine zoals de datalaag hem kent: ISA-95-pad, topics met kwaliteit
+    en de ruwe OPC-UA-bron erachter, plus open alerts en werkorders."""
+    if equipment_id not in M.ALL_EQUIPMENT_IDS:
+        raise HTTPException(404, f"unknown equipment {equipment_id!r}")
+    return DL.context(equipment_id, _buses(), STATE.get("db"),
+                      STATE.get("equipment"), STATE.get("cmms"))
+
+
+@app.get(f"{API}/datalayer/quality")
+def datalayer_quality():
+    return DL.quality(_buses())
+
+
+@app.post(f"{API}/datalayer/dropout/{{equipment_id}}")
+def datalayer_dropout(equipment_id: str, seconds: float = Query(default=120.0)):
+    """Demo: simuleer sensoruitval. De sensorwaarden van deze machine melden
+    BAD tot de tijd om is; de fabriek zelf merkt er niets van."""
+    try:
+        return DL.set_dropout(equipment_id, seconds)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.delete(f"{API}/datalayer/dropout/{{equipment_id}}")
+def datalayer_dropout_clear(equipment_id: str):
+    return DL.clear_dropout(None if equipment_id == "all" else equipment_id)
+
+
+def _cmms():
+    c = STATE.get("cmms")
+    if c is None:
+        raise HTTPException(503, "cmms not enabled")
+    return c
+
+
+@app.get(f"{API}/cmms/work-orders")
+def cmms_work_orders(line: str | None = Query(default=None),
+                     status: str | None = Query(default=None),
+                     equipment_id: str | None = Query(default=None),
+                     open_only: bool = Query(default=False),
+                     limit: int = Query(default=100, ge=1, le=1000)):
+    c = _cmms()
+    return {"adapter": c.adapter.name, "status": c.status,
+            "technicians": TECHNICIANS,
+            "work_orders": c.list(line=_check_line(line), status=status,
+                                  equipment_id=equipment_id, open_only=open_only,
+                                  limit=limit)}
+
+
+class BreakdownRequest(BaseModel):
+    cause: str | None = None
+    repair_s: float | None = None
+
+
+@app.post(f"{API}/equipment/{{equipment_id}}/breakdown")
+def equipment_breakdown(equipment_id: str, body: BreakdownRequest | None = None):
+    """Demo: een storing. De machine gaat op Down, er ontstaat een werkorder,
+    en pas de gereedmelding geeft hem weer vrij."""
+    if equipment_id not in M.ALL_EQUIPMENT_IDS:
+        raise HTTPException(404, f"unknown equipment {equipment_id!r}")
+    body = body or BreakdownRequest()
+    repair = None if body.repair_s is None else max(30.0, min(body.repair_s, 1800.0))
+    return _cmms().report_breakdown(equipment_id, cause=body.cause, repair_s=repair)
+
+
+@app.get(f"{API}/reliability")
+def get_reliability(line: str | None = Query(default=None),
+                    hours: float = Query(default=24.0, gt=0, le=24 * 31)):
+    """ISO 22400-tijden (APT/ADET/idle), beschikbaarheid, MTBF en MTTR per machine."""
+    cost = K.load_cost_model() or {}
+    return cmms_reliability(_db(), STATE.get("equipment"), line=_check_line(line),
+                            hours=hours,
+                            cost_per_downtime_hour=cost.get("cost_per_downtime_hour"))
+
+
+@app.get(f"{API}/losses/equipment")
+def get_losses_equipment(line: str | None = Query(default=None),
+                         hours: float = Query(default=24.0, gt=0, le=24 * 31)):
+    """Verlies in euro's per machine, met dezelfde kostenparameters als de KPI's."""
+    start, end = DL.recent_window(hours)
+    return losses_per_equipment(_db(), STATE.get("equipment"), start, end,
+                                K.load_cost_model(), line=_check_line(line))
+
+
+@app.get(f"{API}/alarms/{{alarm_id}}/cause")
+def get_alarm_cause(alarm_id: str, ai: int = Query(default=0)):
+    """Van alarm naar oorzaak: gecorreleerde signalen uit de datalaag en een
+    afgeleide keten. `?ai=1` laat het lokale model de keten samenvatten."""
+    out = RCA.cause(_db(), alarm_id, cmms=STATE.get("cmms"),
+                    cost_model=K.load_cost_model(), ai=bool(ai),
+                    ollama_url=os.environ.get("OLLAMA_URL"),
+                    ai_model=os.environ.get("OLLAMA_MODEL", "qwen2.5:3b"))
+    if out is None:
+        raise HTTPException(404, f"unknown alarm {alarm_id!r}")
+    return out
+
+
+def _build_mcp() -> MCP.ToolRegistry:
+    reg = MCP.ToolRegistry()
+    eq_schema = {"type": "object", "properties": {
+        "equipment_id": {"type": "string", "enum": list(M.ALL_EQUIPMENT_IDS)}},
+        "required": ["equipment_id"]}
+    hours_schema = {"type": "object", "properties": {
+        "line": {"type": "string", "enum": list(M.LINES)},
+        "hours": {"type": "number", "default": 24}}}
+
+    def _ctx(a):
+        if a.get("equipment_id") not in M.ALL_EQUIPMENT_IDS:
+            raise ValueError("onbekende equipment_id")
+        return DL.context(a["equipment_id"], STATE.get("buses") or {},
+                          STATE.get("db"), STATE.get("equipment"), STATE.get("cmms"))
+
+    def _losses(a):
+        start, end = DL.recent_window(float(a.get("hours") or 24))
+        return losses_per_equipment(STATE["db"], STATE.get("equipment"), start, end,
+                                    K.load_cost_model(), line=a.get("line"))
+
+    def _wos(a):
+        c = STATE.get("cmms")
+        return {"work_orders": c.list(line=a.get("line"),
+                                      equipment_id=a.get("equipment_id"),
+                                      open_only=bool(a.get("open_only")), limit=50)
+                if c else []}
+
+    def _rel(a):
+        cost = K.load_cost_model() or {}
+        return cmms_reliability(STATE["db"], STATE.get("equipment"),
+                                line=a.get("line"), hours=float(a.get("hours") or 24),
+                                cost_per_downtime_hour=cost.get("cost_per_downtime_hour"))
+
+    reg.register("get_context", "Context van één machine: ISA-95-pad, live topics "
+                 "met kwaliteit, ruwe OPC-UA-bron, open alerts en werkorders.",
+                 eq_schema, _ctx)
+    reg.register("get_losses", "Verlies in euro's per machine over de laatste uren.",
+                 hours_schema, _losses)
+    reg.register("list_work_orders", "Werkorders uit het onderhoudssysteem.",
+                 {"type": "object", "properties": {
+                     "line": {"type": "string", "enum": list(M.LINES)},
+                     "equipment_id": {"type": "string"},
+                     "open_only": {"type": "boolean"}}}, _wos)
+    reg.register("get_quality", "Datakwaliteit per machine: GOOD, STALE of BAD.",
+                 {"type": "object", "properties": {}},
+                 lambda a: DL.quality(STATE.get("buses") or {}))
+    reg.register("get_reliability", "MTBF, MTTR, beschikbaarheid en stilstand per machine.",
+                 hours_schema, _rel)
+    reg.register("get_datalayer_map", "Welke bronnen en afnemers aan de datalaag hangen.",
+                 {"type": "object", "properties": {}},
+                 lambda a: DL.layer_map(STATE.get("buses") or {}, STATE.get("db"),
+                                        _extra()))
+    return reg
+
+
+@app.post(f"{API}/mcp")
+def mcp_endpoint(payload: dict | list = Body(...)):
+    """Read-only MCP (JSON-RPC 2.0). Een agent leest de fabriek, schrijft nooit."""
+    reg = STATE.get("mcp") or _build_mcp()
+    out = MCP.handle(payload, reg)
+    if out is None:
+        return Response(status_code=202)
+    return JSONResponse(out)
+
+
+@app.get(f"{API}/system/resources")
+def system_resources():
+    """Wat de stack op de VPS gebruikt (host-meting, alleen-lezen gemount)."""
+    return DO.resources()
+
+
+@app.get(f"{API}/dataops")
+def get_dataops():
+    return DO.dataops(DL.quality(_buses()), _buses(), DL.active_dropouts())
 
 
 @app.get(f"{API}/materials")

@@ -242,6 +242,11 @@ class Autopilot:
                 return self._record("wait_prep")
 
         cook = self.line.eq("cook")
+        if self.equipment is not None and hasattr(self.equipment, "line_down"):
+            down = self.equipment.line_down(self.line.line_id)
+            if down:
+                self._idle_since = None
+                return self._record(f"wait_repair {','.join(down)}")
         if self.equipment is not None and self.equipment.is_dirty(cook):
             try:
                 self.equipment.perform_cip(cook, operator_id=OPERATOR)

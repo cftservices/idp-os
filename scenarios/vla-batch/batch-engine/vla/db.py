@@ -35,6 +35,7 @@ COLLECTIONS = [
     "dw_cbm_alerts",
     "dw_autopilot",
     "dw_shipments", "dw_prep_orders",
+    "dw_work_orders",
 ]
 
 

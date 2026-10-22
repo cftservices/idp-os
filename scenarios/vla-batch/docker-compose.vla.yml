@@ -209,8 +209,17 @@ services:
       # versnelde demo terug naar procestijd, want de norm (5200 packs/h per
       # lijn) is die van een echte lijn.
       KPI_TIME_SCALE: "15.0"
+      # Datalaag-lens: oorzaakuitleg via het lokale model, gesimuleerde
+      # storingen voor de demo, en build-/resourcegegevens voor DataOps.
+      OLLAMA_URL: "http://vla-ollama:11434"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      DEMO_BREAKDOWNS: ${DEMO_BREAKDOWNS:-1}
+      GIT_SHA: ${GIT_SHA:-}
+      HOSTSTATS_FILE: /hoststats/stats.json
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
+      # Geschreven door een host-cron (scripts/hoststats.sh); nooit docker.sock.
+      - /opt/hoststats:/hoststats:ro
     mem_limit: 256m
     depends_on:
       mongo:

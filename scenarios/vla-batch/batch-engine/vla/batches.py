@@ -247,6 +247,9 @@ class BatchRunner:
         running = {self.line.eq(r) for r in _RUNNING_IN_STATE.get(batch_state, set())}
         for eq in self.line.equipment_ids:
             state = "Running" if eq in running else "Idle"
+            if self.equipment is not None and self.equipment.is_down(eq):
+                # Een machine in storing draait niet mee, ook al loopt de batch.
+                state = "Down"
             self.db.dw_equipment_state.insert_one({
                 "equipment_id": eq,
                 "area": M.area_of(eq),

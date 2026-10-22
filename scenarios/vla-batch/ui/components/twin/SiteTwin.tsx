@@ -11,6 +11,10 @@ import { num } from "@/lib/format";
 import type { TwinCtx } from "./context";
 import { CameraControls, DetailCard, KpiCards, TabPanel, Timeline, TopBar, type ActiveOrder } from "./overlay";
 import { describe, listItems, type TwinGroup } from "./selection";
+import { DatalayerPanel, type DlTab } from "./datalayer";
+import { TOURS, TourBar } from "./tour";
+import type { LensMarker } from "./objects/LensMarkers";
+import { useQualityMap, useWorkOrders } from "@/lib/twin/datalayer";
 
 const SiteScene = dynamic(() => import("./SiteScene"), {
   ssr: false,
@@ -119,9 +123,36 @@ export default function SiteTwin() {
   const [, setTick] = useState(0);
   const [follow, setFollow] = useState<string | null>(null);
   const [showPath, setShowPath] = useState(false);
+  const [lens, setLens] = useState(false);
+  const [dlTab, setDlTab] = useState<DlTab>("bronnen");
+  const [tourId, setTourId] = useState<string | null>(null);
+  const [tourStep, setTourStep] = useState(0);
   const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => setWebgl(hasWebGL()), []);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const t = p.get("tour");
+    if (t && TOURS[t]) setTourId(t);
+    if (p.get("lens") === "1") setLens(true);
+  }, []);
+
+  const quality = useQualityMap(lens);
+  const workOrders = useWorkOrders(lens);
+  const lensMarkers: LensMarker[] | null = useMemo(() => {
+    if (!lens) return null;
+    const q = new Map((quality.data?.equipment ?? []).map((r) => [r.equipment_id, r]));
+    const open = (workOrders.data?.work_orders ?? []).filter((w) => w.status !== "done");
+    const wo = new Map(open.map((w) => [w.equipment_id, w.wo_id]));
+    const down = new Set(open.filter((w) => w.kind === "breakdown").map((w) => w.equipment_id));
+    return [...model.equipment, ...model.line2.equipment].map((e) => ({
+      id: e.id,
+      pos: e.pos,
+      quality: q.get(e.id)?.quality ?? "NO_DATA",
+      wo: wo.get(e.id) ?? null,
+      down: down.has(e.id),
+    }));
+  }, [lens, quality.data, workOrders.data, model.equipment, model.line2.equipment]);
 
   const items = useMemo(() => listItems(model), [model]);
   const orders = useOrders<ActiveOrder[]>();
@@ -191,6 +222,7 @@ export default function SiteTwin() {
         setFollow(null);
       }
       if ((e.key === "p" || e.key === "P") && !e.metaKey && !e.ctrlKey && !e.altKey) togglePresent();
+      if ((e.key === "d" || e.key === "D") && !e.metaKey && !e.ctrlKey && !e.altKey) setLens((l) => !l);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -217,6 +249,23 @@ export default function SiteTwin() {
     [palette, selected, hovered, select, reducedMotion, labelled, meta],
   );
 
+  const tour = tourId ? TOURS[tourId] : null;
+  const goStep = useCallback(
+    (n: number) => {
+      if (!tourId) return;
+      const st = TOURS[tourId].steps[n];
+      if (!st) return;
+      setTourStep(n);
+      setLens(true);
+      if (st.tab) setDlTab(st.tab);
+      if (st.select !== undefined) setSelected(st.select);
+    },
+    [tourId],
+  );
+  useEffect(() => {
+    if (tourId) goStep(0);
+  }, [tourId, goStep]);
+
   const batch = model.batch;
   const docksInUse = model.sim ? model.sim.shipments.filter((s) => s.stage === "loading").length : model.logistics.docks.length;
   const chip = siteChip({ stored: model.husAvailable ? model.logistics.totals.stored : null, docksInUse });
@@ -237,6 +286,7 @@ export default function SiteTwin() {
             follow={followId}
             order={order}
             showPath={showPath}
+            lens={lensMarkers}
           />
         ) : (
           <SceneHolder text="3D-scène laden" />
@@ -252,10 +302,15 @@ export default function SiteTwin() {
         onPresent={togglePresent}
         onDrawer={() => setDrawer((d) => !d)}
         drawerOpen={drawer}
+        lens={lens}
+        onLens={() => setLens((l) => !l)}
       />
 
       <KpiCards m={model} series={get} order={order} showPath={showPath} onTogglePath={() => setShowPath((s) => !s)} />
 
+      {lens ? (
+        <DatalayerPanel tab={dlTab} onTab={setDlTab} onSelect={select} onClose={() => setLens(false)} />
+      ) : (
       <TabPanel
         items={items}
         tab={tab}
@@ -267,6 +322,19 @@ export default function SiteTwin() {
         open={drawer}
         simOn={!!model.sim}
       />
+      )}
+
+      {tour && (
+        <TourBar
+          tour={tour}
+          step={tourStep}
+          onStep={goStep}
+          onClose={() => {
+            setTourId(null);
+            setTourStep(0);
+          }}
+        />
+      )}
 
       {selected && (
         <DetailCard
@@ -276,6 +344,7 @@ export default function SiteTwin() {
           onClose={() => setSelected(null)}
           following={follow === selected}
           onFollow={FOLLOWABLE.test(selected) ? () => setFollow((f) => (f === selected ? null : selected)) : undefined}
+          onSelect={select}
         />
       )}
 
