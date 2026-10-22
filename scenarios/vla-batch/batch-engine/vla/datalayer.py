@@ -174,7 +174,11 @@ def layer_map(buses: dict, db=None, extra: Optional[dict] = None) -> dict:
     verbose = _verbose(buses)
     sources = []
     for lid, ln in M.LINES.items():
-        rows = {t: r for t, r in verbose.items() if t.startswith(ln.uns_root + "/")}
+        # Signaalkwaliteit gaat over machinesignalen (conventie .../Status/{tag});
+        # retained regel- en orderinformatie ververst niet live en zou anders
+        # als "verouderd" meetellen.
+        rows = {t: r for t, r in verbose.items()
+                if t.startswith(ln.uns_root + "/") and "/Status/" in t}
         ages = [r["age_s"] for r in rows.values() if r.get("age_s") is not None]
         states = [topic_state(r, threshold) for r in rows.values()]
         bus = buses.get(lid)
@@ -233,6 +237,7 @@ def layer_map(buses: dict, db=None, extra: Optional[dict] = None) -> dict:
         services.append({"id": svc["id"], "kind": svc["kind"], "name": svc["name"],
                          "role": svc["role"], "status": status, "detail": detail})
 
+    signals = sum(s["topics"] or 0 for s in sources)
     good = sum(s["good"] or 0 for s in sources)
     stale = sum(s["stale"] or 0 for s in sources)
     bad = sum(s["bad"] or 0 for s in sources)
@@ -246,6 +251,7 @@ def layer_map(buses: dict, db=None, extra: Optional[dict] = None) -> dict:
             "name": "De datalaag",
             "convention": "{Site}/{Line}/{Area}/{Equipment}/Status/{tag}",
             "topics": len(verbose),
+            "signals": signals,
             "good": good, "stale": stale, "bad": bad,
             "roots": [ln.uns_root for ln in M.LINES.values()],
         },

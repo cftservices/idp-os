@@ -140,7 +140,7 @@ function Sources({ onSelect }: { onSelect: (id: string) => void }) {
       <div className="wt-dl-core" data-twin-dl-core="">
         <strong>{d.datalayer.name}</strong>
         <small>
-          {d.datalayer.topics} topics in ISA-95-context · {d.datalayer.good} goed · {d.datalayer.stale} verouderd · {d.datalayer.bad} slecht
+          {d.datalayer.topics} topics in ISA-95-context · {d.datalayer.signals ?? d.datalayer.topics} machinesignalen: {d.datalayer.good} goed · {d.datalayer.stale} verouderd · {d.datalayer.bad} slecht
         </small>
         <code className="mono">{d.datalayer.convention}</code>
       </div>

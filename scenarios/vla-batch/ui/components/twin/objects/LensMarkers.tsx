@@ -6,6 +6,7 @@ import { QUALITY_WORD, type Quality } from "@/lib/twin/datalayer";
 
 export type LensMarker = {
   id: string;
+  name: string;
   pos: Vec3;
   quality: Quality;
   wo: string | null;
@@ -29,7 +30,8 @@ export function LensMarkers({ markers, onSelect }: { markers: LensMarker[]; onSe
             data-twin-lens={m.id}
           >
             <span className="wt-dl-dot" aria-hidden="true" />
-            {m.down ? "Down" : QUALITY_WORD[m.quality]}
+            <strong>{m.name}</strong>
+            <span className="wt-lens-q">{m.down ? "Down" : QUALITY_WORD[m.quality]}</span>
             {m.wo && <span className="mono"> · {m.wo}</span>}
           </button>
         </Html>
