@@ -41,7 +41,7 @@ _SERVICES = [
      "env": "PROBE_GRAFANA", "default": "grafana:3000",
      "role": "Trends en overzichten op de historian"},
     {"id": "ai", "kind": "consumer", "name": "Lokale AI (vragen aan je fabriek)",
-     "env": "PROBE_AI", "default": "vla-ai:8000",
+     "env": "PROBE_AI", "default": "vla-ai:8080",
      "role": "Lokale taalmodellen; geen data buiten de fabriek"},
     {"id": "twin", "kind": "consumer", "name": "3D-twin en MES-schermen",
      "env": None, "default": None,
