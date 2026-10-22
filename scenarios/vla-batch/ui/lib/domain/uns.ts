@@ -89,7 +89,7 @@ export const STEPS: Array<{
     name: "Vullen",
     area: "Filling",
     equipment: "filler-01",
-    primary: { tag: "packs_total", label: "Pakken", unit: "" },
+    primary: { tag: "packs_total", label: "Pakken", unit: "packs" },
     secondary: [
       { tag: "reject_count", label: "Afgekeurd", unit: "" },
       { tag: "pack_size_L", label: "Pakgrootte", unit: "L" },

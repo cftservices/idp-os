@@ -17,6 +17,15 @@ export function num(v: number | null | undefined, decimals = 1): string {
   });
 }
 
+/** Compact voor krappe kaartjes: 41,3k en 3,33 mln. Onder de 10.000 gewoon num(). */
+export function compact(v: number | null | undefined, decimals = 1): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "-";
+  const a = Math.abs(v);
+  if (a >= 1e6) return `${num(v / 1e6, a >= 1e7 ? 1 : 2)} mln`;
+  if (a >= 1e4) return `${num(v / 1e3, 1)}k`;
+  return num(v, decimals);
+}
+
 /** Bedragen: nul decimalen, duizendscheiding. */
 export function money(v: number | null | undefined, currency = "EUR"): string {
   if (v === null || v === undefined) return "-";

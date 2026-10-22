@@ -6,8 +6,10 @@ import { BATCH_STEPS, batchStepIndex, labelBudget, siteChip } from "@/lib/twin/f
 import { useSeries } from "@/lib/twin/history";
 import { useTwinPalette } from "@/lib/twin/palette";
 import { useTwinData } from "@/lib/twin/useTwinData";
+import { useOrders } from "@/lib/queries";
+import { num } from "@/lib/format";
 import type { TwinCtx } from "./context";
-import { CameraControls, DetailCard, KpiCards, TabPanel, Timeline, TopBar } from "./overlay";
+import { CameraControls, DetailCard, KpiCards, TabPanel, Timeline, TopBar, type ActiveOrder } from "./overlay";
 import { describe, listItems, type TwinGroup } from "./selection";
 
 const SiteScene = dynamic(() => import("./SiteScene"), {
@@ -53,6 +55,42 @@ const BATCH_WORD: Record<string, string> = {
   COMPLETE: "gereed",
 };
 
+/** Per fase het getal dat ertoe doet, in plaats van overal "vullen 0%". */
+const PHASE_EQUIPMENT: Record<string, string> = {
+  DOSING: "process-tank-01",
+  COOKING: "cook-unit-01",
+  COOLING: "cooler-01",
+};
+
+function phaseText(m: ReturnType<typeof useTwinData>): string {
+  const state = m.batch?.state;
+  if (!state) return "";
+  if (state === "FILLING") {
+    const p = m.filling?.packs_progress_pct;
+    return p != null ? `vullen ${Math.round(p)}%` : "";
+  }
+  const eq = m.equipment.find((e) => e.id === PHASE_EQUIPMENT[state]);
+  if (!eq?.live) return "";
+  const parts: string[] = [];
+  const val = (label: string) => {
+    const all = [eq.live?.primary, ...(eq.live?.secondary ?? [])];
+    return all.find((x) => x?.label === label) ?? null;
+  };
+  const fmt = (x: { value: number | null; unit: string } | null) => (x && x.value != null ? `${num(x.value)} ${x.unit}`.trim() : null);
+  if (state === "DOSING") parts.push(fmt(val("Tankniveau")) ?? "");
+  if (state === "COOKING") {
+    parts.push(fmt(val("Temperatuur")) ?? "");
+    const hold = val("Hold");
+    if (hold?.value != null) parts.push(`hold ${num(hold.value, 0)} s`);
+  }
+  if (state === "COOLING") {
+    const t = fmt(val("Temperatuur"));
+    const d = fmt(val("Doel"));
+    parts.push(t && d ? `${t} → ${d}` : t ?? "");
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
 export default function SiteTwin() {
   const model = useTwinData();
   const palette = useTwinPalette();
@@ -72,6 +110,17 @@ export default function SiteTwin() {
   useEffect(() => setWebgl(hasWebGL()), []);
 
   const items = useMemo(() => listItems(model), [model]);
+  const orders = useOrders<ActiveOrder[]>();
+  // De klantorder waar de lijn nu aan werkt: RUNNING eerst, anders de eerstvolgende OPEN.
+  const order = useMemo(() => {
+    const list = Array.isArray(orders.data) ? orders.data : [];
+    const due = (o: ActiveOrder) => (o.due_date ? Date.parse(o.due_date) : Infinity);
+    return (
+      list.find((o) => o.status === "RUNNING") ??
+      list.filter((o) => o.status === "OPEN").sort((a, b) => due(a) - due(b))[0] ??
+      null
+    );
+  }, [orders.data]);
 
   // Historie voor sparklines en delta's. Vult zich in de browser: er is geen historie-endpoint.
   useEffect(() => {
@@ -174,7 +223,7 @@ export default function SiteTwin() {
         drawerOpen={drawer}
       />
 
-      <KpiCards m={model} series={get} />
+      <KpiCards m={model} series={get} order={order} />
 
       <TabPanel
         items={items}
@@ -202,7 +251,7 @@ export default function SiteTwin() {
             )}
           </span>
         }
-        right={model.filling?.packs_progress_pct != null ? `vullen ${Math.round(model.filling.packs_progress_pct)}%` : ""}
+        right={phaseText(model)}
         steps={BATCH_STEPS}
         index={batchStepIndex(batch?.state, model.hus, batch?.batch_id)}
       />

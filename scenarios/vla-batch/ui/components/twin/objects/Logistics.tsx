@@ -698,13 +698,22 @@ export function DockTruck({ slot, visual }: { slot: DockSlot; visual: Visual }) 
         labelHeight={4.6}
       >
         <TruckModel load={slot.progress} docked cargo={slot.loaded} />
-        <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-          <div className="twin-chip" data-twin-dock={slot.dock + 1}>
-            {slot.loaded.length}/{slot.loaded.length + slot.waiting.length} HU
-          </div>
-        </Html>
+        <DockChip id={`dock:${slot.batch_id}`} dock={slot.dock} loaded={slot.loaded.length} total={slot.loaded.length + slot.waiting.length} />
       </Pickable>
     </group>
+  );
+}
+
+/** Compacte HU-teller boven het dock; wijkt voor het volledige label bij hover of selectie. */
+function DockChip({ id, dock, loaded, total }: { id: string; dock: number; loaded: number; total: number }) {
+  const { labelled } = useTwin();
+  if (labelled.has(id)) return null;
+  return (
+    <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+      <div className="twin-chip" data-twin-dock={dock + 1}>
+        D{dock + 1} · {loaded}/{total} HU
+      </div>
+    </Html>
   );
 }
 
