@@ -22,10 +22,11 @@ import {
 import { PARK_LOADER, PARK_PUTAWAY } from "@/lib/twin/forklift";
 import { COLDSTORE, PALLETISER, ROAD_Z, dockPosition, type Vec3 } from "@/lib/twin/layout";
 import type { TwinModel } from "@/lib/twin/useTwinData";
+import { FLAVOUR_WORD, PREP_STATE_WORD } from "@/lib/twin/lines";
 import { EMPTY, age, num, shortTime } from "@/lib/format";
 
-export type TwinGroup = "Lijn" | "Grondstoffen" | "Magazijn" | "Heftrucks" | "Trucks";
-export const GROUPS: TwinGroup[] = ["Lijn", "Grondstoffen", "Magazijn", "Heftrucks", "Trucks"];
+export type TwinGroup = "Lijn" | "Voorbereiding" | "Grondstoffen" | "Magazijn" | "Heftrucks" | "Trucks";
+export const GROUPS: TwinGroup[] = ["Lijn", "Voorbereiding", "Grondstoffen", "Magazijn", "Heftrucks", "Trucks"];
 
 export type TwinItem = {
   id: string;
@@ -87,6 +88,29 @@ export function listItems(m: TwinModel): TwinItem[] {
     labelHeight: 4.2,
     pct: e.kind === "filler" && m.filling?.packs_progress_pct != null ? m.filling.packs_progress_pct : undefined,
   }));
+  for (const e of m.line2?.equipment ?? []) {
+    items.push({
+      id: `equipment:${e.id}`,
+      group: "Lijn",
+      name: e.name,
+      meta: primaryText(e),
+      visual: e.visual,
+      pos: e.pos,
+      labelHeight: 4.2,
+      pct: e.kind === "filler" && m.line2.filling?.packs_progress_pct != null ? m.line2.filling.packs_progress_pct : undefined,
+    });
+  }
+  for (const st of m.prep ?? []) {
+    items.push({
+      id: `prep:${st.id}`,
+      group: "Voorbereiding",
+      name: st.name,
+      meta: st.view.set ? `${st.view.set.line} · ${st.view.flavour ? FLAVOUR_WORD[st.view.flavour] : st.view.set.recipe_id}` : "",
+      visual: st.visual,
+      pos: st.pos,
+      labelHeight: st.kind === "weigh" ? 2.4 : 3.2,
+    });
+  }
   for (const s of m.silos) {
     items.push({
       id: `silo:${s.material.material_id}`,
@@ -198,9 +222,13 @@ export function describe(id: string, m: TwinModel): Detail | null {
   };
 
   if (kind === "equipment") {
-    const e = m.equipment.find((x) => x.id === key);
+    const onL2 = !m.equipment.some((x) => x.id === key);
+    const e = onL2 ? m.line2?.equipment.find((x) => x.id === key) : m.equipment.find((x) => x.id === key);
     if (!e) return null;
+    const fillInfo = onL2 ? m.line2.filling : m.filling;
+    const lineBatch = onL2 ? m.line2.batch : m.batch;
     const rows: Array<[string, string]> = [["Procesdeel", e.id]];
+    if (onL2) rows.push(["Lijn", `L2 · hal 2 · ${FLAVOUR_WORD[m.line2.flavour]}`]);
     const p = e.live?.primary;
     if (p) rows.push([p.label, `${num(p.value)} ${p.unit}`.trim()]);
     for (const s of e.live?.secondary ?? []) rows.push([s.label, s.value == null ? EMPTY : `${num(s.value)} ${s.unit}`.trim()]);
@@ -208,20 +236,52 @@ export function describe(id: string, m: TwinModel): Detail | null {
     rows.push(["Batches sinds CIP", e.health?.batches_since_cip != null ? String(e.health.batches_since_cip) : EMPTY]);
     rows.push(["Laatste CIP", e.health?.last_cip_at ? age(e.health.last_cip_at, m.now) : EMPTY]);
     rows.push(["Open alarmen", String(e.alarms.length)]);
-    const filling = e.kind === "filler" && m.filling?.packs_progress_pct != null;
+    const filling = e.kind === "filler" && fillInfo?.packs_progress_pct != null;
     return {
       title: e.name,
       kind: "Procesdeel",
       visual: e.visual,
       rows,
-      progress: filling ? { label: "Vullen", pct: m.filling!.packs_progress_pct! } : undefined,
-      timeline: m.batch ? batchTimeline : undefined,
+      progress: filling ? { label: "Vullen", pct: fillInfo!.packs_progress_pct! } : undefined,
+      timeline: onL2
+        ? lineBatch
+          ? { steps: BATCH_STEPS, index: batchStepIndex(lineBatch.state, m.hus, lineBatch.batch_id) }
+          : undefined
+        : m.batch
+          ? batchTimeline
+          : undefined,
       spark: p ? [{ key: sparkKey(e.id), label: p.label, unit: p.unit }] : undefined,
       links: [
         { href: "/equipment", label: "Equipment-overzicht" },
-        { href: "/line", label: "Lijnscherm" },
+        { href: onL2 ? "/line?line=L2" : "/line", label: "Lijnscherm" },
         ...(e.alarms.length > 0 ? [{ href: "/alarms", label: "Alarmen" }] : []),
       ],
+    };
+  }
+
+  if (kind === "prep") {
+    const st = m.prep?.find((x) => x.id === key);
+    if (!st) return null;
+    const set = st.view.set;
+    const rows: Array<[string, string]> = [
+      ["Station", st.id],
+      ["Status", PREP_STATE_WORD[st.view.state]],
+    ];
+    if (set) {
+      rows.push(["Set", set.prep_id]);
+      rows.push(["Lijn", set.line]);
+      rows.push(["Recept", st.view.flavour ? `${set.recipe_id} · ${FLAVOUR_WORD[st.view.flavour]}` : set.recipe_id]);
+      rows.push(["Order", set.order_id ?? EMPTY]);
+      rows.push(["Batch", set.batch_id ?? EMPTY]);
+      for (const c of set.components ?? []) rows.push([c.material_id, `${num(c.qty_kg)} ${c.uom ?? "kg"}`.trim()]);
+      rows.push(["Sinds", set.state_changed_at ? age(set.state_changed_at, m.now) : EMPTY]);
+    }
+    return {
+      title: st.name,
+      kind: st.kind === "weigh" ? "Voorbereiding · afwegen" : "Voorbereiding · premix",
+      visual: st.visual,
+      rows,
+      links: set?.batch_id ? batchLinks(set.batch_id) : [{ href: "/batches", label: "Alle batches" }],
     };
   }
 

@@ -27,7 +27,7 @@ def test_oee_shape_and_cook_performance_drop():
     db, mon, runner = setup(2)
     rows = {r["equipment_id"]: r for r in mon.oee()}
     cook = rows["cook-unit-01"]
-    assert set(cook) == {"equipment_id", "availability", "performance",
+    assert set(cook) == {"equipment_id", "line", "availability", "performance",
                          "quality", "oee"}
     # avg heat-up after 2 batches = base*(1.15+1.30)/2 -> performance < 1
     expected_perf = round(BASE_HEATUP_SEC / (BASE_HEATUP_SEC * (1.15 + 1.30) / 2), 4)

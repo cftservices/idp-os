@@ -89,6 +89,50 @@ services:
     networks:
       - idp-network
 
+  # ── VLA FACTORY L2 (Hal 2: smaaklijn vanille/banaan/karamel/aardbei) ─────
+  # Zelfde image en NodeIds als vla-factory; de lijn-naamgeving (-02 ids,
+  # namespace DairyWorks/Vla-L2) zit in vla-l2-opcua-init. Eigen OPC-UA-server,
+  # dus een storing op L2 raakt L1 niet.
+  vla-factory-l2:
+    image: techflow/vla-factory:latest
+    container_name: vla-factory-l2
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    environment:
+      OPCUA_ENDPOINT: "opc.tcp://0.0.0.0:4840/DairyWorks"
+      FACTORY_MODEL: /model/isa95-vla.json
+      TIME_SCALE: "15.0"
+      DOSE_RATE_KG_S: "13.0"
+      HEAT_RATE_C_S: "0.47"
+      COOL_RATE_C_S: "0.145"
+      FILL_RATE_PACKS_S: "11.2"
+      # Doorlopend proces, om dezelfde reden als L1 (zie daar). De engine
+      # start de echte batches met het juiste recept; dit is de terugval.
+      AUTOSTART_RECIPE: vanilla-vla-1L
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    mem_limit: 256m
+    depends_on:
+      vla-factory:
+        condition: service_started
+    networks:
+      - idp-network
+
+  vla-l2-opcua-init:
+    image: curlimages/curl:latest
+    container_name: vla-l2-opcua-init
+    restart: "no"
+    volumes:
+      - ./scenarios/vla-batch/monstermq-init:/init:ro
+    entrypoint: ["sh", "/init/init-vla-l2-opcua.sh"]
+    depends_on:
+      monstermq:
+        condition: service_healthy
+      vla-factory-l2:
+        condition: service_started
+    networks:
+      - idp-network
+
   # ── VLA OPC-UA INIT (★ PRIMARY ingest path) ──────────────────────────────
   # One-shot: registers vla-factory as an OPC-UA device in MonsterMQ via GraphQL
   # (addOpcUaDevice). After this runs, MonsterMQ's OWN OPC-UA client ingests the
@@ -160,6 +204,7 @@ services:
       MONGO_URL: ${MONGO_URL}
       MONGO_DB: ${MONGO_DB}
       FACTORY_MODEL: /model/isa95-vla.json
+      OPCUA_URL_L2: "opc.tcp://vla-factory-l2:4840/DairyWorks"
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
     mem_limit: 256m

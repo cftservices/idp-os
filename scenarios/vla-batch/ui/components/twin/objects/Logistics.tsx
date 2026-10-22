@@ -72,6 +72,7 @@ import type { TwinSilo } from "@/lib/twin/useTwinData";
 import { statusColor, useTwin } from "../context";
 import { FloatLabel, Pickable, Pin, usePick } from "./Pickable";
 import { Robot } from "./Robot";
+import { useFlavourPalette } from "../flavour";
 import { OipMesh, useOipParts, type OipPart } from "../models";
 
 export function Silo({ silo }: { silo: TwinSilo }) {
@@ -368,8 +369,9 @@ function palletWood() {
   return woodCache;
 }
 
-function PalletModel({ packs = 1, wrapped = false }: { packs?: number; wrapped?: boolean }) {
-  const { palette } = useTwin();
+function PalletModel({ packs = 1, wrapped = false, batch }: { packs?: number; wrapped?: boolean; batch?: string | null }) {
+  // Pakken in de kleur van de smaak van de batch (L2: vanille, banaan, ...); chocolade blijft het gewone palet.
+  const palette = useFlavourPalette(batch);
   const n = Math.max(1, Number(packs) || 1);
   const full = Math.min(MAX_LAYERS, Math.floor(n / PACKS_PER_LAYER));
   const rest = full < MAX_LAYERS ? n % PACKS_PER_LAYER : 0;
@@ -427,12 +429,12 @@ export function Palletiser({ logistics, visual }: { logistics: Logistics; visual
       </Suspense>
       {busy && (
         <group position={[0, 0.16, 0]}>
-          <PalletModel packs={logistics.palletiser[0].packs_count} wrapped />
+          <PalletModel packs={logistics.palletiser[0].packs_count} batch={logistics.palletiser[0].batch_id} wrapped />
         </group>
       )}
       {logistics.palletiser.slice(1, 4).map((hu, i) => (
         <group key={hu.hu_id} position={[0, 0, 1.4 + i * 1.2]}>
-          <PalletModel packs={hu.packs_count} wrapped />
+          <PalletModel packs={hu.packs_count} batch={hu.batch_id} wrapped />
         </group>
       ))}
     </Pickable>
@@ -450,7 +452,7 @@ function RackPallet({ hu, slot, transit, origin }: { hu: Hu; slot: number; trans
   });
   return (
     <group ref={ref} position={[x - origin[0], y, z - origin[1]]} visible={!transit.current.has(hu.hu_id)}>
-      <PalletModel packs={hu.packs_count} wrapped />
+      <PalletModel packs={hu.packs_count} batch={hu.batch_id} wrapped />
     </group>
   );
 }
@@ -610,7 +612,7 @@ function TrailerCargo({ hus }: { hus: Hu[] }) {
         const z = hold.front - 0.05 - 0.61 - row * 1.22;
         return (
           <group key={h.hu_id ?? i} position={[x, hold.floor + 0.01, z]} rotation={[0, Math.PI / 2, 0]}>
-            <PalletModel packs={Number(h.packs_count) || 1} wrapped />
+            <PalletModel packs={Number(h.packs_count) || 1} batch={h.batch_id} wrapped />
           </group>
         );
       })}
@@ -1303,7 +1305,7 @@ function RouteForklift({
   const pending = useRef<Move | null>(null);
   const active = useRef<Active | null>(null);
   const pose = useRef<Pose>(park);
-  const [cargo, setCargo] = useState<{ packs: number; at: Vec3 | null }>({ packs: 480, at: null });
+  const [cargo, setCargo] = useState<{ packs: number; at: Vec3 | null; batch?: string }>({ packs: 480, at: null });
 
   const id = move?.hu.hu_id ?? null;
   useEffect(() => {
@@ -1341,7 +1343,7 @@ function RouteForklift({
       const m = pending.current;
       pending.current = null;
       a = active.current = { route: plan(pose.current, m), move: m, t0: now };
-      setCargo({ packs: Number(m.hu.packs_count) || 480, at: pickup(m) });
+      setCargo({ packs: Number(m.hu.packs_count) || 480, at: pickup(m), batch: m.hu.batch_id });
     }
     let p = pose.current;
     if (a) {
@@ -1362,7 +1364,7 @@ function RouteForklift({
       )}
       {cargo.at && (
         <group ref={ghost} position={cargo.at} visible={false}>
-          <PalletModel packs={cargo.packs} wrapped />
+          <PalletModel packs={cargo.packs} batch={cargo.batch} wrapped />
         </group>
       )}
     </group>

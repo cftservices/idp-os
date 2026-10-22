@@ -34,7 +34,7 @@ COLLECTIONS = [
     "dw_equipment_meta",
     "dw_cbm_alerts",
     "dw_autopilot",
-    "dw_shipments",
+    "dw_shipments", "dw_prep_orders",
 ]
 
 
@@ -183,11 +183,15 @@ def get_db(mongo_url: Optional[str] = None, db_name: Optional[str] = None) -> Da
 
 
 def seed_recipes(db: Database) -> None:
-    """Persist the recipe + material seed if the collections are empty."""
+    """Persist the recipe + material seed: every recipe and material that is
+    missing gets inserted. Existing rows are never overwritten, so a released
+    status, a changed tolerance or real stock survive a restart; a new
+    product (L2) still lands in a database that was seeded before it existed."""
     from . import model as M
 
-    if db.dw_recipes.count_documents({}) == 0:
-        for rid, r in M.RECIPES.items():
+    have_r = {r.get("recipe_id") for r in db.dw_recipes.find({})}
+    for rid, r in M.RECIPES.items():
+        if rid not in have_r:
             db.dw_recipes.insert_one({
                 "recipe_id": r.recipe_id,
                 "product_name": r.product_name,
@@ -202,8 +206,9 @@ def seed_recipes(db: Database) -> None:
                 "agitator_rpm": r.agitator_rpm,
                 "status": r.status,
             })
-    if db.dw_materials.count_documents({}) == 0:
-        for mid, m in M.MATERIALS.items():
+    have_m = {m.get("material_id") for m in db.dw_materials.find({})}
+    for mid, m in M.MATERIALS.items():
+        if mid not in have_m:
             db.dw_materials.insert_one({
                 "material_id": m.material_id, "name": m.name, "uom": m.uom,
                 "category": m.category,

@@ -34,7 +34,7 @@ from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
-from vla.equipment import EQUIPMENT_IDS, CipRequired, EquipmentMonitor
+from vla.equipment import CipRequired, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
 from vla.park_control import ParkControl
@@ -47,6 +47,7 @@ from vla.scan import ScanFlow, ScanRejected
 from vla.warehouse import WarehouseSim
 from vla.logistics_sim import LogisticsSim
 from vla.trace import order_trace
+from vla.preparation import PrepManager
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -68,13 +69,22 @@ app.add_middleware(
 )
 
 STATE: dict = {"db": None, "bus": None, "control": None, "orders": None, "runner": None,
-               "scan": None, "handling": None, "equipment": None}
+               "scan": None, "handling": None, "equipment": None,
+               # per productielijn (L1 chocolade, L2 smaken)
+               "runners": {}, "buses": {}, "controls": {}, "autopilots": {},
+               "prep": None}
 API = "/api/v1"
 
 
 class CreateBatch(BaseModel):
     recipe_id: str
     planned_L: float | None = None
+
+
+class CreatePrep(BaseModel):
+    recipe_id: str
+    order_id: str | None = None
+    operator_id: str | None = None
 
 
 class TakeSample(BaseModel):
@@ -166,11 +176,28 @@ class GoodsReceipt(BaseModel):
     operator_id: str | None = None
 
 
-def _runner() -> BatchRunner:
-    runner = STATE.get("runner")
+def _runner(line: str | None = None) -> BatchRunner:
+    runner = (STATE.get("runners") or {}).get(line or M.DEFAULT_LINE) \
+        or STATE.get("runner")
     if runner is None:
         raise HTTPException(503, "engine not initialized")
     return runner
+
+
+def _runner_for_recipe(recipe_id: str) -> BatchRunner:
+    return _runner(M.line_of_recipe(recipe_id))
+
+
+def _runner_for_batch(batch_id: str) -> BatchRunner:
+    db = STATE.get("db")
+    doc = db.dw_batches.find_one({"batch_id": batch_id}) if db is not None else None
+    return _runner(M.line_of_doc(doc))
+
+
+def _check_line(line: str | None) -> str | None:
+    if line is not None and line not in M.LINES:
+        raise HTTPException(400, f"unknown line {line!r} (allowed: {', '.join(M.LINES)})")
+    return line
 
 
 def _orders() -> "OrderManager":
@@ -216,16 +243,27 @@ def _refused(e: ValueError) -> HTTPException:
 @app.on_event("startup")
 def _startup() -> None:
     db = get_db()
-    bus = VlaBus(
-        host=os.environ.get("MQTT_HOST", "monstermq"),
-        port=int(os.environ.get("MQTT_PORT", 1883)),
-    )
-    try:
-        bus.start(wait_connected_s=float(os.environ.get("MQTT_WAIT_S", 3.0)))
-    except Exception as e:
-        log.warning("bus start failed (%s) — continuing offline", e)
-    # PRIMARY control path: direct OPC-UA to the factory (offline-safe no-op).
-    control = OpcuaControl()
+    # Eén bus en één OPC-UA-pad per productielijn. L1 houdt client-id en root
+    # van vroeger, zodat historian, Grafana en archief niets merken.
+    buses: dict = {}
+    controls: dict = {}
+    for lid, ln in M.LINES.items():
+        b = VlaBus(
+            host=os.environ.get("MQTT_HOST", "monstermq"),
+            port=int(os.environ.get("MQTT_PORT", 1883)),
+            client_id="vla-batch-engine" if lid == M.DEFAULT_LINE
+            else f"vla-batch-engine-{lid.lower()}",
+            uns_root=ln.uns_root,
+        )
+        try:
+            b.start(wait_connected_s=float(os.environ.get("MQTT_WAIT_S", 3.0)))
+        except Exception as e:
+            log.warning("bus %s start failed (%s) — continuing offline", lid, e)
+        buses[lid] = b
+        # PRIMARY control path: direct OPC-UA to the factory (offline-safe no-op).
+        controls[lid] = OpcuaControl(url=os.environ.get(ln.opcua_env, ln.opcua_default))
+    bus = buses[M.DEFAULT_LINE]
+    control = controls[M.DEFAULT_LINE]
     # Lijn Vla-B. Offline-veilig: zonder park-model blijft de catalogus leeg en
     # geven de routes een nette 503 in plaats van een stacktrace.
     park = ParkControl(
@@ -234,10 +272,15 @@ def _startup() -> None:
         if getattr(bus, "client", None) else None)
     seed_recipes(db)
     orders = OrderManager(db, bus)
-    equipment = EquipmentMonitor(db, bus)
-    runner = BatchRunner(db, bus, control=control, orders=orders, equipment=equipment)
+    equipment = EquipmentMonitor(db, bus, buses=buses)
+    runners = {lid: BatchRunner(db, buses[lid], control=controls[lid], orders=orders,
+                                equipment=equipment, line=lid)
+               for lid in M.LINES}
+    runner = runners[M.DEFAULT_LINE]
+    prep = PrepManager(db, bus, events=runner._event)
     STATE.update({"db": db, "bus": bus, "control": control, "park": park,
-                  "orders": orders,
+                  "orders": orders, "runners": runners, "buses": buses,
+                  "controls": controls, "prep": prep,
                   "runner": runner, "scan": ScanFlow(db, runner, orders),
                   "handling": HandlingUnitManager(db), "equipment": equipment})
     if os.environ.get("DEMO_AUTOPILOT", "0").strip().lower() in ("1", "true", "yes", "on"):
@@ -251,14 +294,25 @@ def _startup() -> None:
                     warehouse.logistics = LogisticsSim(db, AUTOPILOT_OPERATOR,
                                                        events=runner._event)
                     STATE["logistics"] = warehouse.logistics
-            pilot = Autopilot(
-                db, runner, equipment=equipment, orders=orders, bus=bus,
-                recipe_id=os.environ.get("DEMO_AUTOPILOT_RECIPE", "chocolate-vla-1L"),
-                gap_s=float(os.environ.get("DEMO_AUTOPILOT_GAP_S", "10")),
-                keep_hours=float(os.environ.get("DEMO_AUTOPILOT_KEEP_HOURS", "24")),
-                warehouse=warehouse)
-            pilot.start()
-            STATE["autopilot"] = pilot
+            use_prep = os.environ.get("DEMO_AUTOPILOT_PREP", "1").strip().lower() \
+                in ("1", "true", "yes", "on")
+            gap = float(os.environ.get("DEMO_AUTOPILOT_GAP_S", "10"))
+            keep = float(os.environ.get("DEMO_AUTOPILOT_KEEP_HOURS", "24"))
+            pilots = {}
+            for lid in M.LINES:
+                primary = lid == M.DEFAULT_LINE
+                pilots[lid] = Autopilot(
+                    db, runners[lid], equipment=equipment, orders=orders,
+                    bus=buses[lid], line=lid,
+                    recipe_id=os.environ.get("DEMO_AUTOPILOT_RECIPE", "chocolate-vla-1L")
+                    if primary else None,
+                    gap_s=gap, keep_hours=keep,
+                    warehouse=warehouse if primary else None,
+                    prep=prep if use_prep else None, primary=primary)
+            for p_ in pilots.values():
+                p_.start()
+            STATE["autopilots"] = pilots
+            STATE["autopilot"] = pilots[M.DEFAULT_LINE]
         except ValueError as e:
             log.error("autopilot not started: %s", e)
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
@@ -267,12 +321,13 @@ def _startup() -> None:
 
 @app.on_event("shutdown")
 def _shutdown() -> None:
-    pilot = STATE.get("autopilot")
-    if pilot is not None:
+    for pilot in (STATE.get("autopilots") or {}).values():
         pilot.stop()
-    bus = STATE.get("bus")
-    if bus is not None:
-        bus.stop()
+    if STATE.get("autopilot") is not None:
+        STATE["autopilot"].stop()
+    for b in (STATE.get("buses") or {}).values() or [STATE.get("bus")]:
+        if b is not None:
+            b.stop()
 
 
 # ------------------------------------------------------------------ endpoints
@@ -286,7 +341,59 @@ def health():
 def autopilot_status():
     """Demo-autopilot status: off, or what it last did."""
     pilot = STATE.get("autopilot")
-    return dict(pilot.status) if pilot is not None else {"enabled": False}
+    if pilot is None:
+        return {"enabled": False}
+    out = dict(pilot.status)
+    out["lines"] = {lid: dict(p.status)
+                    for lid, p in (STATE.get("autopilots") or {}).items()}
+    return out
+
+
+@app.get(f"{API}/lines")
+def list_lines():
+    """De productielijnen: hal, recepten, equipment en wat de autopilot doet."""
+    pilots = STATE.get("autopilots") or {}
+    out = []
+    for lid, ln in M.LINES.items():
+        st = pilots[lid].status if lid in pilots else None
+        out.append({"line_id": lid, "name": ln.name, "hall": ln.hall,
+                    "uns_root": ln.uns_root,
+                    "recipes": [{"recipe_id": r,
+                                 "product_name": M.get_recipe(r).product_name,
+                                 "fg_material_id": M.fg_of_recipe(r),
+                                 "flavour": M.flavour_of(r),
+                                 "rank": M.RECIPE_RANK.get(r, 0)}
+                                for r in ln.recipes],
+                    "equipment": dict(ln.equipment),
+                    "autopilot": {"recipe_id": st.get("recipe_id"),
+                                  "last_action": st.get("last_action"),
+                                  "changeover_cips": st.get("changeover_cips")}
+                    if st else None})
+    return out
+
+
+@app.get(f"{API}/prep-orders")
+def list_prep_orders(line: str | None = Query(default=None),
+                     state: str | None = Query(default=None),
+                     limit: int = Query(default=100)):
+    """Voorbereiding: afweeg- en premixsets per batch (beide lijnen)."""
+    prep = STATE.get("prep")
+    if prep is None:
+        raise HTTPException(503, "engine not initialized")
+    return {"sets": prep.list(line=_check_line(line), state=state, limit=limit),
+            "stations": prep.stations()}
+
+
+@app.post(f"{API}/prep-orders")
+def create_prep_order(body: CreatePrep):
+    prep = STATE.get("prep")
+    if prep is None:
+        raise HTTPException(503, "engine not initialized")
+    try:
+        return prep.plan(M.line_of_recipe(body.recipe_id), body.recipe_id,
+                         order_id=body.order_id, operator_id=body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get(f"{API}/logistics")
@@ -308,43 +415,46 @@ def get_tags(verbose: int = Query(default=0)):
     Met ?verbose=1 komt per topic {value, ts, unit, quality, retained, age_s}.
     De platte vorm gooit precies weg wat nodig is om een VEROUDERDE waarde te
     herkennen, en stale is een eerste-klas toestand op de operatorschermen."""
-    bus = STATE.get("bus")
-    if bus is None:
+    buses = list((STATE.get("buses") or {}).values()) or [STATE.get("bus")]
+    if buses[0] is None:
         raise HTTPException(503, "engine not initialized")
-    return bus.snapshot_verbose() if verbose else bus.snapshot()
+    out: dict = {}
+    for b in buses:
+        out.update(b.snapshot_verbose() if verbose else b.snapshot())
+    return out
 
 
 @app.get(f"{API}/equipment")
-def equipment_snapshot():
+def equipment_snapshot(line: str | None = Query(default=None)):
     eq = STATE.get("equipment")
     if eq is None:
         raise HTTPException(503, "engine not initialized")
-    return eq.snapshot()
+    return eq.snapshot(line=_check_line(line))
 
 
 @app.get(f"{API}/oee")
-def equipment_oee():
+def equipment_oee(line: str | None = Query(default=None)):
     """PR-21: per-equipment OEE-light (availability x performance x quality)."""
     eq = STATE.get("equipment")
     if eq is None:
         raise HTTPException(503, "engine not initialized")
-    return eq.oee()
+    return eq.oee(line=_check_line(line))
 
 
 @app.get(f"{API}/equipment/health")
-def equipment_health():
+def equipment_health(line: str | None = Query(default=None)):
     """PR-32: equipment snapshot extended with heat-up trend + open CBM alerts."""
     eq = STATE.get("equipment")
     if eq is None:
         raise HTTPException(503, "engine not initialized")
-    return eq.health()
+    return eq.health(line=_check_line(line))
 
 
 @app.post(f"{API}/equipment/{{equipment_id}}/cip")
 def equipment_cip(equipment_id: str, body: CipRequest):
     """PR-29: CIP cleaning action — resets fouling counter, clears Dirty,
     resolves open fouling alerts."""
-    if equipment_id not in EQUIPMENT_IDS:
+    if equipment_id not in M.ALL_EQUIPMENT_IDS:
         raise HTTPException(404, f"unknown equipment {equipment_id!r}")
     eq = STATE.get("equipment")
     if eq is None:
@@ -419,7 +529,7 @@ def inventory_overview(order_id: str | None = Query(default=None)):
     rows = []
     for m in db.dw_materials.find({}):
         mid = m.get("material_id")
-        is_fg = mid == M.FINISHED_GOOD_ID
+        is_fg = M.is_finished_good(mid)
         stock = float(m.get("stock_qty") or 0)
         reorder = float(m.get("reorder_level") or 0)
         rows.append({
@@ -443,13 +553,13 @@ def inventory_overview(order_id: str | None = Query(default=None)):
 
 
 @app.get(f"{API}/batches")
-def list_batches():
-    return _runner().list_batches()
+def list_batches(line: str | None = Query(default=None)):
+    return _runner().list_batches(line=_check_line(line))
 
 
 @app.post(f"{API}/batches")
 def create_batch(body: CreateBatch):
-    runner = _runner()
+    runner = _runner_for_recipe(body.recipe_id)
     auto = os.environ.get("AUTO_START", "1") not in ("0", "false", "False")
     try:
         batch = runner.create_batch(body.recipe_id, body.planned_L, auto_start=auto)
@@ -478,7 +588,7 @@ def get_batch(batch_id: str):
 
 @app.post(f"{API}/batches/{{batch_id}}/start")
 def start_batch(batch_id: str):
-    runner = _runner()
+    runner = _runner_for_batch(batch_id)
     if runner.get_batch(batch_id) is None:
         raise HTTPException(404, f"batch {batch_id} not found")
     batch = runner.start_batch(batch_id)
@@ -488,7 +598,7 @@ def start_batch(batch_id: str):
 @app.post(f"{API}/batches/{{batch_id}}/ack-verdict")
 def ack_verdict(batch_id: str, body: AckRequest):
     """Acknowledge a batch verdict (idempotent). Batch must be COMPLETE with verdict."""
-    runner = _runner()
+    runner = _runner_for_batch(batch_id)
     try:
         batch = runner.ack_verdict(batch_id, operator_id=body.operator_id)
     except ValueError as e:
@@ -534,10 +644,10 @@ def get_order_trace(order_id: str):
 
 @app.post(f"{API}/orders/{{order_id}}/batches")
 def create_order_batch(order_id: str, body: CreateOrderBatch):
-    runner = _runner()
     order = _orders().get_order(order_id)
     if order is None:
         raise HTTPException(404, f"order {order_id} not found")
+    runner = _runner_for_recipe(order["recipe_id"])
     auto = os.environ.get("AUTO_START", "1") not in ("0", "false", "False")
     try:
         batch = runner.create_batch(order["recipe_id"], body.planned_L,
@@ -614,7 +724,7 @@ def list_samples(batch_id: str | None = Query(default=None)):
 
 @app.post(f"{API}/samples")
 def take_sample(body: TakeSample):
-    runner = _runner()
+    runner = _runner_for_batch(body.batch_id)
     if runner.get_batch(body.batch_id) is None:
         raise HTTPException(404, f"batch {body.batch_id} not found")
     try:
@@ -663,14 +773,14 @@ def shelve_alarm(alarm_id: str, body: ShelveRequest):
 
 
 @app.get(f"{API}/line/live")
-def line_live():
+def line_live(line: str = Query(default=M.DEFAULT_LINE)):
     """De L1-payload: fase, doseringen, vulling en kwaliteit, kant-en-klaar.
     Alles wat de oude client zelf afleidde (lijnsnelheid, packs-target,
     totaalcharge, pallets) komt hiervandaan."""
     db = STATE.get("db")
     if db is None:
         raise HTTPException(503, "engine not initialized")
-    return L.live(db, K.load_factory_model())
+    return L.live(db, K.load_factory_model(), line=_check_line(line))
 
 
 @app.get(f"{API}/kpi/summary")
@@ -748,7 +858,7 @@ def get_equipment_report(equipment_id: str, days: int = Query(default=30),
 
 @app.get(f"{API}/report/{{batch_id}}")
 def get_report(batch_id: str, format: str = Query(default="json")):
-    runner = _runner()
+    runner = _runner_for_batch(batch_id)
     batch = runner.get_batch(batch_id)
     if batch is None:
         raise HTTPException(404, f"batch {batch_id} not found")
@@ -765,21 +875,30 @@ def get_report(batch_id: str, format: str = Query(default="json")):
 def admin_command(body: AdminCommand):
     """Route a control action to the factory (PRIMARY = direct OPC-UA method;
     MQTT Command publish secondary). Contract 05-Backend §4.3."""
-    control = STATE.get("control")
-    bus = STATE.get("bus")
-    if control is None:
-        raise HTTPException(503, "engine not initialized")
     p = body.params or {}
     cmd = body.cmd.lower()
+    # Welke lijn: expliciet (params.line), via het recept, of via het equipment.
+    if p.get("line"):
+        line = _check_line(str(p["line"]))
+    elif cmd == "start" and p.get("recipe_id"):
+        line = M.line_of_recipe(str(p["recipe_id"]))
+    elif body.equipment_id in M.ALL_EQUIPMENT_IDS:
+        line = M.line_of_equipment(body.equipment_id)
+    else:
+        line = M.DEFAULT_LINE
+    control = (STATE.get("controls") or {}).get(line) or STATE.get("control")
+    bus = (STATE.get("buses") or {}).get(line) or STATE.get("bus")
+    if control is None:
+        raise HTTPException(503, "engine not initialized")
 
     if cmd == "start":
-        recipe_id = str(p.get("recipe_id") or M.RECIPE_CHOCOLATE_VLA_1L.recipe_id)
+        recipe_id = str(p.get("recipe_id") or M.get_line(line).recipes[0])
         result = control.start_batch(recipe_id)
         if bus is not None:
             bus.start_batch(recipe_id)
     elif cmd == "stop":
-        runner = _runner()
-        active = next((b for b in runner.list_batches()
+        runner = _runner(line)
+        active = next((b for b in runner.list_batches(line=line)
                        if b["state"] in ("DOSING", "COOKING", "COOLING", "FILLING")),
                       None)
         if active is not None:
@@ -826,7 +945,7 @@ def admin_command(body: AdminCommand):
                                  "(allowed: start|stop|sample|fault|clear|setpoint)")
 
     return {"accepted": True, "path": "opcua", "equipment_id": body.equipment_id,
-            "cmd": cmd, "opcua": result}
+            "line": line, "cmd": cmd, "opcua": result}
 
 
 @app.post(f"{API}/hu")

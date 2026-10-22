@@ -17,6 +17,41 @@ export const LINE_EQUIPMENT = [
 
 export type LineEquipment = (typeof LINE_EQUIPMENT)[number];
 
+/** Hal 2 ligt ten noorden van hal 1, gespiegeld op dezelfde x-as. */
+export const HALL2_Z = -17;
+
+/**
+ * Lijn L2 in hal 2: dezelfde machines als L1, met het achtervoegsel -02 en
+ * dezelfde stap-id's, zodat /api/ui/line?line=L2 er één-op-één op past.
+ */
+export const LINE2_EQUIPMENT = LINE_EQUIPMENT.map((e) => ({
+  ...e,
+  id: e.id.replace(/-01$/, "-02"),
+  name: `${e.name} · L2`,
+  pos: [e.pos[0], e.pos[1], e.pos[2] + HALL2_Z] as Vec3,
+}));
+
+export const HALL2 = {
+  min: [-14, -5.5 + HALL2_Z] as [number, number],
+  max: [13.5, 5.5 + HALL2_Z] as [number, number],
+  wall: 1.4,
+};
+
+/**
+ * Voorbereiding (afwegen + premix), gedeeld door beide lijnen. Ligt in de
+ * strook tussen de hallen, zodat de premix naar beide mengtanks kan.
+ */
+export const PREP_ROOM = { min: [-14, -10.2] as [number, number], max: [-2, -6.8] as [number, number], wall: 1.2 };
+
+export const PREP_STATIONS = [
+  { id: "weigh-station-01", kind: "weigh", name: "Weegstation 1", pos: [-12.4, 0, -8.5] as Vec3 },
+  { id: "weigh-station-02", kind: "weigh", name: "Weegstation 2", pos: [-10.2, 0, -8.5] as Vec3 },
+  { id: "premix-tank-01", kind: "premix", name: "Premixtank 1", pos: [-7.6, 0, -8.5] as Vec3 },
+  { id: "premix-tank-02", kind: "premix", name: "Premixtank 2", pos: [-4.6, 0, -8.5] as Vec3 },
+] as const;
+
+export type PrepStationLayout = (typeof PREP_STATIONS)[number];
+
 /** Silo's voor de grondstoffen, in de volgorde waarin /inventory ze levert. */
 export const SILO_SLOTS: Vec3[] = [
   [-21, 0, -4],
@@ -89,5 +124,6 @@ export function dockPosition(i: number): Vec3 {
 export const ROAD_Z = 13;
 export const ROAD_X = [-34, 46] as [number, number];
 
-export const CAMERA_HOME: Vec3 = [30, 44, 58];
-export const CAMERA_TARGET: Vec3 = [5, 0, 1];
+/** Twee hallen hoog en laag in beeld: het doel schuift naar het midden tussen hal 1 en hal 2. */
+export const CAMERA_HOME: Vec3 = [33, 54, 60];
+export const CAMERA_TARGET: Vec3 = [5, 0, -5];

@@ -6,7 +6,8 @@ import { ProcessView } from "@/components/screens/ProcessView";
 import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
-import { useOrders, useUiModel } from "@/lib/queries";
+import { useLines, useOrders, useUiModel } from "@/lib/queries";
+import { LINE_LABEL, LineSwitch, useLineParam } from "@/components/toolkit/LineSwitch";
 import type { Refusal } from "@/lib/refusal";
 
 /**
@@ -28,11 +29,18 @@ import type { Refusal } from "@/lib/refusal";
 
 const OPERATOR = "op-01";
 
-type Order = { order_id: string; status: string };
+type Order = { order_id: string; status: string; recipe_id?: string; line?: string };
 
 export function Scada() {
   const orders = useOrders<Order[]>();
   const model = useUiModel();
+  const lineId = useLineParam();
+  const lines = useLines();
+  const lineRecipes = lines.data?.find((l) => l.line_id === lineId)?.recipes ?? [];
+  const [pickedRecipe, setPickedRecipe] = useState("");
+  const looseRecipe = lineRecipes.some((r) => r.recipe_id === pickedRecipe)
+    ? pickedRecipe
+    : lineRecipes[0]?.recipe_id ?? (lineId === "L1" ? "chocolate-vla-1L" : "");
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [retry, setRetry] = useState<(() => Promise<void>) | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -60,7 +68,9 @@ export function Scada() {
     }
   }
 
-  const cmd = (body: Record<string, unknown>) => post("/admin/command", body);
+  // Elk commando gaat naar de gekozen lijn; de engine routeert op params.line.
+  const cmd = (body: { equipment_id: string; cmd: string; params: Record<string, unknown> }) =>
+    post("/admin/command", { ...body, params: { ...body.params, line: lineId } });
 
   async function orderBatch() {
     if (!orderId) return;
@@ -70,7 +80,7 @@ export function Scada() {
 
   async function looseBatch() {
     await post("/batches", {
-      recipe_id: recipe?.recipe_id ?? "chocolate-vla-1L",
+      recipe_id: looseRecipe,
       planned_L: plannedL,
     });
   }
@@ -82,11 +92,12 @@ export function Scada() {
         title="Bediening"
         subtitle={
           <>
-            Operator <span className="mono">{OPERATOR}</span>
+            Operator <span className="mono">{OPERATOR}</span> &middot; {LINE_LABEL[lineId]}
           </>
         }
         actions={[
-          { href: "/line", label: "Lijn L1", title: "Live procesbeeld" },
+          { href: `/line?line=${lineId}`, label: `Lijn ${lineId}`, title: "Live procesbeeld" },
+          { href: "/voorbereiding", label: "Voorbereiding" },
           { href: "/orders", label: "Orders" },
           { href: "/batches", label: "Batches" },
           { href: "/equipment", label: "CIP" },
@@ -107,7 +118,9 @@ export function Scada() {
 
       {/* Eerst zien wat het proces doet, dan pas ingrijpen. Een console zonder
           procesbeeld is blind bedienen, en dat was precies wat hier ontbrak. */}
-      <ProcessView />
+      <LineSwitch />
+
+      <ProcessView lineId={lineId} />
 
       <section className="tile flex flex-col gap-3">
         <span className="eyebrow">Lijnbesturing</span>
@@ -210,6 +223,7 @@ export function Scada() {
               <option value="">kies een order</option>
               {(orders.data ?? [])
                 .filter((o) => o.status !== "DONE")
+                .filter((o) => !o.recipe_id || !lineRecipes.length || lineRecipes.some((r) => r.recipe_id === o.recipe_id))
                 .map((o) => (
                   <option key={o.order_id} value={o.order_id}>
                     {o.order_id}
@@ -243,11 +257,18 @@ export function Scada() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-[0.8125rem]">
             Recept
-            <input
-              readOnly
-              value={recipe?.recipe_id ?? "chocolate-vla-1L"}
-              className="border border-line-strong bg-surface-sunken px-2 py-1.5 mono"
-            />
+            <select
+              value={looseRecipe}
+              onChange={(e) => setPickedRecipe(e.target.value)}
+              className="border border-line-strong bg-surface px-2 py-1.5"
+            >
+              {lineRecipes.length === 0 && <option value={looseRecipe}>{looseRecipe}</option>}
+              {lineRecipes.map((r) => (
+                <option key={r.recipe_id} value={r.recipe_id}>
+                  {r.product_name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-[0.8125rem]">
             Volume
@@ -265,7 +286,7 @@ export function Scada() {
           </label>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !looseRecipe}
             onClick={() => run(looseBatch, "losse batch", looseBatch)}
             className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
           >

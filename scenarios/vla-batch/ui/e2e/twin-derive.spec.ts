@@ -12,6 +12,21 @@ import {
 } from "../lib/twin/derive";
 import { COLDSTORE, MAIN_AISLE_Z, MAX_DOCKS, PALLETISER_PICK, RACK_SLOTS, dockPosition, rackSlotPosition } from "../lib/twin/layout";
 import { CARRY_OFFSET, PARK_LOADER, PARK_PUTAWAY, loadRoute, putawayRoute } from "../lib/twin/forklift";
+import { HALL, HALL2, LINE2_EQUIPMENT, LINE_EQUIPMENT, PREP_ROOM, PREP_STATIONS } from "../lib/twin/layout";
+import {
+  FLAVOURS,
+  batchFlavours,
+  flavourKey,
+  flavourOfBatch,
+  flavourOfRecipe,
+  lineOfEquipment,
+  parseFlavour,
+  prepColorKey,
+  prepStationView,
+  prepVisual,
+} from "../lib/twin/lines";
+import { TWIN_KEYS } from "../lib/twin/palette";
+import type { PrepSet, PrepStation, ProductLine } from "../lib/types";
 
 /**
  * De afleidingen van de 3D site-twin, zonder browser.
@@ -274,5 +289,119 @@ test.describe("logisticsVisuals", () => {
   test("een onbereikbare engine maakt alle logistiek verouderd", () => {
     const v = logisticsVisuals(leeg, true, false);
     for (const k of ["palletiser", "coldstore", "dock", "truck"] as const) expect(v[k].state).toBe("stale");
+  });
+});
+
+test.describe("twee hallen en de voorbereiding", () => {
+  const LINES = [
+    {
+      line_id: "L2",
+      name: "Lijn 2",
+      hall: "Hal 2",
+      uns_root: "DairyWorks/Vla-L2",
+      recipes: [{ recipe_id: "R-200", product_name: "Vla 1L", fg_material_id: "FG-200", flavour: "aroma-banaan", rank: 1 }],
+      equipment: {},
+      autopilot: null,
+    },
+  ] as unknown as ProductLine[];
+
+  const set = (over: Partial<PrepSet>): PrepSet => ({
+    prep_id: "PS-1",
+    line: "L2",
+    recipe_id: "vanilla-vla-1L",
+    order_id: "SO-1",
+    batch_id: null,
+    weigh_station: "weigh-station-01",
+    premix_tank: "premix-tank-01",
+    state: "afwegen",
+    components: [{ material_id: "vanilla-aroma", qty_kg: 2.5, uom: "kg" }],
+    created_at: "2026-10-01T11:00:00Z",
+    state_changed_at: "2026-10-01T11:30:00Z",
+    history: [],
+    ...over,
+  });
+
+  test("L2 heeft dezelfde vijf machines met -02, binnen hal 2", () => {
+    expect(LINE2_EQUIPMENT.map((e) => e.id)).toEqual(LINE_EQUIPMENT.map((e) => e.id.replace(/-01$/, "-02")));
+    for (const e of LINE2_EQUIPMENT) {
+      expect(lineOfEquipment(e.id)).toBe("L2");
+      expect(e.pos[0]).toBeGreaterThan(HALL2.min[0]);
+      expect(e.pos[0]).toBeLessThan(HALL2.max[0]);
+      expect(e.pos[2]).toBeGreaterThan(HALL2.min[1]);
+      expect(e.pos[2]).toBeLessThan(HALL2.max[1]);
+    }
+    for (const e of LINE_EQUIPMENT) expect(lineOfEquipment(e.id)).toBe("L1");
+  });
+
+  test("hal 1, de voorbereiding en hal 2 overlappen niet", () => {
+    expect(PREP_ROOM.max[1]).toBeLessThan(HALL.min[1]);
+    expect(PREP_ROOM.min[1]).toBeGreaterThan(HALL2.max[1]);
+    for (const st of PREP_STATIONS) {
+      expect(st.pos[0]).toBeGreaterThan(PREP_ROOM.min[0]);
+      expect(st.pos[0]).toBeLessThan(PREP_ROOM.max[0]);
+      expect(st.pos[2]).toBeGreaterThan(PREP_ROOM.min[1]);
+      expect(st.pos[2]).toBeLessThan(PREP_ROOM.max[1]);
+    }
+    expect(PREP_STATIONS.filter((s) => s.kind === "weigh")).toHaveLength(2);
+    expect(PREP_STATIONS.filter((s) => s.kind === "premix")).toHaveLength(2);
+  });
+
+  test("elke smaak en elke prep-state heeft een kleur in het palet", () => {
+    const keys = new Set<string>(TWIN_KEYS);
+    for (const f of FLAVOURS) expect(keys.has(flavourKey(f))).toBe(true);
+    for (const st of ["gepland", "afwegen", "premix", "gereed", "verbruikt", "vrij"] as const) expect(keys.has(prepColorKey(st))).toBe(true);
+  });
+
+  test("smaak uit recept-id, receptdefinitie of productnaam, met chocolade als terugval", () => {
+    expect(parseFlavour("strawberry-vla-1L")).toBe("strawberry");
+    expect(parseFlavour("Karamelvla")).toBe("caramel");
+    expect(parseFlavour(null)).toBeNull();
+    expect(flavourOfRecipe("vanilla-vla-1L")).toBe("vanilla");
+    expect(flavourOfRecipe("R-200", LINES)).toBe("banana");
+    expect(flavourOfRecipe("onbekend", LINES)).toBe("chocolate");
+    const map = batchFlavours(
+      [
+        { batch_id: "B1", recipe_id: "chocolate-vla-1L" },
+        { batch_id: "B2", recipe_id: "R-200" },
+        { batch_id: "B3", product_name: "Aardbeienvla" },
+      ],
+      LINES,
+    );
+    expect(map).toEqual({ B1: "chocolate", B2: "banana", B3: "strawberry" });
+    expect(flavourOfBatch("B2", map)).toBe("banana");
+    expect(flavourOfBatch("B9", map)).toBe("chocolate");
+  });
+
+  test("een station toont de set die de engine erop meldt", () => {
+    const stations: PrepStation[] = [
+      { station_id: "weigh-station-01", kind: "weigh", line: "L2", state: "bezig", prep_id: "PS-2", recipe_id: "caramel-vla-1L" },
+    ];
+    const sets = [set({ prep_id: "PS-1" }), set({ prep_id: "PS-2", recipe_id: "caramel-vla-1L" })];
+    const v = prepStationView({ id: "weigh-station-01", kind: "weigh" }, stations, sets);
+    expect(v.set?.prep_id).toBe("PS-2");
+    expect(v.flavour).toBe("caramel");
+    expect(prepVisual(v, true)).toMatchObject({ state: "run", label: "afwegen" });
+  });
+
+  test("zonder stationsmelding: de nieuwste bezettende set, en vrij als er niets is", () => {
+    const sets = [
+      set({ prep_id: "PS-1", state: "gereed", state_changed_at: "2026-10-01T11:00:00Z" }),
+      set({ prep_id: "PS-2", state: "premix", state_changed_at: "2026-10-01T11:40:00Z" }),
+      set({ prep_id: "PS-3", state: "verbruikt", state_changed_at: "2026-10-01T11:50:00Z" }),
+    ];
+    const premix = prepStationView({ id: "premix-tank-01", kind: "premix" }, [], sets);
+    expect(premix.set?.prep_id).toBe("PS-2");
+    const weigh = prepStationView({ id: "weigh-station-01", kind: "weigh" }, [], sets);
+    expect(weigh.state).toBe("vrij");
+    expect(prepVisual(weigh, true)).toMatchObject({ state: "idle", label: "vrij" });
+    // De engine meldt het station uitdrukkelijk vrij: dan geen gok uit de sets.
+    const vrij: PrepStation[] = [{ station_id: "premix-tank-01", kind: "premix", line: "L2", state: "vrij", prep_id: null, recipe_id: null }];
+    expect(prepStationView({ id: "premix-tank-01", kind: "premix" }, vrij, sets).state).toBe("vrij");
+  });
+
+  test("zonder engine is een station geen data, nooit vrij", () => {
+    const v = prepStationView({ id: "premix-tank-02", kind: "premix" }, [], []);
+    expect(prepVisual(v, false)).toMatchObject({ state: "unknown", label: "geen data" });
+    expect(prepVisual({ state: "gereed", set: set({ state: "gereed" }), flavour: "vanilla" }, true).state).toBe("idle");
   });
 });

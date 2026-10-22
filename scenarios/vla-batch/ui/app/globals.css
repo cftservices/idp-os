@@ -132,6 +132,19 @@
   --twin-status-warn: var(--amber-52);
   --twin-status-alarm: var(--vermilion-42);
   --twin-status-stale: var(--violet-50);
+  /* Smaak per lijnproduct: kleur van de golf op het pak en de pallet. */
+  --twin-flavour-chocolate: #6b3e26;
+  --twin-flavour-vanilla: #f1d98a;
+  --twin-flavour-banana: #f4d234;
+  --twin-flavour-caramel: #c27a2c;
+  --twin-flavour-strawberry: #e0607e;
+  /* Voorbereiding: status van een afweeg-/premixset. */
+  --twin-prep-gepland: var(--slate-55);
+  --twin-prep-afwegen: var(--amber-52);
+  --twin-prep-premix: var(--blue-45);
+  --twin-prep-gereed: #3f9d5c;
+  --twin-prep-verbruikt: #9aa6b2;
+  --twin-prep-room: #6f8fd8;
   /* Systeemstack, bewust geen webfont. De Artifact-CSP blokkeerde font-CDN's
      in de prototypes en een Docker-build zonder netwerk zou op next/font/google
      stukgaan; een stille fallback is erger dan een bewuste keuze. */
@@ -848,6 +861,9 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .twin-label[data-selected] .twin-label-meta, .twin-label[data-selected] .twin-label-state { color: color-mix(in oklab, var(--white) 85%, transparent); }
 .twin-chip { padding: 0.125rem 0.5rem; font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
 .twin-sign { padding: 0.375rem 0.75rem; font-size: 0.875rem; font-weight: 650; letter-spacing: 0.02em; border-radius: 8px; }
+/* Voorbereiding: kleurstip in de status van de set (kleur via --prep-dot in een style-attribuut). */
+.twin-chip[data-prep] { display: inline-flex; align-items: center; gap: 0.3125rem; }
+.twin-chip[data-prep]::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--prep-dot, var(--twin-status-idle)); }
 
 /* ---- beweging ---- */
 @keyframes wt-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

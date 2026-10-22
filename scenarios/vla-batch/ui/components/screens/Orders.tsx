@@ -8,7 +8,8 @@ import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
 import { EMPTY, num, shortDateTime } from "@/lib/format";
-import { useOrders, useOrderTrace, useUiModel } from "@/lib/queries";
+import { useLines, useOrders, useOrderTrace, useUiModel } from "@/lib/queries";
+import { ProductTag, useRecipeIndex } from "@/components/toolkit/Product";
 import { OrderTrace, type Trace } from "@/components/screens/OrderTrace";
 import type { Refusal } from "@/lib/refusal";
 
@@ -77,7 +78,11 @@ export function Orders() {
   const [qty, setQty] = useState(5000);
   const [due, setDue] = useState("");
 
-  const recipeId = model.data?.recipe?.recipe_id ?? "chocolate-vla-1L";
+  const lines = useLines();
+  const recipes = useRecipeIndex();
+  const [pickedRecipe, setPickedRecipe] = useState("");
+  // De lijn volgt uit het recept: chocolade gaat naar L1, de smaken naar L2.
+  const recipeId = pickedRecipe || (model.data?.recipe?.recipe_id ?? "chocolate-vla-1L");
 
   function open(id: string | null) {
     const next = new URLSearchParams(params.toString());
@@ -151,12 +156,23 @@ export function Orders() {
         </div>
         <form onSubmit={createOrder} className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-[0.8125rem]">
-            Recept
-            <input
-              readOnly
+            Product
+            <select
               value={recipeId}
-              className="border border-line-strong bg-surface-sunken px-2 py-1.5 mono"
-            />
+              onChange={(e) => setPickedRecipe(e.target.value)}
+              className="border border-line-strong bg-surface px-2 py-1.5"
+            >
+              {!recipes.has(recipeId) && <option value={recipeId}>{recipeId}</option>}
+              {(lines.data ?? []).map((l) => (
+                <optgroup key={l.line_id} label={`${l.line_id} · ${l.hall}`}>
+                  {l.recipes.map((r) => (
+                    <option key={r.recipe_id} value={r.recipe_id}>
+                      {r.product_name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-[0.8125rem]">
             Doelvolume
@@ -199,7 +215,7 @@ export function Orders() {
         <table className="w-full border-collapse text-[0.8125rem]">
           <thead>
             <tr className="border-b border-line text-left">
-              {["Order", "Klant", "Status", "Doel", "Geproduceerd", "Voortgang", "Leverdatum", ""].map((h) => (
+              {["Order", "Product", "Klant", "Status", "Doel", "Geproduceerd", "Voortgang", "Leverdatum", ""].map((h) => (
                 <th
                   key={h}
                   className="px-3 py-2 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase text-ink-faint"
@@ -212,7 +228,7 @@ export function Orders() {
           <tbody>
             {(orders.data ?? []).length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-ink-muted">
+                <td colSpan={9} className="px-3 py-4 text-ink-muted">
                   Nog geen orders. Maak er hierboven een aan.
                 </td>
               </tr>
@@ -232,6 +248,9 @@ export function Orders() {
                       {o.order_id}
                     </CrossLink>
                   </span>
+                </td>
+                <td className="px-3 py-[var(--density-row)] whitespace-nowrap">
+                  <ProductTag recipeId={o.recipe_id} index={recipes} showLine />
                 </td>
                 <td className="px-3 py-[var(--density-row)]">{o.customer ?? EMPTY}</td>
                 <td className="px-3 py-[var(--density-row)]">
@@ -318,7 +337,9 @@ export function Orders() {
             <dt className="text-ink-muted">Klant</dt>
             <dd>{detail.customer ?? EMPTY}</dd>
             <dt className="text-ink-muted">Recept</dt>
-            <dd className="mono">{detail.recipe_id}</dd>
+            <dd>
+                  <ProductTag recipeId={detail.recipe_id} index={recipes} showLine />
+                </dd>
             <dt className="text-ink-muted">Batches</dt>
             <dd className="num">{detail.progress?.batches_count ?? 0}</dd>
             <dt className="text-ink-muted">Gebatcht</dt>

@@ -9,7 +9,8 @@ import { test, expect } from "@playwright/test";
  * tegen de echte engine.
  */
 
-const LINE_OBJECTS = '[data-twin-object^="equipment:"]';
+// Alleen lijn L1 (Hal 1); de L2-machines (-02) staan sinds Hal 2 in hetzelfde tabblad.
+const LINE_OBJECTS = '[data-twin-object^="equipment:"][data-twin-object$="-01"]';
 const STATE_WORDS = /stil|draait|aandacht|alarm|storing|verouderd|geen data|vervuild|reinigen/i;
 
 test.beforeEach(async ({ page }) => {

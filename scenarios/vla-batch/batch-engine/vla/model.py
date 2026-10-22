@@ -115,12 +115,112 @@ AREA_OF: dict[str, str] = {
     "cook-unit-01": "Cook",
     "cooler-01": "Cooling",
     "filler-01": "Filling",
+    "receiving-tank-02": "Receiving",
+    "process-tank-02": "Mixing",
+    "cook-unit-02": "Cook",
+    "cooler-02": "Cooling",
+    "filler-02": "Filling",
     "Batch": "Batch",  # line-level object (no Area segment)
 }
 
 # The dose materials in the Mixing tank and their command-target short names
 # used by SetSetpoint("dose.<name>", value) — §OPC-UA methods.
-DOSE_MATERIALS = ["milk", "sugar", "starch", "cocoa"]
+DOSE_MATERIALS = ["milk", "sugar", "starch", "cocoa",
+                  "vanilla", "banana", "caramel", "strawberry"]
+# Basisgrondstoffen; alles daarbuiten in een recept is de smaak.
+BASE_MATERIALS = ("milk", "sugar", "starch")
+
+
+# ------------------------------------------------------------------ lijnen
+# Twee lijnen, elk met een eigen fabriek (OPC-UA) en een eigen UNS-root.
+#
+# L1 houdt bewust exact zijn oude namen: root DairyWorks/Vla en de -01
+# equipment-ids. Historian, Grafana en het archief kijken daar al naar; een
+# hernoeming zou een datamigratie kosten zonder dat iemand er iets aan heeft.
+# L2 publiceert onder DairyWorks/Vla-L2, een eigen niveau, zodat de
+# subscriptie DairyWorks/Vla/# van L1 hem niet per ongeluk oppikt.
+#
+# Equipment-rollen: de code spreekt in rollen (cook, filler, ...), het
+# register vertaalt per lijn naar het id. Zo staat "cook-unit-01" nog maar op
+# één plek en kan een derde lijn erbij zonder zoektocht.
+ROLES = ("receiving", "process", "cook", "cooler", "filler")
+
+
+@dataclass(frozen=True)
+class Line:
+    line_id: str
+    name: str
+    hall: str
+    uns_root: str
+    opcua_env: str
+    opcua_default: str
+    equipment: dict
+    recipes: tuple
+
+    @property
+    def equipment_ids(self) -> list[str]:
+        return [self.equipment[r] for r in ROLES]
+
+    def eq(self, role: str) -> str:
+        return self.equipment[role]
+
+
+LINES: dict[str, Line] = {
+    "L1": Line(
+        line_id="L1", name="Lijn 1 · chocolade", hall="Hal 1",
+        uns_root=UNS_ROOT,
+        opcua_env="OPCUA_URL", opcua_default="opc.tcp://vla-factory:4840/DairyWorks",
+        equipment={"receiving": "receiving-tank-01", "process": "process-tank-01",
+                   "cook": "cook-unit-01", "cooler": "cooler-01",
+                   "filler": "filler-01"},
+        recipes=("chocolate-vla-1L",),
+    ),
+    "L2": Line(
+        line_id="L2", name="Lijn 2 · smaken", hall="Hal 2",
+        uns_root=f"{SITE}/{LINE}-L2",
+        opcua_env="OPCUA_URL_L2",
+        opcua_default="opc.tcp://vla-factory-l2:4840/DairyWorks",
+        equipment={"receiving": "receiving-tank-02", "process": "process-tank-02",
+                   "cook": "cook-unit-02", "cooler": "cooler-02",
+                   "filler": "filler-02"},
+        recipes=("vanilla-vla-1L", "banana-vla-1L", "caramel-vla-1L",
+                 "strawberry-vla-1L"),
+    ),
+}
+DEFAULT_LINE = "L1"
+ALL_EQUIPMENT_IDS = [e for ln in LINES.values() for e in ln.equipment_ids]
+
+
+def get_line(line_id: Optional[str]) -> Line:
+    return LINES.get(line_id or DEFAULT_LINE) or LINES[DEFAULT_LINE]
+
+
+def line_of_equipment(equipment_id: str) -> str:
+    for ln in LINES.values():
+        if equipment_id in ln.equipment_ids:
+            return ln.line_id
+    return DEFAULT_LINE
+
+
+def line_of_recipe(recipe_id: Optional[str]) -> str:
+    for ln in LINES.values():
+        if recipe_id in ln.recipes:
+            return ln.line_id
+    return DEFAULT_LINE
+
+
+def line_of_doc(doc: Optional[dict]) -> str:
+    """Lijn van een batch/order/alarm. Oude documenten hebben geen veld en
+    zijn per definitie van L1: die bestond als enige."""
+    if not doc:
+        return DEFAULT_LINE
+    if doc.get("line"):
+        return doc["line"]
+    if doc.get("recipe_id"):
+        return line_of_recipe(doc["recipe_id"])
+    if doc.get("equipment_id"):
+        return line_of_equipment(doc["equipment_id"])
+    return DEFAULT_LINE
 
 
 # --------------------------------------------------------------------- dataclasses
@@ -240,7 +340,20 @@ class Batch:
 
 # --------------------------------------------------------------- recipe seed
 
-FINISHED_GOOD_ID = "vla-1L"
+FINISHED_GOOD_ID = "vla-1L"  # chocolade; de naam is ouder dan de andere smaken
+
+
+def _flavour(mid: str, name: str, stock: float, reorder: float,
+             shelf: int = 365) -> Material:
+    return Material(mid, name, "kg", category="DryPowder",
+                    tolerance_pos_pct=1.0, tolerance_neg_pct=1.0,
+                    shelf_life_days=shelf, stock_qty=stock, reorder_level=reorder)
+
+
+def _fg(mid: str, name: str) -> Material:
+    return Material(mid, name, "pack", category="FinishedGood",
+                    shelf_life_days=21, stock_qty=0.0, reorder_level=0.0)
+
 
 MATERIALS = {
     "milk":   Material("milk", "Milk", "kg", category="LiquidBase",
@@ -256,34 +369,91 @@ MATERIALS = {
     "cocoa":  Material("cocoa", "Cocoa", "kg", category="DryPowder",
                        tolerance_pos_pct=1.0, tolerance_neg_pct=1.0,
                        shelf_life_days=540, stock_qty=400.0, reorder_level=120.0),
-    FINISHED_GOOD_ID: Material(FINISHED_GOOD_ID, "Chocolate Vla 1L", "pack",
-                               category="FinishedGood", shelf_life_days=21,
-                               stock_qty=0.0, reorder_level=0.0),
+    # Smaakgrondstoffen voor L2. Hoeveelheden zijn demowaarden, niet geverifieerd.
+    "vanilla":    _flavour("vanilla", "Vanilla extract", 80.0, 30.0),
+    "banana":     _flavour("banana", "Banana puree", 400.0, 150.0, shelf=180),
+    "caramel":    _flavour("caramel", "Caramel syrup", 800.0, 300.0),
+    "strawberry": _flavour("strawberry", "Strawberry puree", 1000.0, 350.0, shelf=180),
+    FINISHED_GOOD_ID:   _fg(FINISHED_GOOD_ID, "Chocolate Vla 1L"),
+    "fg-vanilla-1L":    _fg("fg-vanilla-1L", "Vanilla Vla 1L"),
+    "fg-banana-1L":     _fg("fg-banana-1L", "Banana Vla 1L"),
+    "fg-caramel-1L":    _fg("fg-caramel-1L", "Caramel Vla 1L"),
+    "fg-strawberry-1L": _fg("fg-strawberry-1L", "Strawberry Vla 1L"),
 }
 
 SAMPLE_TYPES = ["dose_check", "cook_temp", "hold", "viscosity"]  # 06-Model B.1
 
-RECIPE_CHOCOLATE_VLA_1L = Recipe(
-    recipe_id="chocolate-vla-1L",
-    product_name="Chocolate Vla (1L)",
-    basis_L=5000.0,
-    doses=[
-        Dose(material_id="milk", qty_target=5000.0),
-        Dose(material_id="sugar", qty_target=500.0),
-        Dose(material_id="starch", qty_target=250.0),
-        Dose(material_id="cocoa", qty_target=100.0),
-    ],
-    cook_setpoint_C=88.0,
-    hold_sec=300.0,
-    cool_target_C=22.0,
-    spec_min_cP=SPEC_MIN_CP,
-    spec_max_cP=SPEC_MAX_CP,
-    agitator_rpm=60.0,
-)
 
-RECIPES: dict[str, Recipe] = {
-    RECIPE_CHOCOLATE_VLA_1L.recipe_id: RECIPE_CHOCOLATE_VLA_1L,
+def _recipe(rid: str, name: str, flavour: str, flavour_kg: float,
+            sugar_kg: float = 500.0) -> Recipe:
+    return Recipe(
+        recipe_id=rid, product_name=name, basis_L=5000.0,
+        doses=[Dose(material_id="milk", qty_target=5000.0),
+               Dose(material_id="sugar", qty_target=sugar_kg),
+               Dose(material_id="starch", qty_target=250.0),
+               Dose(material_id=flavour, qty_target=flavour_kg)],
+        cook_setpoint_C=88.0, hold_sec=300.0, cool_target_C=22.0,
+        spec_min_cP=SPEC_MIN_CP, spec_max_cP=SPEC_MAX_CP, agitator_rpm=60.0,
+    )
+
+
+RECIPE_CHOCOLATE_VLA_1L = _recipe("chocolate-vla-1L", "Chocolate Vla (1L)", "cocoa", 100.0)
+
+RECIPES: dict[str, Recipe] = {r.recipe_id: r for r in (
+    RECIPE_CHOCOLATE_VLA_1L,
+    _recipe("vanilla-vla-1L", "Vanilla Vla (1L)", "vanilla", 12.0),
+    _recipe("banana-vla-1L", "Banana Vla (1L)", "banana", 60.0),
+    _recipe("caramel-vla-1L", "Caramel Vla (1L)", "caramel", 120.0, sugar_kg=400.0),
+    _recipe("strawberry-vla-1L", "Strawberry Vla (1L)", "strawberry", 150.0),
+)}
+
+# Gereed product per recept. Chocolade houdt zijn oude id vla-1L, zodat de
+# bestaande voorraad, HU's en verzendingen niet hoeven te verhuizen.
+FG_OF_RECIPE: dict[str, str] = {
+    "chocolate-vla-1L": FINISHED_GOOD_ID,
+    "vanilla-vla-1L": "fg-vanilla-1L",
+    "banana-vla-1L": "fg-banana-1L",
+    "caramel-vla-1L": "fg-caramel-1L",
+    "strawberry-vla-1L": "fg-strawberry-1L",
 }
+FINISHED_GOOD_IDS = frozenset(FG_OF_RECIPE.values())
+
+# Productwissel: van licht naar donker mag direct, omgekeerd niet. Een
+# donkere of allergene smaak (aardbei: kleur en allergeen-claim, chocolade:
+# kleur) laat resten achter die je in een lichter product terugziet.
+# Een lagere rang na een hogere vraagt dus een CIP, reden "productwissel".
+RECIPE_RANK: dict[str, int] = {
+    "vanilla-vla-1L": 0,
+    "banana-vla-1L": 1,
+    "caramel-vla-1L": 2,
+    "strawberry-vla-1L": 3,
+    "chocolate-vla-1L": 4,
+}
+
+
+def fg_of_recipe(recipe_id: Optional[str]) -> str:
+    return FG_OF_RECIPE.get(recipe_id or "", FINISHED_GOOD_ID)
+
+
+def is_finished_good(material_id: Optional[str]) -> bool:
+    return material_id in FINISHED_GOOD_IDS
+
+
+def flavour_of(recipe) -> Optional[str]:
+    if isinstance(recipe, str):
+        recipe = get_recipe(recipe)
+    if recipe is None:
+        return None
+    for d in recipe.doses:
+        if d.material_id not in BASE_MATERIALS:
+            return d.material_id
+    return None
+
+
+def changeover_needs_cip(prev_recipe: Optional[str], next_recipe: Optional[str]) -> bool:
+    if not prev_recipe or not next_recipe or prev_recipe == next_recipe:
+        return False
+    return RECIPE_RANK.get(next_recipe, 0) < RECIPE_RANK.get(prev_recipe, 0)
 
 
 def get_recipe(recipe_id: str) -> Optional[Recipe]:
@@ -297,28 +467,31 @@ def area_of(equipment_id: str) -> str:
     return AREA_OF.get(equipment_id, "Processing")
 
 
-def status_topic(equipment_id: str, tag: str) -> str:
-    """DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}.
+def status_topic(equipment_id: str, tag: str, root: Optional[str] = None) -> str:
+    """{root}/{Area}/{Equipment}/Status/{tag}; root volgt uit de lijn van het
+    equipment, behalve voor het lijnobject 'Batch' (dat geeft de bus mee).
 
     The line-level 'Batch' object has no Area segment:
     DairyWorks/Vla/Batch/Status/{tag}.
     """
     if equipment_id == "Batch":
-        return f"{UNS_ROOT}/Batch/Status/{tag}"
+        return f"{root or UNS_ROOT}/Batch/Status/{tag}"
+    root = root or get_line(line_of_equipment(equipment_id)).uns_root
     area = area_of(equipment_id)
-    return f"{UNS_ROOT}/{area}/{equipment_id}/Status/{tag}"
+    return f"{root}/{area}/{equipment_id}/Status/{tag}"
 
 
-def command_topic(equipment_id: str, cmd: str) -> str:
-    """DairyWorks/Vla/{Area}/{Equipment}/Command/{cmd}.
+def command_topic(equipment_id: str, cmd: str, root: Optional[str] = None) -> str:
+    """{root}/{Area}/{Equipment}/Command/{cmd}.
 
     Line-level Batch commands:
     DairyWorks/Vla/Batch/Command/{StartBatch|Stop|InjectFault|ClearFault|TakeSample}.
     """
     if equipment_id == "Batch":
-        return f"{UNS_ROOT}/Batch/Command/{cmd}"
+        return f"{root or UNS_ROOT}/Batch/Command/{cmd}"
+    root = root or get_line(line_of_equipment(equipment_id)).uns_root
     area = area_of(equipment_id)
-    return f"{UNS_ROOT}/{area}/{equipment_id}/Command/{cmd}"
+    return f"{root}/{area}/{equipment_id}/Command/{cmd}"
 
 
 def physics_viscosity(peak_temp_C: float, hold_elapsed: float, hold_sec: float) -> float:

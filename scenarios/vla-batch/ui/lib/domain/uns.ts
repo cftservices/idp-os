@@ -15,12 +15,30 @@ import "server-only";
 
 const ROOT = "DairyWorks/Vla";
 
-export function statusTopic(area: string, equipment: string, tag: string): string {
-  return `${ROOT}/${area}/${equipment}/Status/${tag}`;
+/** Productielijnen: L1 (Hal 1, chocolade) en L2 (Hal 2, de smaken). */
+export const LINE_IDS = ["L1", "L2"] as const;
+export type LineId = (typeof LINE_IDS)[number];
+
+export function asLineId(v: string | null | undefined): LineId {
+  return (LINE_IDS as readonly string[]).includes(v ?? "") ? (v as LineId) : "L1";
 }
 
-export function batchTopic(tag: string): string {
-  return `${ROOT}/Batch/Status/${tag}`;
+/** L2 heeft een eigen root, zodat de L1-historian er niets van merkt. */
+export function rootOf(line: LineId = "L1"): string {
+  return line === "L1" ? ROOT : `${ROOT}-${line}`;
+}
+
+/** Equipment-id op een lijn: cook-unit-01 wordt cook-unit-02 op L2. */
+export function equipmentOn(equipment: string, line: LineId = "L1"): string {
+  return line === "L1" ? equipment : equipment.replace(/-01$/, `-0${line.slice(1)}`);
+}
+
+export function statusTopic(area: string, equipment: string, tag: string, line: LineId = "L1"): string {
+  return `${rootOf(line)}/${area}/${equipmentOn(equipment, line)}/Status/${tag}`;
+}
+
+export function batchTopic(tag: string, line: LineId = "L1"): string {
+  return `${rootOf(line)}/Batch/Status/${tag}`;
 }
 
 export type StepId = "receiving" | "mixing" | "cooking" | "cooling" | "filling";

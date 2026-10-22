@@ -49,14 +49,15 @@ def _num(v) -> float:
         return 0.0
 
 
-def _active_batch(db) -> Optional[dict]:
+def _active_batch(db, line: Optional[str] = None) -> Optional[dict]:
     """De lopende batch, en anders de meest recente.
 
     Dit is de regressie die eerder één keer is gefixt: targets alleen laden bij
     een actieve batch lijkt logisch en is fout, want de lijn staat het grootste
     deel van de tijd op COMPLETE. Dan toonden de doseerkaarten "target -".
     """
-    batches = list(db.dw_batches.find({}))
+    batches = [b for b in db.dw_batches.find({})
+               if line is None or M.line_of_doc(b) == line]
     if not batches:
         return None
     active = [b for b in batches if b.get("state") not in (None, M.COMPLETE, "IDLE")]
@@ -65,8 +66,8 @@ def _active_batch(db) -> Optional[dict]:
     return sorted(batches, key=lambda b: b.get("started_at") or "", reverse=True)[0]
 
 
-def live(db, model: Optional[dict] = None) -> dict:
-    """De volledige L1-payload."""
+def live(db, model: Optional[dict] = None, line: str = M.DEFAULT_LINE) -> dict:
+    """De volledige payload van één lijn (standaard L1)."""
     model = model or {}
     recipe = (model.get("recipes") or [{}])[0]
     pack_size_L = _num(recipe.get("pack_size_L")) or 1.0
@@ -74,10 +75,11 @@ def live(db, model: Optional[dict] = None) -> dict:
     fill_limits = model.get("fill_limits_ml")
     phase_nominal = model.get("phase_nominal_sec") or {}
 
-    batch = _active_batch(db)
+    batch = _active_batch(db, line)
     if batch is None:
         return {
             "available": False,
+            "line": line,
             "reason": "nog geen batch gedraaid",
             "generated_at": _iso(),
         }
@@ -109,7 +111,11 @@ def live(db, model: Optional[dict] = None) -> dict:
     # Vulsnelheid over een servervenster, uit de productieboekingen.
     now = datetime.now(timezone.utc)
     recent = []
+    line_batches = {b.get("batch_id") for b in db.dw_batches.find({})
+                    if M.line_of_doc(b) == line}
     for p in db.dw_production.find({}):
+        if p.get("batch_id") not in line_batches:
+            continue
         ts = _parse(p.get("ts"))
         if ts and (now - ts).total_seconds() <= RATE_WINDOW_S:
             recent.append((ts, _num(p.get("packs"))))
@@ -123,6 +129,7 @@ def live(db, model: Optional[dict] = None) -> dict:
 
     return {
         "available": True,
+        "line": line,
         "batch": {
             "batch_id": batch_id,
             "state": batch.get("state"),

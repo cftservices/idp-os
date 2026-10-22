@@ -189,3 +189,55 @@ export type LineLive = {
     spec_cP: { min: number; max: number } | null;
   };
 };
+
+/* ------------------------------------------------------ productielijnen */
+
+export type LineId = "L1" | "L2";
+
+export type ProductLine = {
+  line_id: LineId;
+  name: string;
+  hall: string;
+  uns_root: string;
+  recipes: Array<{
+    recipe_id: string;
+    product_name: string;
+    fg_material_id: string;
+    flavour: string;
+    /** Licht (0) naar donker: een stap terug vraagt een omstel-CIP. */
+    rank: number;
+  }>;
+  /** rol -> equipment-id, bijvoorbeeld cook -> cook-unit-02. */
+  equipment: Record<string, string>;
+  autopilot: {
+    recipe_id: string | null;
+    last_action: string | null;
+    changeover_cips: number | null;
+  } | null;
+};
+
+export type PrepState = "gepland" | "afwegen" | "premix" | "gereed" | "verbruikt";
+
+export type PrepSet = {
+  prep_id: string;
+  line: LineId;
+  recipe_id: string;
+  order_id: string | null;
+  batch_id: string | null;
+  weigh_station: string;
+  premix_tank: string;
+  state: PrepState;
+  components: Array<{ material_id: string; qty_kg: number; uom: string }>;
+  created_at: string;
+  state_changed_at: string;
+  history: Array<{ state: PrepState; ts: string }>;
+};
+
+export type PrepStation = {
+  station_id: string;
+  kind: "weigh" | "premix";
+  line: LineId;
+  state: "bezig" | "vrij";
+  prep_id: string | null;
+  recipe_id: string | null;
+};

@@ -7,7 +7,8 @@ import { Box3, Vector3 } from "three";
 import { trackedObject } from "./objects/Pickable";
 import { OrderPath } from "./objects/OrderPath";
 import type { ActiveOrder } from "./overlay";
-import { CAMERA_HOME, CAMERA_TARGET, LINE_EQUIPMENT, MAX_DOCKS, type Vec3 } from "@/lib/twin/layout";
+import { CAMERA_HOME, CAMERA_TARGET, HALL2_Z, LINE_EQUIPMENT, MAX_DOCKS, type Vec3 } from "@/lib/twin/layout";
+import { flavourKey } from "@/lib/twin/lines";
 import type { TwinModel } from "@/lib/twin/useTwinData";
 import { TwinContext, type TwinCtx } from "./context";
 import { EquipmentObject, ProcessPipe } from "./objects/Equipment";
@@ -24,12 +25,47 @@ import {
   Tanker,
 } from "./objects/Logistics";
 import { SiteGround } from "./objects/Site";
+import { Conveyor, PolyPipe, PrepStationObject } from "./objects/Prep";
+import { FlavourContext } from "./flavour";
 import { preloadProps } from "./models";
 
 if (typeof window !== "undefined") preloadProps();
 import { positionOf } from "./selection";
 
 const ACTIVE_STATES = new Set(["DOSING", "COOKING", "COOLING", "FILLING"]);
+
+/*
+ * Premixleidingen: een verzamelleiding boven de twee premixtanks, met een
+ * aftakking naar de mengtank van L1 (zuid) en die van L2 (noord). Boven de
+ * achterwand van hal 1 langs, dus op 3,5 m.
+ */
+const PIPE_Y = 3.5;
+const PREMIX_HEADER: Vec3[] = [
+  [-7.6, 2.2, -8.5],
+  [-7.6, PIPE_Y, -8.5],
+  [-4.6, PIPE_Y, -8.5],
+  [-4.6, 2.2, -8.5],
+];
+const PREMIX_TO_L1: Vec3[] = [
+  [-6, PIPE_Y, -8.5],
+  [-6, PIPE_Y, -1.3],
+];
+const PREMIX_TO_L2: Vec3[] = [
+  [-6, PIPE_Y, -8.5],
+  [-6, PIPE_Y, HALL2_Z + 1.3],
+];
+/** Band van de weegstations naar de premixtanks. */
+const WEIGH_BELT: Vec3[] = [
+  [-12.4, 0.7, -9.7],
+  [-4.6, 0.7, -9.7],
+];
+/** L2-uitvoer: van de vuller in hal 2 naar de westwand van hetzelfde koelmagazijn. */
+const L2_OUTFEED: Vec3[] = [
+  [12.3, 0.74, HALL2_Z],
+  [14.8, 0.74, HALL2_Z],
+  [14.8, 0.74, -6],
+  [16.1, 0.74, -6],
+];
 
 /**
  * Camera: zachtjes naar een geselecteerd object, terug naar huis bij een
@@ -141,6 +177,9 @@ export default function SiteScene({
 }) {
   const { palette, reducedMotion } = ctx;
   const flowing = model.batch ? ACTIVE_STATES.has(model.batch.state) : false;
+  const l2 = model.line2;
+  const flowing2 = l2.batch ? ACTIVE_STATES.has(l2.batch.state) : false;
+  const l2Pack = palette[flavourKey(l2.flavour)];
   // Alleen bij een nieuwe selectie: anders trekt elke poll de camera terug.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const focus = useMemo(() => (ctx.selected ? positionOf(ctx.selected, model) : null), [ctx.selected]);
@@ -160,6 +199,7 @@ export default function SiteScene({
       data-twin-canvas=""
     >
       <TwinContext.Provider value={ctx}>
+      <FlavourContext.Provider value={model.flavours}>
         <color attach="background" args={[palette.sky]} />
         <fog attach="fog" args={[palette.sky, 120, 320]} />
         <hemisphereLight args={[palette["roof-edge"], palette.ground, 1.1]} />
@@ -195,6 +235,26 @@ export default function SiteScene({
         {xs.slice(0, -1).map((x, i) => (
           <ProcessPipe key={x} from={x + 1.2} to={xs[i + 1] - 1.2} flowing={flowing} />
         ))}
+
+        {/* Hal 2: lijn L2, dezelfde machines met -02, en de uitvoer naar het koelmagazijn. */}
+        {l2.equipment.map((eq) => (
+          <EquipmentObject key={eq.id} eq={eq} batchState={l2.batch?.state ?? null} packColor={l2Pack} />
+        ))}
+        <group position={[0, 0, HALL2_Z]}>
+          {xs.slice(0, -1).map((x, i) => (
+            <ProcessPipe key={x} from={x + 1.2} to={xs[i + 1] - 1.2} flowing={flowing2} />
+          ))}
+        </group>
+        <Conveyor points={L2_OUTFEED} color={l2Pack} running={l2.batch?.state === "FILLING"} />
+
+        {/* Voorbereiding tussen de hallen: afwegen, premix, en de leidingen naar beide mengtanks. */}
+        {model.prep.map((st) => (
+          <PrepStationObject key={st.id} st={st} />
+        ))}
+        <Conveyor points={WEIGH_BELT} color={palette.pack} running={false} packs={0} />
+        <PolyPipe points={PREMIX_HEADER} flowing={false} />
+        <PolyPipe points={PREMIX_TO_L1} flowing={model.batch?.state === "DOSING"} />
+        <PolyPipe points={PREMIX_TO_L2} flowing={l2.batch?.state === "DOSING"} />
 
         <Palletiser logistics={model.logistics} visual={lv.palletiser} />
         <PutawayForklift logistics={model.logistics} transit={transit} sim={model.sim?.forklifts.find((f) => f.role === "putaway")} />
@@ -234,6 +294,7 @@ export default function SiteScene({
         />
         {showPath && order && <OrderPath order={order} model={model} />}
         <CameraRig focus={focus} follow={follow} resetSignal={resetSignal} zoom={zoom} />
+      </FlavourContext.Provider>
       </TwinContext.Provider>
     </Canvas>
   );

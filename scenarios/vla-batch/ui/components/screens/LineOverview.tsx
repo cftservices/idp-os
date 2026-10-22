@@ -6,6 +6,7 @@ import { AlarmBar } from "@/components/toolkit/AlarmBar";
 import { DeviationBand, StaleVeil } from "@/components/toolkit/Indicators";
 import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
 import { getUi, post } from "@/lib/client";
+import { LINE_LABEL, LineSwitch, useLineParam } from "@/components/toolkit/LineSwitch";
 import { EMPTY, num, shortTime, value as fmt } from "@/lib/format";
 import { POLL, useAlarms, useKpiSummary } from "@/lib/queries";
 import type { Alarm } from "@/lib/types";
@@ -216,9 +217,10 @@ function StepCard({ step }: { step: Step }) {
 }
 
 export function LineOverview() {
+  const lineId = useLineParam();
   const line = useQuery<LinePayload>({
-    queryKey: ["ui", "line"],
-    queryFn: ({ signal }) => getUi<LinePayload>("/line", signal),
+    queryKey: ["ui", "line", lineId],
+    queryFn: ({ signal }) => getUi<LinePayload>(`/line?line=${lineId}`, signal),
     refetchInterval: POLL.live,
     refetchIntervalInBackground: false,
     staleTime: 0,
@@ -246,10 +248,12 @@ export function LineOverview() {
         onAck={ack}
       />
 
+      <LineSwitch />
+
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <span className="eyebrow">Level 1, operator</span>
-          <h1 className="text-lg font-semibold tracking-[-0.015em]">DairyWorks, lijn Vla</h1>
+          <h1 className="text-lg font-semibold tracking-[-0.015em]">DairyWorks, {LINE_LABEL[lineId]}</h1>
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-[0.8125rem] text-ink-muted">
             {batch ? (
               <span>

@@ -12,6 +12,8 @@ import { post } from "@/lib/client";
 import { EMPTY, num, shortDateTime, value as fmt } from "@/lib/format";
 import { useBatch, useBatches, useUiModel } from "@/lib/queries";
 import type { Refusal } from "@/lib/refusal";
+import { LineSwitch, useLineParam } from "@/components/toolkit/LineSwitch";
+import { ProductTag, useRecipeIndex } from "@/components/toolkit/Product";
 
 /**
  * Scherm 2, batches (lijst plus detail), met scherm 3 (recept) als uitklapblok.
@@ -33,6 +35,7 @@ type Batch = {
   verdict: string | null;
   verdict_ack?: VerdictAck | null;
   recipe_id: string;
+  line?: string;
   order_id?: string | null;
   planned_L: number | null;
   packs_total: number | null;
@@ -77,6 +80,8 @@ export function Batches() {
   const selected = params.get("batch");
   const verdictFilter = params.get("verdict");
   const orderFilter = params.get("order");
+  const lineFilter = useLineParam(true);
+  const recipes = useRecipeIndex();
 
   // De lijst pollt niet zolang er een detail open staat.
   const list = useBatches<Batch[]>(Boolean(selected));
@@ -112,7 +117,8 @@ export function Batches() {
 
   const rows = (list.data ?? [])
     .filter((b) => !verdictFilter || b.verdict === verdictFilter)
-    .filter((b) => !orderFilter || b.order_id === orderFilter);
+    .filter((b) => !orderFilter || b.order_id === orderFilter)
+    .filter((b) => !lineFilter || (b.line ?? "L1") === lineFilter);
   const spec = model.data?.recipe?.viscosity_spec_cP ?? null;
   const unsigned = (list.data ?? []).filter(
     (b) => b.state === "COMPLETE" && b.verdict && !b.verdict_ack,
@@ -134,6 +140,8 @@ export function Batches() {
           { href: "/reports?type=batch", label: "Batchrapport" },
         ]}
       />
+
+      <LineSwitch allowAll />
 
       {(verdictFilter || orderFilter) && (
         <p className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
@@ -159,7 +167,7 @@ export function Batches() {
           <table className="w-full border-collapse text-[0.8125rem]">
             <thead>
               <tr className="border-b border-line text-left">
-                {["Batch", "Order", "Status", "Verdict", "Pakken", "Viscositeit", "Afgerond"].map((h) => (
+                {["Batch", "Product", "Order", "Status", "Verdict", "Pakken", "Viscositeit", "Afgerond"].map((h) => (
                   <th key={h} className="px-3 py-2 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase text-ink-faint">
                     {h}
                   </th>
@@ -169,7 +177,7 @@ export function Batches() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-4 text-ink-muted">
+                  <td colSpan={8} className="px-3 py-4 text-ink-muted">
                     Geen batches in deze selectie.{" "}
                     <CrossLink href="/orders">Maak een order en start een batch</CrossLink>.
                   </td>
@@ -188,6 +196,9 @@ export function Batches() {
                   }`}
                 >
                   <td className="px-3 py-[var(--density-row)] mono">{b.batch_id}</td>
+                  <td className="px-3 py-[var(--density-row)] whitespace-nowrap">
+                    <ProductTag recipeId={b.recipe_id} index={recipes} showLine />
+                  </td>
                   <td className="px-3 py-[var(--density-row)] mono">
                     {b.order_id ? (
                       // De doorklik mag het detailpaneel niet ook openen.
@@ -296,7 +307,9 @@ export function Batches() {
                   </summary>
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[0.8125rem] text-ink-muted">
                     <dt className="font-semibold">Recept</dt>
-                    <dd className="mono">{detail.data.recipe_id}</dd>
+                    <dd>
+                    <ProductTag recipeId={detail.data.recipe_id} index={recipes} showLine />
+                  </dd>
                     <dt className="font-semibold">Gepland</dt>
                     <dd className="num">
                       {detail.data.planned_L === null ? EMPTY : `${num(detail.data.planned_L, 0)} L`}

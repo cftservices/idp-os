@@ -55,12 +55,61 @@ COMPLETE = "COMPLETE"
 
 STATES = [IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE]
 
-# --- recipe library (contract: chocolate-vla-1L) ---
+# --- recipe library (contract: chocolate-vla-1L; lijn 2 maakt de vier smaken) ---
+# Alle doseerstromen bestaan op elke lijn; een recept zet wat het niet gebruikt op 0.
+DOSE_MATERIALS = ["milk", "sugar", "starch", "cocoa",
+                  "vanilla", "banana", "caramel", "strawberry"]
+
+
+def _doses(d: dict) -> dict:
+    return {m: float(d.get(m, 0.0)) for m in DOSE_MATERIALS}
+
+
 RECIPES = {
     "chocolate-vla-1L": {
         "product_name": "Chocolate Vla 1L",
         "base_L": 5000.0,
-        "doses_kg": {"milk": 5000.0, "sugar": 500.0, "starch": 250.0, "cocoa": 100.0},
+        "doses_kg": _doses({"milk": 5000.0, "sugar": 500.0, "starch": 250.0, "cocoa": 100.0}),
+        "cook_setpoint_C": 88.0,
+        "hold_sec": 300.0,
+        "cool_target_C": 22.0,
+        "spec_min_cP": 150.0,
+        "spec_max_cP": 300.0,
+    },
+    "vanilla-vla-1L": {
+        "product_name": "Vanilla Vla 1L",
+        "base_L": 5000.0,
+        "doses_kg": _doses({"milk": 5000.0, "sugar": 500.0, "starch": 250.0, "vanilla": 12.0}),
+        "cook_setpoint_C": 88.0,
+        "hold_sec": 300.0,
+        "cool_target_C": 22.0,
+        "spec_min_cP": 150.0,
+        "spec_max_cP": 300.0,
+    },
+    "banana-vla-1L": {
+        "product_name": "Banana Vla 1L",
+        "base_L": 5000.0,
+        "doses_kg": _doses({"milk": 5000.0, "sugar": 500.0, "starch": 250.0, "banana": 60.0}),
+        "cook_setpoint_C": 88.0,
+        "hold_sec": 300.0,
+        "cool_target_C": 22.0,
+        "spec_min_cP": 150.0,
+        "spec_max_cP": 300.0,
+    },
+    "caramel-vla-1L": {
+        "product_name": "Caramel Vla 1L",
+        "base_L": 5000.0,
+        "doses_kg": _doses({"milk": 5000.0, "sugar": 400.0, "starch": 250.0, "caramel": 120.0}),
+        "cook_setpoint_C": 88.0,
+        "hold_sec": 300.0,
+        "cool_target_C": 22.0,
+        "spec_min_cP": 150.0,
+        "spec_max_cP": 300.0,
+    },
+    "strawberry-vla-1L": {
+        "product_name": "Strawberry Vla 1L",
+        "base_L": 5000.0,
+        "doses_kg": _doses({"milk": 5000.0, "sugar": 500.0, "starch": 250.0, "strawberry": 150.0}),
         "cook_setpoint_C": 88.0,
         "hold_sec": 300.0,
         "cool_target_C": 22.0,
@@ -160,8 +209,8 @@ class VlaProcess:
         self.mix_temp_C: float = AMBIENT_C
         self.agitator_rpm: float = 0.0
         self.agitator_setpoint_rpm: float = AGITATOR_DEFAULT_RPM
-        self.dose_setpoint_kg: dict[str, float] = {"milk": 0.0, "sugar": 0.0, "starch": 0.0, "cocoa": 0.0}
-        self.dose_actual_kg: dict[str, float] = {"milk": 0.0, "sugar": 0.0, "starch": 0.0, "cocoa": 0.0}
+        self.dose_setpoint_kg: dict[str, float] = {m: 0.0 for m in DOSE_MATERIALS}
+        self.dose_actual_kg: dict[str, float] = {m: 0.0 for m in DOSE_MATERIALS}
         self.phase: str = "idle"  # human-readable sub-phase string tag
 
         # --- cook-unit-01 ---
@@ -263,14 +312,8 @@ class VlaProcess:
             self.cool_target_C = value
         elif t == "mixing.agitator_rpm":
             self.agitator_setpoint_rpm = value
-        elif t == "dose.milk":
-            self.dose_setpoint_kg["milk"] = value
-        elif t == "dose.sugar":
-            self.dose_setpoint_kg["sugar"] = value
-        elif t == "dose.starch":
-            self.dose_setpoint_kg["starch"] = value
-        elif t == "dose.cocoa":
-            self.dose_setpoint_kg["cocoa"] = value
+        elif t.startswith("dose.") and t[5:] in DOSE_MATERIALS:
+            self.dose_setpoint_kg[t[5:]] = value
         elif t == "receiving.fat":
             self.fat_setpoint_pct = value
         else:
@@ -562,10 +605,8 @@ class VlaProcess:
                 "level_L": round(self.mix_level_L, 2),
                 "temp_C": round(self.mix_temp_C, 2),
                 "agitator_rpm": round(self.agitator_rpm, 1),
-                "dose_milk_actual_kg": round(self.dose_actual_kg["milk"], 2),
-                "dose_sugar_actual_kg": round(self.dose_actual_kg["sugar"], 2),
-                "dose_starch_actual_kg": round(self.dose_actual_kg["starch"], 2),
-                "dose_cocoa_actual_kg": round(self.dose_actual_kg["cocoa"], 2),
+                **{f"dose_{m}_actual_kg": round(self.dose_actual_kg.get(m, 0.0), 2)
+                   for m in DOSE_MATERIALS},
                 "phase": self.phase,
             },
             ("Cook", "cook-unit-01"): {

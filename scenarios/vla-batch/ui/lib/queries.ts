@@ -3,7 +3,9 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { get, getUi } from "./client";
 import type { Refusal } from "./refusal";
-import type { Alarm, KpiSummary, LineLive, TagReading, UiModel } from "./types";
+import type {
+  Alarm, KpiSummary, LineLive, PrepSet, PrepStation, ProductLine, TagReading, UiModel,
+} from "./types";
 
 /**
  * Query-keys en poll-intervallen op een plek.
@@ -35,7 +37,9 @@ export const POLL = {
 
 export const keys = {
   tags: ["tags"] as const,
-  line: ["line"] as const,
+  line: (id = "L1") => ["line", id] as const,
+  lines: ["lines"] as const,
+  prep: (line: string) => ["prep", line] as const,
   batches: ["batches"] as const,
   batch: (id: string) => ["batch", id] as const,
   orders: ["orders"] as const,
@@ -112,8 +116,21 @@ export function useUiModel(extra?: Extra<UiModel>) {
 
 /* ------------------------------------------------------------ operatorkant */
 
-export function useLineLive(extra?: Extra<LineLive>) {
-  return usePolled<LineLive>(keys.line, "/line/live", POLL.live, extra);
+export function useLineLive(line = "L1", extra?: Extra<LineLive>) {
+  return usePolled<LineLive>(keys.line(line), `/line/live?line=${encodeURIComponent(line)}`,
+    POLL.live, extra);
+}
+
+/** Productielijnen met recepten en equipment. Verandert alleen bij een deploy. */
+export function useLines(extra?: Extra<ProductLine[]>) {
+  return usePolled<ProductLine[]>(keys.lines, "/lines", POLL.aggregates, extra);
+}
+
+/** Voorbereiding: afweeg- en premixsets plus de bezetting van de stations. */
+export function usePrepOrders(line = "", extra?: Extra<{ sets: PrepSet[]; stations: PrepStation[] }>) {
+  const qs = line ? `?line=${encodeURIComponent(line)}` : "";
+  return usePolled<{ sets: PrepSet[]; stations: PrepStation[] }>(
+    keys.prep(line || "alle"), `/prep-orders${qs}`, POLL.lists, extra);
 }
 
 export function useAlarms(filter = "", extra?: Extra<Alarm[]>) {
