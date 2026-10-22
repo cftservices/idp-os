@@ -109,6 +109,7 @@
   --twin-tank: #e8eef3;
   --twin-milk: #fbf8f0;
   --twin-vla: #e8b860;
+  --twin-choco: #6b3e26;
   --twin-pipe: #a9b6c3;
   --twin-rack: #2f5bd3;
   --twin-pallet: #c9965f;
@@ -570,6 +571,8 @@ html, body { max-width: 100%; overflow-x: hidden; }
   z-index: 20;
   display: grid;
   grid-template-columns: repeat(5, minmax(7.5rem, 9.5rem)) minmax(13rem, 16rem);
+  /* De orderkaart groeit met het orderpad; de andere tegels houden hun eigen hoogte. */
+  align-items: start;
   gap: 0.5rem;
   margin: 0;
 }
