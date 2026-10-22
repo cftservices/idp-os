@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import type { Group, Mesh } from "three";
-import type { Vec3 } from "@/lib/twin/layout";
+import { PREP_STATIONS, type Vec3 } from "@/lib/twin/layout";
 import type { TwinPrepStation } from "@/lib/twin/useTwinData";
 import { FLAVOUR_WORD, PREP_STATE_WORD, flavourKey, prepColorKey } from "@/lib/twin/lines";
 import { useTwin } from "../context";
@@ -117,16 +117,28 @@ function PremixTank({ st }: { st: TwinPrepStation }) {
   );
 }
 
-/** Altijd zichtbaar chipje: state · product · lijn. */
-function PrepChip({ st, height }: { st: TwinPrepStation; height: number }) {
+const PREP_ROWS = PREP_STATIONS.map((s) => s.id);
+const PREP_BOARD: Vec3 = [
+  PREP_STATIONS.reduce((a, s) => a + s.pos[0], 0) / PREP_STATIONS.length,
+  0,
+  PREP_STATIONS[0].pos[2],
+];
+
+/** Chipje voor een station met een set: state · product · lijn. */
+function PrepChip({ st, offset, row }: { st: TwinPrepStation; offset: Vec3; row: number }) {
   const set = st.view.set;
   const text = set
     ? `${PREP_STATE_WORD[st.view.state]} · ${st.view.flavour ? FLAVOUR_WORD[st.view.flavour] : set.recipe_id} · ${set.line}`
     : st.visual.label;
   const dot = `var(--twin-${prepColorKey(st.view.state)})`;
   return (
-    <Html position={[0, height, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-      <div className="twin-chip" data-prep={st.view.state} data-twin-prep={st.id} style={{ ["--prep-dot" as string]: dot }}>
+    <Html position={offset} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+      <div
+        className="twin-chip"
+        data-prep={st.view.state}
+        data-twin-prep={st.id}
+        style={{ ["--prep-dot" as string]: dot, transform: `translateY(${row * 26}px)` }}
+      >
         {text}
       </div>
     </Html>
@@ -134,13 +146,18 @@ function PrepChip({ st, height }: { st: TwinPrepStation; height: number }) {
 }
 
 export function PrepStationObject({ st }: { st: TwinPrepStation }) {
+  const { labelled } = useTwin();
   const label = st.kind === "weigh" ? 2.4 : 3.2;
-  // De stations staan 2-3 m uit elkaar; om-en-om hoger zodat de chips elkaar niet bedekken.
-  const stagger = st.id.endsWith("02") ? 1.1 : 0;
+  // De stations staan 2-3 m uit elkaar en de chips zijn breder: alle chips hangen aan één punt
+  // boven het midden van de ruimte en staan in pixels onder elkaar, leesbaar op elke zoom.
+  const row = PREP_ROWS.indexOf(st.id);
+  const offset: Vec3 = [PREP_BOARD[0] - st.pos[0], 4.2, PREP_BOARD[2] - st.pos[2]];
   return (
     <Pickable id={`prep:${st.id}`} name={st.name} visual={st.visual} position={st.pos} radius={1} labelHeight={label}>
       {st.kind === "weigh" ? <WeighStation st={st} /> : <PremixTank st={st} />}
-      <PrepChip st={st} height={label - 0.55 + stagger} />
+      {/* Alleen een station met een set krijgt een chip ("vrij" x4 klonterde in het overzicht);
+          geselecteerd of gehoverd krijgt het het grote label, dan geen tweede chip eronder. */}
+      {st.view.set && !labelled.has(`prep:${st.id}`) && <PrepChip st={st} offset={offset} row={Math.max(row, 0)} />}
     </Pickable>
   );
 }

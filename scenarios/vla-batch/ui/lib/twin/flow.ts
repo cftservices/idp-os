@@ -146,25 +146,51 @@ const RANK: Record<VisualState, number> = { alarm: 1, warn: 2, stale: 2, run: 3,
  * Welke objecten een zwevend label krijgen. Volgorde: geselecteerd, alarm,
  * aandacht/verouderd, actief. Stil en onbekend nooit (behalve geselecteerd),
  * en nooit meer dan `max`: een diorama vol ballonnen is geen overzicht meer.
+ * Met posities slaat het budget een label over dat in beeld op een eerder label
+ * valt. Gemeten langs de assen van de startcamera: een ballon is breed (~14 m in
+ * camera-x) en laag (~3 m in schermhoogte). Sinds Hal 2 vielen de ballonnen van
+ * L2-tanks op 5 m afstand anders over elkaar.
  */
 export function labelBudget(
-  items: Array<{ id: string; visual: Visual }>,
+  items: Array<{ id: string; visual: Visual; pos?: readonly number[] }>,
   selected: string | null,
   hovered: string | null,
   max = 6,
+  gap: { x: number; y: number } = LABEL_GAP,
 ): Set<string> {
   const out = new Set<string>();
   if (selected) out.add(selected);
   if (hovered) out.add(hovered);
   const ranked = items
-    // Docks dragen hun eigen chip met "x/y HU"; een tweede ballon erboven overlapt de buurdock.
-    .filter((i) => !out.has(i.id) && RANK[i.visual.state] < 9 && !i.id.startsWith("dock:"))
+    // Docks en voorbereidingsstations dragen een eigen chip; een tweede ballon erboven overlapt de buren.
+    .filter((i) => !out.has(i.id) && RANK[i.visual.state] < 9 && !i.id.startsWith("dock:") && !i.id.startsWith("prep:"))
     .sort((a, b) => RANK[a.visual.state] - RANK[b.visual.state]);
+  const byId = new Map(items.map((i) => [i.id, i.pos]));
+  // Docks en voorbereiding dragen een vaste chip: daar mag ook geen ballon overheen.
+  const chips = items.filter((i) => i.id.startsWith("dock:") || i.id.startsWith("prep:")).map((i) => i.pos);
+  const placed = [...[...out].map((id) => byId.get(id)), ...chips].filter((p): p is readonly number[] => !!p);
+  const tooClose = (p?: readonly number[]) => !!p && placed.some((q) => labelsCollide(p, q, gap));
   for (const i of ranked) {
     if (out.size >= max) break;
+    if (tooClose(i.pos)) continue;
     out.add(i.id);
+    if (i.pos) placed.push(i.pos);
   }
   return out;
+}
+
+/** Schermassen van de startcamera op de vloer (CAMERA_HOME naar CAMERA_TARGET). */
+const VIEW_RIGHT = [0.918, -0.396] as const;
+const VIEW_DEPTH = [-0.396, -0.918] as const;
+const VIEW_TILT = 0.61;
+export const LABEL_GAP = { x: 14, y: 3 };
+
+export function labelsCollide(p: readonly number[], q: readonly number[], gap = LABEL_GAP): boolean {
+  const dx = p[0] - q[0];
+  const dz = p[2] - q[2];
+  const sx = Math.abs(dx * VIEW_RIGHT[0] + dz * VIEW_RIGHT[1]);
+  const sy = Math.abs(dx * VIEW_DEPTH[0] + dz * VIEW_DEPTH[1]) * VIEW_TILT;
+  return sx < gap.x && sy < gap.y;
 }
 
 /** Spelden alleen boven wat aandacht vraagt. */

@@ -26,6 +26,7 @@ import type { TwinPalette } from "@/lib/twin/palette";
 import {
   COLDSTORE,
   MAIN_AISLE_Z,
+  MAX_DOCKS,
   PALLETISER,
   PALLETISER_PICK,
   RACK,
@@ -567,7 +568,8 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
         {logistics.rack.map(({ slot, hu }) => (
           <RackPallet key={hu.hu_id} hu={hu} slot={slot} transit={transit} origin={origin} />
         ))}
-        <Html position={[x1 - origin[0], h + 0.4, z1 - 1.5 - origin[1]]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+        {/* Op de achterwand: de voorkant boven de docks is van de dockchips. */}
+        <Html position={[cx - origin[0], h + 0.4, z0 + 0.6 - origin[1]]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
           <div className="twin-chip" data-twin-occupancy={logistics.rack.length}>
             {logistics.rack.length}/{RACK_SLOTS} vakken · {logistics.totals.packsStored.toLocaleString("nl-NL")} packs
           </div>
@@ -904,9 +906,13 @@ function DockChip({
   const { labelled } = useTwin();
   if (labelled.has(id)) return null;
   const cargo = cargoLine(ship);
+  // De docks staan 3,4 m uit elkaar en de chips zijn veel breder. Alle chips hangen daarom aan
+  // hetzelfde punt boven het midden van de dockrij en staan in pixels onder elkaar: een dockbord,
+  // leesbaar op elke zoom.
+  const mid = (MAX_DOCKS - 1) / 2;
   return (
-    <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-      <div className="twin-chip" data-twin-dock={dock + 1}>
+    <Html position={[(mid - dock) * 3.4, 4.5, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+      <div className="twin-chip" data-twin-dock={dock + 1} style={{ transform: `translateY(${(dock - mid) * 26}px)` }}>
         D{dock + 1}
         {cargo && ` · ${cargo}`} · {state === "laden" ? `laden ${loaded}/${total}` : `aangemeld · ${total} pallets`}
       </div>
@@ -915,9 +921,10 @@ function DockChip({
 }
 
 /** Chip boven een vertrekkende truck: welke order en klant hij vervoert. */
-function TruckChip({ id, ship }: { id: string; ship: SimShipment }) {
+function TruckChip({ id, ship, lane = 0 }: { id: string; ship: SimShipment; lane?: number }) {
   const { labelled } = useTwin();
-  if (labelled.has(id)) return null;
+  // Vertrekkende trucks rijden achter elkaar; alleen de voorste draagt een chip, de rest via hover.
+  if (labelled.has(id) || lane > 0) return null;
   return (
     <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
       <div className="twin-chip">
@@ -1015,7 +1022,7 @@ export function SimDepartingTruck({ s, lane }: { s: SimShipment; lane: number })
   return (
     <Driving id={`shipment:${s.shipment_id}`} name={cargoLine(s)} visual={shipmentVisual(s)} pose={pose} labelHeight={4.2}>
       <TruckModel load={1} />
-      <TruckChip id={`shipment:${s.shipment_id}`} ship={s} />
+      <TruckChip id={`shipment:${s.shipment_id}`} ship={s} lane={lane} />
     </Driving>
   );
 }
@@ -1137,7 +1144,7 @@ function applyPose(rig: Rig, p: Pose) {
   if (rig.load.current) rig.load.current.visible = p.carrying;
 }
 
-function ForkliftModel({ rig, color, packs, children }: { rig: Rig; color: string; packs: number; children?: ReactNode }) {
+function ForkliftModel({ rig, color, packs, batch, children }: { rig: Rig; color: string; packs: number; batch?: string | null; children?: ReactNode }) {
   const { palette } = useTwin();
   const steel = palette["steel-dark"];
   return (
@@ -1240,20 +1247,20 @@ function ForkliftModel({ rig, color, packs, children }: { rig: Rig; color: strin
           </mesh>
         ))}
         <group ref={rig.load} position={[0, 0, CARRY_OFFSET]} visible={false}>
-          <PalletModel packs={packs} wrapped />
+          <PalletModel packs={packs} batch={batch} wrapped />
         </group>
       </group>
     </group>
   );
 }
 
-function PickableForklift({ rig, color, packs, pick }: { rig: Rig; color: string; packs: number; pick: { id: string; name: string; visual: Visual } }) {
+function PickableForklift({ rig, color, packs, batch, pick }: { rig: Rig; color: string; packs: number; batch?: string | null; pick: { id: string; name: string; visual: Visual } }) {
   const { palette, selected, hovered } = useTwin();
   const handlers = usePick(pick.id);
   const on = selected === pick.id || hovered === pick.id;
   return (
     <group {...handlers}>
-      <ForkliftModel rig={rig} color={color} packs={packs}>
+      <ForkliftModel rig={rig} color={color} packs={packs} batch={batch}>
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
           <ringGeometry args={[1.25, on ? 1.5 : 1.38, 40]} />
           <meshBasicMaterial color={on ? palette.glow : statusColor(palette, pick.visual.state)} transparent opacity={on ? 0.95 : 0.6} />
@@ -1358,9 +1365,9 @@ function RouteForklift({
   return (
     <group name={name}>
       {pick ? (
-        <PickableForklift rig={rig} color={color} packs={cargo.packs} pick={pick} />
+        <PickableForklift rig={rig} color={color} packs={cargo.packs} batch={cargo.batch} pick={pick} />
       ) : (
-        <ForkliftModel rig={rig} color={color} packs={cargo.packs} />
+        <ForkliftModel rig={rig} color={color} packs={cargo.packs} batch={cargo.batch} />
       )}
       {cargo.at && (
         <group ref={ghost} position={cargo.at} visible={false}>
