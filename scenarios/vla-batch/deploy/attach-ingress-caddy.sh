@@ -24,6 +24,7 @@ CADDY_CONTAINER=${CADDY_CONTAINER:-aios-caddy}
 NETWERK=${NETWERK:-idp-network}
 DOMEIN=${DOMEIN:-milkdemo.techflow24.com}
 UPSTREAM=${UPSTREAM:-vla-ui:3000}
+GRAFANA_UPSTREAM=${GRAFANA_UPSTREAM:-grafana:3000}
 AUTH_FILE=${AUTH_FILE:-/root/idp-os/.milkdemo-auth}
 
 BEGIN="# >>> vla begin (beheerd door attach-ingress-caddy.sh, niet met de hand bewerken)"
@@ -84,7 +85,7 @@ fi
 vul_in() {
     python3 -c 'import os, string, sys; sys.stdout.write(string.Template(sys.stdin.read()).safe_substitute(os.environ))'
 }
-export BEGIN EIND DOMEIN UPSTREAM AUTH_USER AUTH_HASH
+export BEGIN EIND DOMEIN UPSTREAM GRAFANA_UPSTREAM AUTH_USER AUTH_HASH
 
 vul_in >> "$CADDYFILE" <<'SJABLOON'
 
@@ -96,6 +97,21 @@ ${DOMEIN} {
 	@health path /api/ui/model
 	handle @health {
 		reverse_proxy ${UPSTREAM}
+	}
+
+	# Grafana onder een subpad: dezelfde voordeur als de site, en daarachter
+	# nog Grafana's eigen login. Geen prefix-strip (serve_from_sub_path doet
+	# dat al). De Authorization-header gaat er bewust af: anders probeert
+	# Grafana het demowachtwoord als eigen basic-auth en weigert elk verzoek,
+	# en zou het demowachtwoord ook een Grafana-gebruiker kunnen raden.
+	handle /grafana* {
+		basic_auth {
+			${AUTH_USER} ${AUTH_HASH}
+		}
+		reverse_proxy ${GRAFANA_UPSTREAM} {
+			header_up -Authorization
+			header_up X-Real-IP {remote_host}
+		}
 	}
 
 	handle {
@@ -117,7 +133,7 @@ ${DOMEIN} {
 }
 ${EIND}
 SJABLOON
-echo "• vla-blok toegevoegd voor ${DOMEIN} → ${UPSTREAM}"
+echo "• vla-blok toegevoegd voor ${DOMEIN} → ${UPSTREAM} (+ /grafana → ${GRAFANA_UPSTREAM})"
 
 # --- 3. controleren en herladen --------------------------------------------
 if ! docker exec "$CADDY_CONTAINER" caddy validate --config /etc/caddy/Caddyfile \

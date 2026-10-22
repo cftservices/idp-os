@@ -460,6 +460,16 @@ services:
       # Blijft expliciet uit; zie de waarschuwing bij de labels.
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Hardening voor de publieke /grafana-route (attach-ingress-caddy.sh).
+      # De proxy haalt de Authorization-header weg; Grafana's eigen
+      # basic-auth is dan overbodig en blijft dicht als tweede slot.
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
     # ── auth ──────────────────────────────────────────────────────────────
     # De slim-base zet vier Traefik-labels voor grafana.${DOMAIN} ZONDER
     # middleware, terwijl vla-dashboard wel achter milkdemo-auth zit. Grafana's
