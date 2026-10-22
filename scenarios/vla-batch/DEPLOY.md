@@ -81,9 +81,14 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
   batches, events en track & trace staan in mongo en gaan wél mee.
 - Op een machine zonder `aios-caddy` moet je zelf een reverse proxy zetten met dezelfde
   drie routes als hierboven.
-- Er draait **geen automatische back-up** van deze stack (de cronregels op de VPS zijn van
-  `buzzws` en `emcp`). Wil je dat: `0 4 * * * /root/idp-os/scenarios/vla-batch/deploy/stack.sh backup`
-  en ruim oude mappen op.
+- **Nachtelijke back-up staat aan** (sinds 2026-10-22, root-crontab):
+  `0 2 * * * /root/idp-os/scenarios/vla-batch/deploy/stack.sh backup --nachtelijk >> /var/log/idp-os-backup.log 2>&1`.
+  De VPS draait op UTC, dus dat is 04:00 in de zomer en 03:00 in de winter (NL). De back-up
+  komt in `/root/backups/idp-os/nacht/`; alleen de laatste drie blijven staan (`BEWAAR=3`).
+  Opruimen gebeurt pas na een geslaagde back-up, en handmatige back-ups buiten `nacht/` raakt
+  het nooit. Een `flock` voorkomt dat twee back-ups tegelijk draaien. Grafana ligt elke nacht
+  ~10 s stil. **De back-ups staan op dezelfde VPS**: kopieer er af en toe een naar buiten
+  (`scp -r techflow-vps:/root/backups/idp-os/nacht/<map> .`).
 - De cron `hoststats.sh` (elke minuut) voedt het DataOps-tabblad en mag blijven staan.
 
 **Code uitrollen.** `/root/idp-os` is geen git-checkout. Gewijzigde bestanden gaan per
