@@ -184,7 +184,7 @@ Workshop and demo scenarios live in [`scenarios/`](./scenarios/). Each one is a 
 
 > 🔒 **Anonymisation is a hard rule.** Scenarios use fictional names (DairyWorks, …) only — no real customer, vendor or employer names, IPs or vendor schemas.
 >
-> 🌐 The vla-batch demo runs on its own VPS host behind basic auth; access on request. Deploy: [`scenarios/vla-batch/DEPLOY.md`](./scenarios/vla-batch/DEPLOY.md).
+> 🌐 The vla-batch demo runs on a shared VPS behind basic auth; access on request. It is **one Docker Compose project (`idp-os`, 13 services)** managed by a single script, [`scenarios/vla-batch/deploy/stack.sh`](./scenarios/vla-batch/deploy/stack.sh): `status`, `offline`, `online [--build]`, `backup [--met-historian]`, `restore <dir>`, `remove`. Take it offline and bring it back in one command each; a backup (Mongo dump, Grafana, code, secrets) restores onto a fresh machine. Runbook: [`scenarios/vla-batch/DEPLOY.md`](./scenarios/vla-batch/DEPLOY.md) (top section). Grafana lives at `/grafana` behind the same basic auth plus its own login; the historian (TDengine) and a small local LLM (`qwen2.5:1.5b`, for the root-cause summary) run alongside.
 
 ---
 

@@ -115,6 +115,23 @@ See the full v2 architecture docs in the CFT Services **Datalayer** doc set
 
 ## Run
 
+### On the VPS (how the live demo runs)
+
+The live demo is one compose project, `idp-os`, built from three files (slim base + this
+overlay + `docker-compose.vps-shared.yml`). Manage it with one script, not raw compose:
+
+```bash
+S=/root/idp-os/scenarios/vla-batch/deploy/stack.sh
+$S status | offline | online [--build] | backup [--met-historian] | restore <dir> | remove
+```
+
+`online` starts a fixed list of 13 services with `--no-deps` (so `fastapi`, `vla-dashboard`
+and `vla-tdgpt` stay off), pulls the local model if missing, re-attaches the ingress and
+checks the site. Full runbook, service table, security checks and the "offline and back
+again" matrix: [`DEPLOY.md`](DEPLOY.md), top section.
+
+### Locally
+
 Always run the **slim-base + this overlay together** (from the `idp-os` root):
 
 ```bash

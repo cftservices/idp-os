@@ -178,14 +178,28 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
   (`logistics_sim.py` ↔ `tankerPose` in `ui/lib/twin/flow.ts`).
 - **Kleuren alleen uit palette-tokens** (`npm run lint:tokens`), geen hex in TSX.
 - **Uitrol:** gewijzigde bestanden als tar naar `/root/idp-os`, dan
-  `docker compose -p idp-os -f docker-compose.slim.yml -f scenarios/vla-batch/docker-compose.vla.yml -f scenarios/vla-batch/docker-compose.vps-shared.yml up -d --build vla-ui vla-batch-engine`.
-  Altijd `-p idp-os`; een ongefilterde `down` legt de demo plat.
+  `docker compose -p idp-os -f docker-compose.slim.yml -f scenarios/vla-batch/docker-compose.vla.yml -f scenarios/vla-batch/docker-compose.vps-shared.yml up -d --no-deps --build vla-ui vla-batch-engine`.
+  Altijd `-p idp-os` en `--no-deps`; een ongefilterde `down` legt de demo plat.
+- **Beheer = één script:** `scenarios/vla-batch/deploy/stack.sh`
+  (`status`, `offline`, `online [--build]`, `backup [--met-historian]`, `restore <map>`, `remove`).
+  Eén compose-project `idp-os`, 13 diensten. Runbook en "offline en weer terug": `DEPLOY.md`,
+  bovenste sectie. Er draait géén automatische back-up van deze stack.
+- **Ingress:** `aios-caddy` (andere stack) bezit 80/443; ons blok komt uitsluitend uit
+  `deploy/attach-ingress-caddy.sh`. `/grafana*` zit achter dezelfde basic auth plus de
+  Grafana-login, met de `Authorization`-header gestript. Nooit de Caddyfile met de hand bewerken.
+- **Lokale AI:** `vla-ollama` met `qwen2.5:1.5b` (`mem_limit 2g`, 2 CPU's ≈ 4 tok/s). De
+  oorzaaksamenvatting draait daarom op de achtergrond (`rca.py`, cache per feitenset).
 - **Tests:** `pytest tests/test_logistics_sim.py tests/test_warehouse.py` (de API-tests hangen zonder
   Mongo), `npx tsc --noEmit`, `npx playwright test e2e/twin-flow.spec.ts e2e/twin-derive.spec.ts`.
 
 ---
 
 ## Changelog
+
+### 2026-10-22: vla-batch beheer, Grafana, lokale AI
+- **Nieuw:** `deploy/stack.sh` — offline, online, back-up en herstel van de hele stack in één commando
+- **Nieuw:** Grafana op `milkdemo…/grafana` (dubbel slot), historian en lokale AI draaien op de VPS
+- **Nieuw:** datalaag-lens met oorzaakanalyse; AI-samenvatting op de achtergrond
 
 ### 2026-10-21: vla-batch site-twin
 - **Nieuw:** 3D site-twin op `/site` met WareTrack-overlay, autopilot-magazijn en OIP-modellen (MIT)

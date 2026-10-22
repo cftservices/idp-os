@@ -7,6 +7,95 @@
 
 ---
 
+## ★ Zo draait het nu op `techflow-vps` (stand 2026-10-22)
+
+**Ja, het is één compose-stack:** project `idp-os`, opgebouwd uit drie bestanden in
+`/root/idp-os`. Eén script beheert hem: [`deploy/stack.sh`](deploy/stack.sh).
+
+```bash
+S=/root/idp-os/scenarios/vla-batch/deploy/stack.sh
+$S status                 # diensten + 4 http-checks (lokaal, Grafana, publiek, auth)
+$S offline                # alles stoppen; containers, volumes, netwerk blijven
+$S online                 # alles starten in volgorde + model + ingress + check
+$S online --build         # idem, maar images opnieuw bouwen (na code-wijziging)
+$S backup                 # → /root/backups/idp-os/<datum>   (--met-historian: + TDengine)
+$S restore <map>          # back-up terugzetten, daarna vanzelf online
+$S remove                 # containers + netwerk weg, volumes blijven
+```
+
+**Diensten (13, in startvolgorde)**
+
+| Dienst | Rol | Poort op de host | Volume |
+|---|---|---|---|
+| `mongo` | orders, batches, events, HU's | 127.0.0.1:27017 | `idp-os_mongo-data` (~1,8 GB) |
+| `monstermq` | de datalaag (topics, ISA-95-context) | geen | `idp-os_monstermq-data` |
+| `vla-tdengine` | historian | 127.0.0.1:6060 | `idp-os_vla-tdengine-data` (~3 GB) |
+| `vla-factory`, `vla-factory-l2` | gesimuleerde lijnen L1/L2 (OPC-UA) | geen | — |
+| `vla-opcua-init`, `vla-l2-opcua-init` | eenmalig: koppelt de lijnen aan de datalaag (exit 0 is goed) | — | — |
+| `vla-batch-engine` | MES, autopilot, datalaag-API, oorzaakanalyse | geen | — |
+| `vla-tdengine-bridge` | schrijft topics naar de historian | geen | — |
+| `vla-ollama` | lokaal taalmodel `qwen2.5:1.5b`, `mem_limit 2g` | geen | `idp-os_vla-ollama-data` (model, wordt bij `online` opnieuw gehaald als hij ontbreekt) |
+| `vla-ai` | AI-dienst op poort 8080 | 127.0.0.1:8095 | — |
+| `grafana` | dashboards op `/grafana` | 127.0.0.1:3001 | `idp-os_grafana-data` |
+| `vla-ui` | Next.js: site, `/site`-twin, analyse | 127.0.0.1:8091 | — |
+
+Bewust **niet** gestart (staan wel in de compose-bestanden): `fastapi`, `vla-dashboard`,
+`vla-tdgpt` (1,5 GB, past niet). Daarom start `stack.sh` een vaste lijst met `--no-deps`;
+een kale `docker compose up -d` start ze mee.
+
+**Ingress.** 80/443 zijn van de container `aios-caddy` (een andere stack). Ons blok in diens
+Caddyfile wordt geschreven door [`deploy/attach-ingress-caddy.sh`](deploy/attach-ingress-caddy.sh)
+(idempotent, valideert, draait terug bij een fout). `stack.sh online` roept hem aan.
+- `/` → `vla-ui:3000`, achter basic auth (`/root/idp-os/.milkdemo-auth`, alleen op de VPS)
+- `/api/ui/model` → zonder login (healthcheck)
+- `/grafana*` → `grafana:3000`, achter dezelfde basic auth **én** de eigen Grafana-login. De
+  proxy haalt de `Authorization`-header weg, zodat het demowachtwoord nooit een Grafana-login is.
+- ⚠ Nooit de Caddyfile met de hand bewerken: bind-mount op een inode.
+
+**Beveiliging (gecontroleerd 2026-10-22, van buitenaf).** Alle interne poorten zijn dicht;
+de 0.0.0.0-poorten van `aios-openfga` en `portainer` worden door `DOCKER-USER` gedropt
+(UFW ziet Docker-verkeer niet, test dus altijd met een TCP-connect van buiten). Grafana:
+anoniem uit, sign-up uit, eigen basic-auth uit, cookie `Secure` + `SameSite=Strict`, geen
+externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
+
+**Secrets** staan alleen op de VPS: `/root/idp-os/.env` en `/root/idp-os/.milkdemo-auth`.
+`stack.sh backup` neemt ze mee (chmod 600) maar ze gaan nooit in git.
+
+### Offline halen en terugzetten
+
+| Wat je wilt | Doe | Terug |
+|---|---|---|
+| Tijdelijk uit (RAM vrij) | `$S offline` | `$S online` |
+| Containers echt weg, data houden | `$S backup` → `$S remove` | `$S online` |
+| Alles weg, ook volumes | `$S backup` → `scp -r techflow-vps:/root/backups/idp-os/<map> .` → `$S remove` → `docker volume rm $(docker volume ls -q \| grep ^idp-os_)` | zie *Nieuwe machine* |
+| Nieuwe machine | Docker installeren, back-upmap erheen kopiëren, `mkdir -p /root/idp-os && tar xzf <map>/code.tgz -C /root/idp-os`, dan `$S restore <map>` | — |
+
+- **Gemeten op 2026-10-22:** `offline` 22 s (publiek daarna 502), `online` 37 s tot alles
+  200 geeft. Back-up ~7 min en 1,2 GB, waarvan 1,1 GB mongo: het archief
+  `dw_uns_archivearchive` (55 mln. rijen, 11 GB ongecomprimeerd, TTL 1 jaar) is het grootste deel.
+  De testback-up `/root/backups/idp-os/test-2026-10-22` is gecontroleerd met `gzip -t`,
+  `mongorestore --dryRun` en `tar -tzf`.
+- Na `online` duurt het ~1 min voor de site antwoordt; de autopilot vult het magazijn
+  daarna in ~12 min weer op. Logistieke ritten staan in geheugen en beginnen opnieuw.
+- Zonder `--met-historian` start de historian leeg en vult hij zich vanzelf; orders,
+  batches, events en track & trace staan in mongo en gaan wél mee.
+- Op een machine zonder `aios-caddy` moet je zelf een reverse proxy zetten met dezelfde
+  drie routes als hierboven.
+- Er draait **geen automatische back-up** van deze stack (de cronregels op de VPS zijn van
+  `buzzws` en `emcp`). Wil je dat: `0 4 * * * /root/idp-os/scenarios/vla-batch/deploy/stack.sh backup`
+  en ruim oude mappen op.
+- De cron `hoststats.sh` (elke minuut) voedt het DataOps-tabblad en mag blijven staan.
+
+**Code uitrollen.** `/root/idp-os` is geen git-checkout. Gewijzigde bestanden gaan per
+`scp`/tar erheen, daarna `$S online --build` (of gericht:
+`docker compose -p idp-os -f … up -d --no-deps --build vla-ui vla-batch-engine`). Zet bij
+de engine `GIT_SHA=<sha>` ervoor, anders toont de UI "onbekend".
+
+> De secties hieronder beschrijven de oorspronkelijke installatie (Traefik, later host-nginx).
+> Ze zijn historisch; voor de VPS geldt bovenstaand blok.
+
+---
+
 ## 0. Vooraf (eenmalig)
 
 - [ ] **VPS**: Ubuntu 22.04/24.04, ≥ 2 GB RAM (TDengine + 8 containers; 4 GB comfortabeler), ≥ 20 GB disk.
@@ -177,8 +266,8 @@ Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
 
 | Service | Bereikbaar |
 |---------|-----------|
-| Dashboard | `https://milkdemo.<domain>` (basic-auth) |
-| Grafana | `https://grafana.<domain>` |
+| Dashboard / site-twin | `https://milkdemo.<domain>` en `/site` (basic-auth) |
+| Grafana | `https://milkdemo.<domain>/grafana/` (basic-auth + Grafana-login) |
 | batch-engine / factory / TDengine / MonsterMQ | intern op `idp-network` (niet publiek) |
 
 ---
