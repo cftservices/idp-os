@@ -156,7 +156,8 @@ export function labelBudget(
   if (selected) out.add(selected);
   if (hovered) out.add(hovered);
   const ranked = items
-    .filter((i) => !out.has(i.id) && RANK[i.visual.state] < 9)
+    // Docks dragen hun eigen chip met "x/y HU"; een tweede ballon erboven overlapt de buurdock.
+    .filter((i) => !out.has(i.id) && RANK[i.visual.state] < 9 && !i.id.startsWith("dock:"))
     .sort((a, b) => RANK[a.visual.state] - RANK[b.visual.state]);
   for (const i of ranked) {
     if (out.size >= max) break;

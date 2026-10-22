@@ -14,7 +14,7 @@ import { PILL, SHAPE, type Visual, type VisualState } from "@/lib/twin/derive";
 import { needsPin, searchItems } from "@/lib/twin/flow";
 import { delta, sparkPath, type Sample } from "@/lib/twin/history";
 import type { TwinModel } from "@/lib/twin/useTwinData";
-import { EMPTY, num } from "@/lib/format";
+import { EMPTY, compact, num, shortTime } from "@/lib/format";
 import { GROUPS, describe, type TwinGroup, type TwinItem } from "./selection";
 
 export function VisualPill({ v }: { v: Visual }) {
@@ -211,7 +211,63 @@ function Delta({ samples, unit }: { samples: Sample[]; unit: string }) {
   );
 }
 
-export function KpiCards({ m, series }: { m: TwinModel; series: (k: string) => Sample[] }) {
+/** De lopende klantorder, zoals de engine hem in /orders teruggeeft. */
+export type ActiveOrder = {
+  order_id: string;
+  customer?: string | null;
+  due_date?: string | null;
+  target_qty_L?: number | null;
+  status: string;
+  progress?: { progress_pct?: number | null; produced_L?: number | null; batches_count?: number | null } | null;
+};
+
+function KpiValue({ v, unit }: { v: number | null | undefined; unit: string }) {
+  if (v == null) return <dd className="num wt-kpi-val">{EMPTY}</dd>;
+  return (
+    <dd className="num wt-kpi-val" title={`${num(v)} ${unit}`.trim()}>
+      {unit === "%" ? num(v) : compact(v)}
+      {unit ? <span className="wt-kpi-unit">{unit === "%" ? "%" : ` ${unit}`}</span> : null}
+    </dd>
+  );
+}
+
+function OrderCard({ order, now }: { order: ActiveOrder | null; now: number }) {
+  if (!order) {
+    return (
+      <div className="wt-kpi wt-kpi-order wt-glass" data-twin-order="">
+        <dt>Klantorder</dt>
+        <dd className="wt-order-cust">geen lopende order</dd>
+      </div>
+    );
+  }
+  const pct = Math.max(0, Math.min(100, order.progress?.progress_pct ?? 0));
+  const due = order.due_date ? Date.parse(order.due_date) : NaN;
+  const late = Number.isFinite(due) && due < now;
+  return (
+    <div className="wt-kpi wt-kpi-order wt-glass" data-twin-order={order.order_id} style={{ animationDelay: "250ms" }}>
+      <dt title={order.order_id}>
+        Klantorder · <Link href="/orders">{order.order_id}</Link>
+      </dt>
+      <dd className="wt-order-cust" title={order.customer ?? ""}>
+        {order.customer || "zonder klant"}
+      </dd>
+      <dd className="wt-order-bar" role="progressbar" aria-label="Ordervoortgang" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+        <span style={{ width: `${pct}%` }} />
+      </dd>
+      <dd className="wt-kpi-foot">
+        <span className="num">
+          {num(pct, pct > 0 && pct < 100 ? 1 : 0)}% · {compact(order.progress?.produced_L ?? 0, 0)}/{compact(order.target_qty_L ?? null, 0)} L
+        </span>
+        <span className="num wt-order-due" data-late={late ? "" : undefined}>
+          {late ? "te laat · " : "lever "}
+          {order.due_date ? shortTime(order.due_date) : EMPTY}
+        </span>
+      </dd>
+    </div>
+  );
+}
+
+export function KpiCards({ m, series, order }: { m: TwinModel; series: (k: string) => Sample[]; order: ActiveOrder | null }) {
   const picked = useMemo(() => {
     const ranked = [...m.kpis].sort((a, b) => {
       const ia = KPI_PREFERENCE.indexOf(a.kpi_id);
@@ -237,7 +293,7 @@ export function KpiCards({ m, series }: { m: TwinModel; series: (k: string) => S
           return (
             <div key={k.kpi_id} className="wt-kpi wt-glass" data-twin-kpi={k.kpi_id} style={{ animationDelay: `${i * 50}ms` }}>
               <dt title={k.name}>{k.name}</dt>
-              <dd className="num wt-kpi-val">{k.value == null || k.status === "UNSET" ? EMPTY : `${num(k.value)} ${k.unit}`.trim()}</dd>
+              <KpiValue v={k.value == null || k.status === "UNSET" ? null : k.value} unit={k.unit} />
               <dd className="wt-kpi-foot">
                 <StatusPill status={statusFromKpi(k.status)} />
                 <Delta samples={s} unit="" />
@@ -248,11 +304,12 @@ export function KpiCards({ m, series }: { m: TwinModel; series: (k: string) => S
       )}
       <div className="wt-kpi wt-glass" style={{ animationDelay: "200ms" }}>
         <dt>Geproduceerd</dt>
-        <dd className="num wt-kpi-val">{m.produced.packs == null ? EMPTY : `${num(m.produced.packs, 0)} packs`}</dd>
+        <KpiValue v={m.produced.packs} unit="packs" />
         <dd className="wt-kpi-foot">
           <Sparkline samples={series("produced")} w={72} h={18} label="geproduceerd" />
         </dd>
       </div>
+      <OrderCard order={order} now={m.now} />
     </dl>
   );
 }
@@ -331,6 +388,11 @@ export function TabPanel({
                 <span className="wt-row-name">{i.name}</span>
                 <span className="wt-row-meta">{i.meta || EMPTY}</span>
                 <VisualPill v={i.visual} />
+                {i.pct != null && (
+                  <span className="wt-row-bar" aria-hidden="true">
+                    <span style={{ width: `${Math.max(0, Math.min(100, i.pct))}%` }} />
+                  </span>
+                )}
               </button>
             </li>
           ))

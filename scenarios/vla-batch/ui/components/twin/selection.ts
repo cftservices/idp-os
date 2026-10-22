@@ -37,6 +37,8 @@ export type TwinItem = {
   pos: Vec3;
   /** Hoogte van het zwevende label boven het object. */
   labelHeight: number;
+  /** 0..100 voor het minibalkje in de objectlijst (vulgraad, laden, accu). */
+  pct?: number;
 };
 
 export type Detail = {
@@ -83,6 +85,7 @@ export function listItems(m: TwinModel): TwinItem[] {
     visual: e.visual,
     pos: e.pos,
     labelHeight: 4.2,
+    pct: e.kind === "filler" && m.filling?.packs_progress_pct != null ? m.filling.packs_progress_pct : undefined,
   }));
   for (const s of m.silos) {
     items.push({
@@ -93,6 +96,7 @@ export function listItems(m: TwinModel): TwinItem[] {
       visual: s.visual,
       pos: s.pos,
       labelHeight: 6.4,
+      pct: s.fill != null ? s.fill * 100 : undefined,
     });
   }
   for (const i of m.sim?.inbounds ?? []) {
@@ -106,6 +110,7 @@ export function listItems(m: TwinModel): TwinItem[] {
       visual: inboundVisual(i),
       pos: p.visible ? [p.x, 0, p.z] : [bay.x, 0, bay.z],
       labelHeight: 4.4,
+      pct: i.stage === "unloading" ? i.unloaded_pct : undefined,
     });
   }
   const l = m.logistics;
@@ -136,6 +141,7 @@ export function listItems(m: TwinModel): TwinItem[] {
       visual: m.logisticsVisual.dock,
       pos: dockPosition(d.dock),
       labelHeight: 4.4,
+      pct: d.progress * 100,
     });
   }
   for (const f of m.sim?.forklifts ?? []) {
@@ -144,10 +150,12 @@ export function listItems(m: TwinModel): TwinItem[] {
       id: `forklift:${f.id}`,
       group: "Heftrucks",
       name: `Heftruck ${f.id}`,
-      meta: `${Math.round(f.battery_pct)}% · ${f.trips_today} ritten`,
+      // De accu staat al in het statuslabel ("rijdt · 76%"); hier niet nog eens.
+      meta: `${f.trips_today} ritten`,
       visual: forkliftVisual(f),
       pos: [park.x, 0, park.z],
       labelHeight: 3.2,
+      pct: f.battery_pct,
     });
   }
   (m.sim?.shipments ?? []).forEach((s, i) => {
@@ -159,6 +167,7 @@ export function listItems(m: TwinModel): TwinItem[] {
       visual: shipmentVisual(s),
       pos: shipmentPos(m, s, i),
       labelHeight: 4.6,
+      pct: s.stage === "loading" || s.stage === "en_route" ? shipmentProgress(s, m.now) * 100 : undefined,
     });
   });
   return items;
