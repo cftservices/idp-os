@@ -46,6 +46,7 @@ from vla.report import render_json, render_pdf
 from vla.scan import ScanFlow, ScanRejected
 from vla.warehouse import WarehouseSim
 from vla.logistics_sim import LogisticsSim
+from vla.trace import order_trace
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -517,6 +518,18 @@ def get_order(order_id: str):
     if detail is None:
         raise HTTPException(404, f"order {order_id} not found")
     return detail
+
+
+@app.get(f"{API}/orders/{{order_id}}/trace")
+def get_order_trace(order_id: str):
+    """Order -> batches -> pallets -> trucks -> customer, for the trace view."""
+    now = datetime.now(timezone.utc)
+    sim = STATE.get("logistics")
+    live = sim.shipments(now) if sim is not None else []
+    out = order_trace(_orders().db, order_id, now, live)
+    if out is None:
+        raise HTTPException(404, f"order {order_id} not found")
+    return out
 
 
 @app.post(f"{API}/orders/{{order_id}}/batches")

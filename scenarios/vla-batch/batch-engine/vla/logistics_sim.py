@@ -186,6 +186,8 @@ class LogisticsSim:
                 f.charging = True
         if self.db is not None:
             self._supply(now)
+            if any(m.startswith("ship ") for m in moved):
+                self._persist_departed(now)
 
     # ---------------------------------------------------------------- supply
 
@@ -306,6 +308,19 @@ class LogisticsSim:
         rank = {"loading": 0, "en_route": 1, "order": 2, "delivered": 3}
         out.sort(key=lambda s: (rank[s["stage"]], s["ordered_at"]))
         return out
+
+    def _persist_departed(self, now: datetime) -> None:
+        """Keep every truck that has left in dw_shipments. Shipped HUs are
+        dropped after KEEP_SHIPPED_S, and with them the derived shipment; the
+        stored copy keeps the chain order -> batch -> truck -> customer
+        traceable for as long as the batch itself (pruned with it)."""
+        stored = {s.get("batch_id") for s in self.db.dw_shipments.find({})}
+        for s in self.shipments(now):
+            if s["stage"] in ("en_route", "delivered") and s["batch_id"] not in stored:
+                row = {k: s[k] for k in ("shipment_id", "truck_id", "batch_id", "order_id",
+                                         "customer", "destination", "drive_min", "pallets",
+                                         "packs", "loaded_at", "eta")}
+                self.db.dw_shipments.insert_one(row)
 
     # --------------------------------------------------------------- inbound
 

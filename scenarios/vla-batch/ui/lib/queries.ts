@@ -40,6 +40,7 @@ export const keys = {
   batch: (id: string) => ["batch", id] as const,
   orders: ["orders"] as const,
   order: (id: string) => ["order", id] as const,
+  orderTrace: (id: string) => ["order-trace", id] as const,
   inventory: ["inventory"] as const,
   materials: ["materials"] as const,
   samples: (batchId: string) => ["samples", batchId] as const,
@@ -134,6 +135,14 @@ export function useTagsVerbose(extra?: Extra<Record<string, TagReading>>) {
 
 export function useOrders<T = unknown[]>(extra?: Extra<T>) {
   return usePolled<T>(keys.orders, "/orders", POLL.lists, extra);
+}
+
+/** Tracering van een order: batches, pallets, vrachtwagens, klant. */
+export function useOrderTrace<T = Record<string, unknown>>(id: string | null, extra?: Extra<T>) {
+  return usePolled<T>(keys.orderTrace(id ?? "none"), `/orders/${id}/trace`, POLL.lists, {
+    enabled: Boolean(id),
+    ...extra,
+  });
 }
 
 /** Detail bevriest de lijst-loop: zie useBatches(frozen). */
