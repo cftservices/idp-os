@@ -8,7 +8,8 @@ import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
 import { EMPTY, num, shortDateTime } from "@/lib/format";
-import { useOrders, useUiModel } from "@/lib/queries";
+import { useOrders, useOrderTrace, useUiModel } from "@/lib/queries";
+import { OrderTrace, type Trace } from "@/components/screens/OrderTrace";
 import type { Refusal } from "@/lib/refusal";
 
 /**
@@ -36,6 +37,7 @@ type Order = {
   status: string;
   target_qty_L: number;
   due_date: string | null;
+  customer?: string | null;
   created_at?: string;
   progress?: {
     produced_L?: number;
@@ -117,6 +119,7 @@ export function Orders() {
   }
 
   const detail = (orders.data ?? []).find((o) => o.order_id === selected) ?? null;
+  const trace = useOrderTrace<Trace>(detail ? detail.order_id : null);
 
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
@@ -196,7 +199,7 @@ export function Orders() {
         <table className="w-full border-collapse text-[0.8125rem]">
           <thead>
             <tr className="border-b border-line text-left">
-              {["Order", "Status", "Doel", "Geproduceerd", "Voortgang", "Leverdatum", ""].map((h) => (
+              {["Order", "Klant", "Status", "Doel", "Geproduceerd", "Voortgang", "Leverdatum", ""].map((h) => (
                 <th
                   key={h}
                   className="px-3 py-2 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase text-ink-faint"
@@ -209,7 +212,7 @@ export function Orders() {
           <tbody>
             {(orders.data ?? []).length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-4 text-ink-muted">
+                <td colSpan={8} className="px-3 py-4 text-ink-muted">
                   Nog geen orders. Maak er hierboven een aan.
                 </td>
               </tr>
@@ -230,6 +233,7 @@ export function Orders() {
                     </CrossLink>
                   </span>
                 </td>
+                <td className="px-3 py-[var(--density-row)]">{o.customer ?? EMPTY}</td>
                 <td className="px-3 py-[var(--density-row)]">
                   <StatusPill status={orderStatus(o.status)}>{o.status}</StatusPill>
                 </td>
@@ -311,6 +315,8 @@ export function Orders() {
             </button>
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[0.8125rem]">
+            <dt className="text-ink-muted">Klant</dt>
+            <dd>{detail.customer ?? EMPTY}</dd>
             <dt className="text-ink-muted">Recept</dt>
             <dd className="mono">{detail.recipe_id}</dd>
             <dt className="text-ink-muted">Batches</dt>
@@ -322,6 +328,7 @@ export function Orders() {
             <dt className="text-ink-muted">Aangemaakt</dt>
             <dd className="num">{shortDateTime(detail.created_at)}</dd>
           </dl>
+          {trace.data && <OrderTrace trace={trace.data} />}
           <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-2 text-[0.8125rem]">
             <CrossLink href={`/batches?order=${detail.order_id}`}>Batches van deze order</CrossLink>
             <CrossLink href="/shopfloor">Werkvloer: doseren en boeken</CrossLink>

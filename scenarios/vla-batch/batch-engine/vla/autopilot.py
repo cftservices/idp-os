@@ -52,7 +52,7 @@ ORDER_LEAD_HOURS = 2.0
 ORPHAN_PRUNE_S = 3600.0
 # collections whose rows belong to one batch (pruned with the batch)
 BATCH_COLLECTIONS = ("dw_doses", "dw_samples", "dw_batch_events", "dw_alarms",
-                     "dw_handling_units", "dw_production")
+                     "dw_handling_units", "dw_production", "dw_shipments")
 
 
 def _now() -> datetime:
