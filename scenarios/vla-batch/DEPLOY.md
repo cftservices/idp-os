@@ -111,8 +111,11 @@ Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
 
 - `vla-batch-engine`: `DEMO_AUTOPILOT=1` start om de ~2 min een MES-batch
   (`chocolate-vla-1L`, 10 s pauze na COMPLETE). Een CIP volgt vanzelf als de
-  kookunit vuil is. Alle batches komen op één staande order per dag, en
-  autopilot-batches ouder dan 24 uur worden elk uur opgeruimd.
+  kookunit vuil is. Batches komen op opeenvolgende klantorders (6, 8, 10 of 12
+  batches, leverdatum 2 uur na aanmaak, één van de vijf klanten); een order
+  sluit zodra hij volledig is geproduceerd en de volgende klant begint.
+  Autopilot-batches ouder dan 24 uur, of meer dan een uur vastgelopen in een
+  lopende fase, worden elk uur opgeruimd.
 - `vla-factory`: `AUTOSTART_DELAY_S=30` ketent pas zelf als er 30 s geen
   MES-batch kwam. Dat is het vangnet, zodat de bus nooit stilvalt.
 - Status: `GET /api/v1/autopilot` (`last_action`, `batches_started`, `cip_runs`).
