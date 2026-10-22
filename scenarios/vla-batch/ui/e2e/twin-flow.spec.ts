@@ -120,6 +120,14 @@ test("labels: geselecteerd eerst, dan alarm; stil nooit; nooit meer dan het budg
   expect([...labelBudget(items, null, null, 6)].sort()).toEqual(["b", "c", "d"]);
   expect([...labelBudget(items, "a", null, 2)]).toEqual(["a", "c"]);
   expect(labelBudget(items, null, null, 1).has("c")).toBe(true);
+  // Twee machines naast elkaar in beeld: alleen de belangrijkste krijgt een ballon.
+  const dicht = [
+    { id: "x", visual: vis("warn"), pos: [0, 0, 0] },
+    { id: "y", visual: vis("run"), pos: [5, 0, 0] },
+    { id: "z", visual: vis("run"), pos: [0, 0, 12] },
+    { id: "prep:p", visual: vis("alarm"), pos: [30, 0, 0] },
+  ];
+  expect([...labelBudget(dicht, null, null, 6)].sort()).toEqual(["x", "z"]);
   expect(needsPin(vis("alarm"))).toBe(true);
   expect(needsPin(vis("run"))).toBe(false);
 });
