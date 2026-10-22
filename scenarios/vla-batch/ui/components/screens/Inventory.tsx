@@ -51,7 +51,9 @@ const OPERATOR = "op-01";
 /** Tot twee keer de bestelgrens; zie de kopnoot. */
 function topUpQty(m: Material): number {
   if (!m.reorder_level) return 0;
-  return Math.max(0, Math.ceil(m.reorder_level * 2 - m.stock_qty));
+  // Een negatieve voorraad is een boekfout, geen vraag naar levering: tel hem
+  // als nul, anders boekt "alles bijvullen" tientallen miljoenen kg als ontvangst.
+  return Math.max(0, Math.ceil(m.reorder_level * 2 - Math.max(0, m.stock_qty)));
 }
 
 export function Inventory() {
