@@ -229,7 +229,10 @@ class Autopilot:
         order = self.orders.get_order(st["order_id"]) if st.get("order_id") else None
         if order is not None and order["status"] != M.ORDER_DONE:
             prog = self.orders.order_progress(order["order_id"])
-            if prog["produced_L"] < float(order.get("target_qty_L") or 0):
+            # an order without a customer is a legacy standing day order whose
+            # target is never reached: close it so customer orders can start
+            if order.get("customer") and \
+                    prog["produced_L"] < float(order.get("target_qty_L") or 0):
                 return order["order_id"]
             try:
                 self.orders.close_order(order["order_id"])
