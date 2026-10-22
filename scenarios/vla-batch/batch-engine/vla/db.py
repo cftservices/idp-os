@@ -38,9 +38,19 @@ COLLECTIONS = [
 ]
 
 
+def _get_path(doc: dict, key: str):
+    """Mongo dot notation ("payload.hu_id"), equality only."""
+    cur = doc
+    for part in key.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
 def _matches(doc: dict, query: dict) -> bool:
     for k, v in query.items():
-        if doc.get(k) != v:
+        if _get_path(doc, k) != v:
             return False
     return True
 
@@ -88,6 +98,9 @@ class _MemCollection:
     def count_documents(self, query: Optional[dict] = None) -> int:
         return len(self.find(query))
 
+    def create_index(self, keys, **kwargs) -> None:
+        """No-op: a list scan is the index here."""
+
     def delete_many(self, query: Optional[dict] = None) -> None:
         query = query or {}
         self._docs = [d for d in self._docs if not _matches(d, query)]
@@ -129,6 +142,9 @@ class _MongoCollectionWrapper:
 
     def count_documents(self, query: Optional[dict] = None) -> int:
         return self._coll.count_documents(query or {})
+
+    def create_index(self, keys, **kwargs) -> None:
+        self._coll.create_index(keys, **kwargs)
 
     def delete_many(self, query: Optional[dict] = None) -> None:
         self._coll.delete_many(query or {})

@@ -191,6 +191,8 @@ curl -s -X POST http://vla-batch-engine:8000/api/v1/batches \
 | POST | `/hu/{hu_id}/putaway` | book HU into cold-store |
 | POST | `/hu/{hu_id}/ship` | ship HU to expedition |
 | GET | `/hu` | list handling units (optionally by batch) |
+| GET | `/hu/{hu_id}/history` | every event of one pallet (wrap, putaway, forklift, ship), with batch and order |
+| GET | `/forklifts/{forklift_id}/history` | which orders and pallets a forklift handled (`?limit=` recent moves) |
 | GET | `/equipment` | equipment snapshot (state, running hours, dirty flag) |
 | GET | `/equipment/health` | snapshot extended with heat-up trend + open CBM alerts |
 | POST | `/equipment/{equipment_id}/cip` | perform CIP cleaning — resets fouling counter, clears Dirty |
@@ -263,8 +265,35 @@ retries the batch. Clients that only read `detail.message` keep working.
 **OEE-light** (`GET /oee`) is the classic one-liner — `OEE = Availability ×
 Performance × Quality` — computed per equipment from the state-history
 durations (availability), the cook-unit heat-up trend vs its clean baseline
-(performance, 1.0 elsewhere), and the plant-wide approved-vs-total pack ratio
-(quality, same for every row).
+(performance, 1.0 elsewhere), and the approved-vs-total pack ratio **of the
+equipment's own line** (quality), so a HOLD on L2 no longer lowers the score of
+L1. Availability stays 1.0 in the demo: the simulation has no downtime, and we
+show that rather than invent stops.
+
+**Throughput KPI.** The norm (5,200 packs/h) is *per line* and in *real time*.
+The tile therefore takes the packs per line, divides by the **elapsed** part of
+the window (not the full week ahead) and by `KPI_TIME_SCALE`, which must equal
+the factory `TIME_SCALE` (15 in the demo). The value is the mean over the lines;
+`detail.per_line` and `detail.plant_total` keep the raw figures visible.
+
+### Track & trace: per order, per pallet, per forklift
+
+Every forklift move is recorded twice: on the handling unit (`putaway_by`,
+`loaded_by` with timestamps) and as a `forklift_task` event in
+`dw_batch_events` (`hu_id`, `forklift_id`, `task`, `line`, `slot`, `truck_id`).
+The event survives after shipped HUs are cleaned up. On top of that:
+
+- `GET /orders/{id}/trace` adds per batch a `pallet_list` (who put each pallet
+  away, who loaded it, which truck) and an order-level `events` timeline: order,
+  batch, preparation, QA verdict, wrap, putaway, forklift, ship and delivery.
+- `GET /forklifts/{id}/history` lists the orders a forklift handled, with
+  pallet counts, trucks and the most recent moves; the twin's forklift card
+  shows it.
+- `GET /hu/{id}/history` is the full chain of one pallet.
+
+Indexes on `dw_batch_events` (`batch_id`, `order_id`, `payload.hu_id`,
+`event_type + payload.forklift_id`) keep these queries fast. Moves from before
+this release carry no forklift attribution.
 
 The batch report is now explicitly an **Electronic Batch Record (EBR)**:
 order/lot genealogy, doses, process events, alarms and the **verdict

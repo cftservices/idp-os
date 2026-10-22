@@ -367,10 +367,13 @@ class EquipmentMonitor:
                 down_sec += dur
         return running_sec, down_sec
 
-    def _quality(self) -> float:
-        """PR-21: plant-wide quality = Sigma packs_total of APPROVED batches /
-        Sigma packs_total of COMPLETE batches (1.0 when no COMPLETE batches)."""
-        complete = list(self.db.dw_batches.find({"state": M.COMPLETE}))
+    def _quality(self, line: Optional[str] = None) -> float:
+        """PR-21: quality = Sigma packs_total of APPROVED batches / Sigma
+        packs_total of COMPLETE batches (1.0 when no COMPLETE batches).
+        Per line when `line` is given: a HOLD on L2 says nothing about the
+        machines of L1, so a plant-wide figure hid which line lost quality."""
+        complete = [b for b in self.db.dw_batches.find({"state": M.COMPLETE})
+                    if line is None or M.line_of_doc(b) == line]
         total = sum(b.get("packs_total", 0) for b in complete)
         if total == 0:
             return 1.0
@@ -381,11 +384,15 @@ class EquipmentMonitor:
     def oee(self, line: Optional[str] = None) -> list[dict]:
         """PR-21: per-equipment OEE-light — availability from state-history
         durations, performance (cook-unit-01 only, heat-up trend vs baseline,
-        1.0 elsewhere / when no history), quality (plant-wide, same for every
-        row). All four numbers rounded to 4 decimals."""
-        quality = round(self._quality(), 4)
+        1.0 elsewhere / when no history), quality (per line of the
+        equipment). All four numbers rounded to 4 decimals."""
+        qualities: dict[str, float] = {}
         out = []
         for eq in _ids(line):
+            eq_line = M.line_of_equipment(eq)
+            if eq_line not in qualities:
+                qualities[eq_line] = round(self._quality(eq_line), 4)
+            quality = qualities[eq_line]
             running_sec, down_sec = self._running_and_down_seconds(eq)
             denom = running_sec + down_sec
             availability = round(running_sec / denom, 4) if denom > 0 else 1.0
@@ -403,7 +410,7 @@ class EquipmentMonitor:
             oee = round(availability * performance * quality, 4)
             out.append({
                 "equipment_id": eq,
-                "line": M.line_of_equipment(eq),
+                "line": eq_line,
                 "availability": availability,
                 "performance": performance,
                 "quality": quality,

@@ -109,6 +109,11 @@ def destination_of(customer: str) -> tuple[str, int]:
     return _pick(DESTINATIONS, customer + ":dest")
 
 
+def truck_of(batch_id: str) -> str:
+    """The (stable) truck that carries this batch's pallets."""
+    return f"TRK-{int(hashlib.sha1(batch_id.encode()).hexdigest()[:4], 16) % 90 + 10}"
+
+
 class Forklift:
     def __init__(self, fid: str, role: str, battery: float,
                  line: Optional[str] = None):
@@ -202,6 +207,8 @@ class LogisticsSim:
             f.trips_today += 1
             f.last_task = m
             f.last_move = now
+            if self.db is not None and len(parts) > 1:
+                self._attribute(f, parts[0], parts[1], line, now)
             charger_busy = any(o.charging for o in self.forklifts.values() if o is not f)
             if not f.charging and f.battery < CHARGE_BELOW_PCT and (
                     not charger_busy or f.battery < CHARGE_CRITICAL_PCT):
@@ -210,6 +217,30 @@ class LogisticsSim:
             self._supply(now)
             if any(m.startswith("ship ") for m in moved):
                 self._persist_departed(now)
+
+    def _attribute(self, f: Forklift, kind: str, hu_id: str,
+                   line: Optional[str], now: datetime) -> None:
+        """Book which truck moved which pallet. On the HU (putaway_by /
+        loaded_by) for the live view, and as a forklift_task batch event,
+        because shipped HUs are dropped after a while and the batch event
+        keeps the chain order -> pallet -> truck as long as the batch."""
+        hu = self.db.dw_handling_units.find_one({"hu_id": hu_id})
+        if hu is None:
+            return
+        task = "putaway" if kind == "putaway" else "load"
+        field = "putaway_by" if task == "putaway" else "loaded_by"
+        self.db.dw_handling_units.update_one(
+            {"hu_id": hu_id}, {"$set": {field: f.id, field + "_at": now.isoformat()}})
+        bid = hu.get("batch_id")
+        payload = {"hu_id": hu_id, "forklift_id": f.id, "task": task,
+                   "line": line or hu.get("line") or M.DEFAULT_LINE}
+        if task == "putaway" and hu.get("slot") is not None:
+            payload["slot"] = hu.get("slot")
+        if task == "load" and bid:
+            payload["truck_id"] = truck_of(bid)
+        self.db.dw_batch_events.insert_one({
+            "batch_id": bid, "event_type": "forklift_task",
+            "payload": payload, "ts": now.isoformat()})
 
     # ---------------------------------------------------------------- supply
 
@@ -315,7 +346,7 @@ class LogisticsSim:
             suffix = batch_id.split("-")[-1][-4:].upper()
             out.append({
                 "shipment_id": f"SHP-{suffix}",
-                "truck_id": f"TRK-{int(hashlib.sha1(batch_id.encode()).hexdigest()[:4], 16) % 90 + 10}",
+                "truck_id": truck_of(batch_id),
                 "batch_id": batch_id,
                 "order_id": order_id,
                 "recipe_id": recipe_id,

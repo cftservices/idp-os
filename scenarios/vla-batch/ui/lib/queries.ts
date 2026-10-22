@@ -45,6 +45,7 @@ export const keys = {
   orders: ["orders"] as const,
   order: (id: string) => ["order", id] as const,
   orderTrace: (id: string) => ["order-trace", id] as const,
+  forkliftHistory: (id: string) => ["forklift-history", id] as const,
   inventory: ["inventory"] as const,
   materials: ["materials"] as const,
   samples: (batchId: string) => ["samples", batchId] as const,
@@ -160,6 +161,46 @@ export function useOrderTrace<T = Record<string, unknown>>(id: string | null, ex
     enabled: Boolean(id),
     ...extra,
   });
+}
+
+export type ForkliftOrder = {
+  order_id: string | null;
+  customer: string | null;
+  recipe_id: string | null;
+  batches: string[];
+  putaway: number;
+  loaded: number;
+  trucks: string[];
+  first_ts: string | null;
+  last_ts: string | null;
+};
+
+export type ForkliftMove = {
+  ts: string | null;
+  task: "putaway" | "load" | null;
+  hu_id: string | null;
+  batch_id: string | null;
+  order_id: string | null;
+  line: string | null;
+  slot: number | null;
+  truck_id: string | null;
+};
+
+export type ForkliftHistory = {
+  forklift_id: string;
+  totals: { moves: number; putaway: number; loaded: number; orders: number };
+  orders: ForkliftOrder[];
+  recent: ForkliftMove[];
+};
+
+/** Welke orders (en pallets) een heftruck heeft behandeld, nieuwste eerst. */
+export function useForkliftHistory(id: string | null, extra?: Extra<ForkliftHistory>) {
+  return usePolled<ForkliftHistory>(
+    keys.forkliftHistory(id ?? "none"),
+    `/forklifts/${encodeURIComponent(id ?? "")}/history?limit=8`,
+    POLL.aggregates,
+    { enabled: Boolean(id), ...extra },
+  );
 }
 
 /** Detail bevriest de lijst-loop: zie useBatches(frozen). */
