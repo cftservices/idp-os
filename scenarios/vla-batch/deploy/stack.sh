@@ -13,6 +13,7 @@
 #   stack.sh online [--build]    alles starten in de juiste volgorde + ingress + check
 #   stack.sh backup [map]        mongodump + grafana + monstermq + code + secrets
 #                                (--met-historian: ook TDengine, ~3 GB)
+#                                (--nachtelijk: naar <base>/nacht/, laatste $BEWAAR=3 blijven; voor cron)
 #   stack.sh restore <map>       een back-up terugzetten en daarna online brengen
 #   stack.sh remove              containers en netwerk weg, volumes BLIJVEN
 #
@@ -30,6 +31,7 @@ PROJECT=idp-os
 NET=idp-network
 OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b}
 BACKUP_BASE=${BACKUP_BASE:-/root/backups/idp-os}
+BEWAAR=${BEWAAR:-3}   # aantal nachtelijke back-ups dat blijft staan
 SITE=${SITE:-https://milkdemo.techflow24.com}
 
 # Startvolgorde: opslag en bus eerst, dan de fabriek, dan wat erop leest.
@@ -105,10 +107,20 @@ volume_tar(){  # volume_tar <volume-zonder-prefix> <doelmap>
 }
 
 cmd_backup(){
-    local historian=0 doel=""
+    local historian=0 doel="" nacht=0
     for a in "$@"; do
-        case "$a" in --met-historian) historian=1 ;; *) doel="$a" ;; esac
+        case "$a" in
+            --met-historian) historian=1 ;;
+            --nachtelijk) nacht=1 ;;
+            *) doel="$a" ;;
+        esac
     done
+    if [ "$nacht" = 1 ]; then
+        # Cron: niet overlappen, en alleen ${BEWAAR} nachtelijke mappen houden.
+        exec 9>/run/idp-os-backup.lock
+        flock -n 9 || { rood "Er draait al een back-up."; exit 1; }
+        doel="${BACKUP_BASE}/nacht/$(date +%Y-%m-%d_%H%M)"
+    fi
     doel=${doel:-${BACKUP_BASE}/$(date +%Y-%m-%d_%H%M)}
     mkdir -p "$doel"; chmod 700 "$doel"
     echo "→ ${doel}"
@@ -152,6 +164,11 @@ cmd_backup(){
     } > "$doel/MANIFEST"
     chmod 600 "$doel"/*
     du -sh "$doel"
+    if [ "$nacht" = 1 ]; then
+        # Pas opruimen ná een geslaagde back-up; handmatige mappen blijven staan.
+        ls -1d "${BACKUP_BASE}"/nacht/20??-??-??_???? 2>/dev/null | sort | head -n -"${BEWAAR}" \
+            | while read -r oud; do echo "• opgeruimd: ${oud}"; rm -rf -- "$oud"; done
+    fi
     groen "Back-up klaar. Bewaar hem ook buiten de VPS:"
     echo "  scp -r techflow-vps:${doel} ."
 }
@@ -209,5 +226,5 @@ case "${1:-}" in
     backup) shift; cmd_backup "$@" ;;
     restore) shift; cmd_restore "$@" ;;
     remove) cmd_remove ;;
-    *) sed -n '2,22p' "$0"; exit 1 ;;
+    *) sed -n '2,23p' "$0"; exit 1 ;;
 esac
