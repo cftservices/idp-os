@@ -343,7 +343,7 @@ services:
     environment:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
-      MQTT_TOPICS: "DairyWorks/Vla/#"
+      MQTT_TOPICS: "DairyWorks/Vla/#,DairyWorks/Vla-L2/#,DairyWorks/Prep/#,DairyWorks/Vla-B/#"
       TD_URL: "http://vla-tdengine:6041"
       TD_DB: ${TD_DB:-idp}
       TD_USER: ${TD_USER:-root}

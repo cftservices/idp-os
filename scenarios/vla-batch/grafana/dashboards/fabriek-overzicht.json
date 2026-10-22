@@ -1,0 +1,1630 @@
+{
+  "uid": "fabriek-overzicht",
+  "title": "Fabriek — overzicht",
+  "description": "Beide lijnen, voorbereiding, magazijn en logistiek op één scherm.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## DairyWorks — fabriek in één oogopslag\nLive toestand komt uit de historian (TDengine), KPI's en logistiek uit de batch-engine. Elke KPI wordt op precies één plek berekend: `GET /api/v1/kpi/summary`. Doorklikken via **Fabrieksdashboards** rechtsboven."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Doorzet (pakken/uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "kpis[kpi_id='throughput_rate'].value",
+              "name": "Doorzet",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Kwaliteitsratio",
+      "gridPos": {
+        "x": 4,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "kpis[kpi_id='quality_ratio'].value",
+              "name": "Kwaliteit",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Benutting",
+      "gridPos": {
+        "x": 8,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "kpis[kpi_id='utilization_efficiency'].value",
+              "name": "Benutting",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "OTIF",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "kpis[kpi_id='otif_pct'].value",
+              "name": "OTIF",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Massarendement",
+      "gridPos": {
+        "x": 16,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "kpis[kpi_id='mass_yield_pct'].value",
+              "name": "Rendement",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Verlies deze week",
+      "gridPos": {
+        "x": 20,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.losses.total_causal",
+              "name": "Verlies",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Lijn 1",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as L1 from idp.telemetry where `topic`='DairyWorks/Vla/Batch/Status/state'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "color": "text",
+                  "index": 0
+                },
+                "Idle": {
+                  "color": "text",
+                  "index": 1
+                },
+                "RECEIVING": {
+                  "color": "blue",
+                  "index": 2
+                },
+                "MIXING": {
+                  "color": "purple",
+                  "index": 3
+                },
+                "COOKING": {
+                  "color": "orange",
+                  "index": 4
+                },
+                "COOLING": {
+                  "color": "light-blue",
+                  "index": 5
+                },
+                "FILLING": {
+                  "color": "green",
+                  "index": 6
+                },
+                "COMPLETE": {
+                  "color": "dark-green",
+                  "index": 7
+                },
+                "CIP": {
+                  "color": "yellow",
+                  "index": 8
+                },
+                "FAULT": {
+                  "color": "red",
+                  "index": 9
+                },
+                "Running": {
+                  "color": "green",
+                  "index": 10
+                },
+                "Stopped": {
+                  "color": "red",
+                  "index": 11
+                },
+                "vrij": {
+                  "color": "text",
+                  "index": 12
+                },
+                "bezig": {
+                  "color": "green",
+                  "index": 13
+                },
+                "storing": {
+                  "color": "red",
+                  "index": 14
+                },
+                "ok": {
+                  "color": "green",
+                  "index": 15
+                },
+                "due": {
+                  "color": "yellow",
+                  "index": 16
+                },
+                "overdue": {
+                  "color": "red",
+                  "index": 17
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Lijn 2",
+      "gridPos": {
+        "x": 4,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as L2 from idp.telemetry where `topic`='DairyWorks/Vla-L2/Batch/Status/state'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "color": "text",
+                  "index": 0
+                },
+                "Idle": {
+                  "color": "text",
+                  "index": 1
+                },
+                "RECEIVING": {
+                  "color": "blue",
+                  "index": 2
+                },
+                "MIXING": {
+                  "color": "purple",
+                  "index": 3
+                },
+                "COOKING": {
+                  "color": "orange",
+                  "index": 4
+                },
+                "COOLING": {
+                  "color": "light-blue",
+                  "index": 5
+                },
+                "FILLING": {
+                  "color": "green",
+                  "index": 6
+                },
+                "COMPLETE": {
+                  "color": "dark-green",
+                  "index": 7
+                },
+                "CIP": {
+                  "color": "yellow",
+                  "index": 8
+                },
+                "FAULT": {
+                  "color": "red",
+                  "index": 9
+                },
+                "Running": {
+                  "color": "green",
+                  "index": 10
+                },
+                "Stopped": {
+                  "color": "red",
+                  "index": 11
+                },
+                "vrij": {
+                  "color": "text",
+                  "index": 12
+                },
+                "bezig": {
+                  "color": "green",
+                  "index": 13
+                },
+                "storing": {
+                  "color": "red",
+                  "index": 14
+                },
+                "ok": {
+                  "color": "green",
+                  "index": 15
+                },
+                "due": {
+                  "color": "yellow",
+                  "index": 16
+                },
+                "overdue": {
+                  "color": "red",
+                  "index": 17
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Voorbereiding",
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as weigh_station_01 from idp.telemetry where `topic`='DairyWorks/Prep/weigh-station-01/Status/state'"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as premix_tank_01 from idp.telemetry where `topic`='DairyWorks/Prep/premix-tank-01/Status/state'"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as weigh_station_02 from idp.telemetry where `topic`='DairyWorks/Prep/weigh-station-02/Status/state'"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as premix_tank_02 from idp.telemetry where `topic`='DairyWorks/Prep/premix-tank-02/Status/state'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "color": "text",
+                  "index": 0
+                },
+                "Idle": {
+                  "color": "text",
+                  "index": 1
+                },
+                "RECEIVING": {
+                  "color": "blue",
+                  "index": 2
+                },
+                "MIXING": {
+                  "color": "purple",
+                  "index": 3
+                },
+                "COOKING": {
+                  "color": "orange",
+                  "index": 4
+                },
+                "COOLING": {
+                  "color": "light-blue",
+                  "index": 5
+                },
+                "FILLING": {
+                  "color": "green",
+                  "index": 6
+                },
+                "COMPLETE": {
+                  "color": "dark-green",
+                  "index": 7
+                },
+                "CIP": {
+                  "color": "yellow",
+                  "index": 8
+                },
+                "FAULT": {
+                  "color": "red",
+                  "index": 9
+                },
+                "Running": {
+                  "color": "green",
+                  "index": 10
+                },
+                "Stopped": {
+                  "color": "red",
+                  "index": 11
+                },
+                "vrij": {
+                  "color": "text",
+                  "index": 12
+                },
+                "bezig": {
+                  "color": "green",
+                  "index": 13
+                },
+                "storing": {
+                  "color": "red",
+                  "index": 14
+                },
+                "ok": {
+                  "color": "green",
+                  "index": 15
+                },
+                "due": {
+                  "color": "yellow",
+                  "index": 16
+                },
+                "overdue": {
+                  "color": "red",
+                  "index": 17
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Open alarmen",
+      "gridPos": {
+        "x": 14,
+        "y": 7,
+        "w": 3,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/alarms",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "state",
+              "open"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$[*].alarm_id",
+              "name": "Alarmen",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Vrachtwagens onderweg",
+      "gridPos": {
+        "x": 17,
+        "y": 7,
+        "w": 3,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$count(shipments[stage='en_route'])",
+              "name": "Onderweg",
+              "type": "number",
+              "language": "jsonata"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Open werkorders",
+      "gridPos": {
+        "x": 20,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/cmms/work-orders",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "open_only",
+              "true"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.work_orders[*].wo_id",
+              "name": "Werkorders",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 14,
+      "type": "state-timeline",
+      "title": "Batchverloop L1 en L2",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as lijn_1 from idp.telemetry where `topic`='DairyWorks/Vla/Batch/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as lijn_2 from idp.telemetry where `topic`='DairyWorks/Vla-L2/Batch/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "color": "text",
+                  "index": 0
+                },
+                "Idle": {
+                  "color": "text",
+                  "index": 1
+                },
+                "RECEIVING": {
+                  "color": "blue",
+                  "index": 2
+                },
+                "MIXING": {
+                  "color": "purple",
+                  "index": 3
+                },
+                "COOKING": {
+                  "color": "orange",
+                  "index": 4
+                },
+                "COOLING": {
+                  "color": "light-blue",
+                  "index": 5
+                },
+                "FILLING": {
+                  "color": "green",
+                  "index": 6
+                },
+                "COMPLETE": {
+                  "color": "dark-green",
+                  "index": 7
+                },
+                "CIP": {
+                  "color": "yellow",
+                  "index": 8
+                },
+                "FAULT": {
+                  "color": "red",
+                  "index": 9
+                },
+                "Running": {
+                  "color": "green",
+                  "index": 10
+                },
+                "Stopped": {
+                  "color": "red",
+                  "index": 11
+                },
+                "vrij": {
+                  "color": "text",
+                  "index": 12
+                },
+                "bezig": {
+                  "color": "green",
+                  "index": 13
+                },
+                "storing": {
+                  "color": "red",
+                  "index": 14
+                },
+                "ok": {
+                  "color": "green",
+                  "index": 15
+                },
+                "due": {
+                  "color": "yellow",
+                  "index": 16
+                },
+                "overdue": {
+                  "color": "red",
+                  "index": 17
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "rowHeight": 0.8,
+        "alignValue": "center",
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "L2 wordt pas sinds 22-10-2026 in de historian weggeschreven; daarvoor is die rij leeg."
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Heftrucks",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/logistics",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.forklifts[*].id",
+              "name": "Heftruck",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].role",
+              "name": "Taak",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].state",
+              "name": "Toestand",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].battery_pct",
+              "name": "Accu %",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].trips_today",
+              "name": "Ritten vandaag",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.forklifts[*].last_task",
+              "name": "Laatste taak",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Accu %"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 25
+                    },
+                    {
+                      "color": "green",
+                      "value": 50
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Open alarmen",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/alarms",
+          "cacheDurationSeconds": 0,
+          "params": [
+            [
+              "state",
+              "open"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$[*].ts",
+              "name": "Tijd",
+              "type": "time",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].priority",
+              "name": "Prioriteit",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].message",
+              "name": "Melding",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 17,
+      "type": "bargauge",
+      "title": "OEE per machine",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/oee",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$[*].oee",
+              "name": "OEE",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.65
+              },
+              {
+                "color": "green",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "/OEE/",
+          "values": true
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Verliezen in euro's (deze week)",
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/kpi/summary",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.losses.items[*].label",
+              "name": "Verlies",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].cause",
+              "name": "Oorzaak",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].causal_or_resultant",
+              "name": "Soort",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].amount",
+              "name": "Bedrag",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.losses.items[*].share_pct",
+              "name": "Aandeel %",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bedrag"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyEUR"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    }
+  ]
+}

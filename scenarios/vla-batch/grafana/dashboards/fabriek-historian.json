@@ -1,0 +1,715 @@
+{
+  "uid": "fabriek-historian",
+  "title": "Fabriek — historian en datakwaliteit",
+  "description": "Wat de historian (TDengine) binnenkrijgt, hoe vers elk topic is en of de datalaag gezond is.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Rijen totaal",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select count(*) as rijen from idp.telemetry"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Topics",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select count(*) as `aantal` from information_schema.ins_tables where db_name='idp' and stable_name='telemetry'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Rijen laatste uur",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select count(*) as rijen from idp.telemetry where _ts > now-1h"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select cast((cast(now() as bigint) - cast(last(_ts) as bigint)) / 1000 as bigint) as sec_geleden from idp.telemetry where _ts > now-1d"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Instroom per gebied (rijen per 10 min)",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, count(*) as lijn_1 from idp.telemetry where `topic` like 'DairyWorks/Vla/%' and _ts >= $from and _ts <= $to interval(10m)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, count(*) as lijn_2 from idp.telemetry where `topic` like 'DairyWorks/Vla-L2/%' and _ts >= $from and _ts <= $to interval(10m)"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, count(*) as voorbereiding from idp.telemetry where `topic` like 'DairyWorks/Prep/%' and _ts >= $from and _ts <= $to interval(10m)"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, count(*) as datakwaliteit from idp.telemetry where `topic` like 'DairyWorks/Vla-B/%' and _ts >= $from and _ts <= $to interval(10m)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 70,
+            "spanNulls": true,
+            "showPoints": "never",
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Versheid per topic",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 14,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select now() as gemeten, `topic` as `topic`, cast((cast(now() as bigint) - cast(last(_ts) as bigint)) / 1000 as bigint) as sec_geleden, count(*) as rijen_24u from idp.telemetry where _ts > now-1d partition\nby `topic` order by sec_geleden desc"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gemeten"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sec_geleden"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 120
+                    },
+                    {
+                      "color": "red",
+                      "value": 900
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": true,
+          "reducer": [
+            "count"
+          ],
+          "fields": [
+            "topic"
+          ]
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Topics die het afgelopen etmaal iets stuurden. Stilgevallen topics staan bovenaan."
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Datakwaliteit per machine",
+      "gridPos": {
+        "x": 14,
+        "y": 12,
+        "w": 10,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/datalayer/quality",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.equipment[*].equipment_id",
+              "name": "Machine",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].line",
+              "name": "Lijn",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].quality",
+              "name": "Kwaliteit",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.equipment[*].oldest_age_s",
+              "name": "Oudste (s)",
+              "type": "number",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Kwaliteit"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "GOOD": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "UNCERTAIN": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "BAD": {
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "DataOps-regels",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/dataops",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.rules[*].id",
+              "name": "Regel",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.rules[*].rule",
+              "name": "Omschrijving",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.rules[*].ok",
+              "name": "In orde",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.rules[*].detail",
+              "name": "Detail",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Databases in de historian",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select create_time as aangemaakt, name as db, ntables as tabellen, `keep` as bewaartermijn, `vgroups` as vgroepen from information_schema.ins_databases where name not in ('information_schema','performance_schema','log')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Containers (geheugen en CPU)",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/system/resources",
+          "cacheDurationSeconds": 0,
+          "params": [],
+          "fields": [
+            {
+              "jsonPath": "$.containers[*].name",
+              "name": "Container",
+              "type": "string",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.containers[*].mem_mib",
+              "name": "Geheugen (MiB)",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.containers[*].cpu_pct",
+              "name": "CPU %",
+              "type": "number",
+              "language": "jsonpath"
+            },
+            {
+              "jsonPath": "$.containers[*].stack",
+              "name": "Eigen stack",
+              "type": "string",
+              "language": "jsonpath"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Geheugen (MiB)",
+            "desc": true
+          }
+        ]
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      }
+    }
+  ]
+}
