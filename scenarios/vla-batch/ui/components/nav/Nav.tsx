@@ -26,7 +26,8 @@ import { useAlarms } from "@/lib/queries";
 type Item = { href: string; label: string; hint: string };
 
 const OPS: Item[] = [
-  { href: "/line", label: "Lijn L1", hint: "Live procesbeeld, vijf processtappen" },
+  { href: "/line", label: "Lijnen", hint: "Live procesbeeld L1 en L2, vijf processtappen" },
+  { href: "/voorbereiding", label: "Voorbereiding", hint: "Afwegen en premixen voor beide lijnen" },
   { href: "/alarms", label: "Alarmen", hint: "Bevestigen en parkeren" },
   { href: "/shopfloor", label: "Werkvloer", hint: "Scannen, wegen, boeken, verzenden" },
   { href: "/scada", label: "SCADA", hint: "Setpoints, batches, simulatie" },

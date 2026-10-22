@@ -77,6 +77,10 @@ VEHICLES = {
     "sugar":  {"kind": "bulkwagen suiker", "vehicle": "bulk", "prefix": "SUI", "unload_s": 200},
     "starch": {"kind": "bulkwagen zetmeel", "vehicle": "bulk", "prefix": "ZTM", "unload_s": 200},
     "cocoa":  {"kind": "vrachtwagen cacao", "vehicle": "pallet", "prefix": "CAC", "unload_s": 160},
+    "vanilla":    {"kind": "vrachtwagen vanille", "vehicle": "pallet", "prefix": "VAN", "unload_s": 120},
+    "banana":     {"kind": "koelwagen bananenpuree", "vehicle": "pallet", "prefix": "BAN", "unload_s": 160},
+    "caramel":    {"kind": "tankwagen karamel", "vehicle": "bulk", "prefix": "KAR", "unload_s": 200},
+    "strawberry": {"kind": "koelwagen aardbeienpuree", "vehicle": "pallet", "prefix": "AAR", "unload_s": 160},
 }
 DEFAULT_VEHICLE = {"kind": "vrachtwagen", "vehicle": "pallet", "prefix": "INK", "unload_s": 160}
 DRY_LOAD_X_CAPACITY = 1.25
@@ -202,7 +206,7 @@ class LogisticsSim:
         for m in self.db.dw_materials.find({}):
             mid = m.get("material_id")
             reorder = float(m.get("reorder_level") or 0)
-            if mid == M.FINISHED_GOOD_ID or reorder <= 0:
+            if M.is_finished_good(mid) or reorder <= 0:
                 continue
             cap = reorder * SILO_CAPACITY_X_REORDER
             stock = float(m.get("stock_qty") or 0)
@@ -259,7 +263,8 @@ class LogisticsSim:
         for b in self.db.dw_batches.find({}):
             if b.get("batch_id") in batch_ids:
                 oid = b.get("order_id")
-                out[b["batch_id"]] = (oid, orders.get(oid))
+                out[b["batch_id"]] = (oid, orders.get(oid), b.get("recipe_id"),
+                                      M.line_of_doc(b))
         return out
 
     def shipments(self, now: datetime) -> list[dict]:
@@ -273,7 +278,8 @@ class LogisticsSim:
         out = []
         for batch_id, rows in by_batch.items():
             shipped = [h for h in rows if h["status"] == M.HU_SHIPPED]
-            order_id, customer = links.get(batch_id, (None, None))
+            order_id, customer, recipe_id, line = links.get(
+                batch_id, (None, None, None, M.DEFAULT_LINE))
             # orders without a customer (manual, older) keep the stable pick
             customer = customer or _pick(CUSTOMERS, batch_id + ":cust")
             city, drive_min = destination_of(customer)
@@ -294,6 +300,8 @@ class LogisticsSim:
                 "truck_id": f"TRK-{int(hashlib.sha1(batch_id.encode()).hexdigest()[:4], 16) % 90 + 10}",
                 "batch_id": batch_id,
                 "order_id": order_id,
+                "recipe_id": recipe_id,
+                "line": line,
                 "customer": customer,
                 "destination": city,
                 "drive_min": drive_min,
@@ -318,7 +326,7 @@ class LogisticsSim:
         for s in self.shipments(now):
             if s["stage"] in ("en_route", "delivered") and s["batch_id"] not in stored:
                 row = {k: s[k] for k in ("shipment_id", "truck_id", "batch_id", "order_id",
-                                         "customer", "destination", "drive_min", "pallets",
+                                         "recipe_id", "line", "customer", "destination", "drive_min", "pallets",
                                          "packs", "loaded_at", "eta")}
                 self.db.dw_shipments.insert_one(row)
 

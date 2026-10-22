@@ -10,6 +10,7 @@ import { post } from "@/lib/client";
 import { EMPTY, num } from "@/lib/format";
 import { useEquipmentHealth, useKpiSummary, useOee } from "@/lib/queries";
 import type { Refusal } from "@/lib/refusal";
+import { LineSwitch, lineOfEquipment, useLineParam } from "@/components/toolkit/LineSwitch";
 
 /**
  * Scherm 8, equipment health, met scherm 9 (OEE) erin gevouwen.
@@ -66,7 +67,14 @@ function eqStatus(e: Health): Status {
 }
 
 export function EquipmentHealth() {
-  const health = useEquipmentHealth<Health[]>();
+  const healthAll = useEquipmentHealth<Health[]>();
+  const lineFilter = useLineParam(true);
+  // Filteren in de client: de lijst is klein en dan deelt dit scherm zijn
+  // query met de rest van de app.
+  const health = {
+    ...healthAll,
+    data: (healthAll.data ?? []).filter((e) => !lineFilter || lineOfEquipment(e.equipment_id) === lineFilter),
+  };
   const oee = useOee<Oee[]>();
   const kpi = useKpiSummary("week", false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -100,7 +108,7 @@ export function EquipmentHealth() {
         actions={[
           { href: "/alarms", label: "Alarmen", title: "Meldingen van deze procesdelen" },
           { href: "/reports?type=equipment", label: "Onderhoudsrapport" },
-          { href: "/line", label: "Lijn L1" },
+          { href: `/line?line=${lineFilter || "L1"}`, label: `Lijn ${lineFilter || "L1"}` },
         ]}
       >
         {oeeTarget !== null && (
@@ -109,6 +117,8 @@ export function EquipmentHealth() {
           </span>
         )}
       </ScreenHeader>
+
+      <LineSwitch allowAll />
 
       {refusal && (
         <section className="tile flex flex-col items-start gap-2 border-l-[3px] border-l-status-alarm">

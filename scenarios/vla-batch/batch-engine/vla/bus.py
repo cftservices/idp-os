@@ -146,7 +146,7 @@ class VlaBus:
         Payload = {"value":.., "ts":.., "source":.., **extra}. Method-style
         commands (StartBatch/InjectFault/...) put their args in `extra`.
         """
-        topic = M.command_topic(equipment, cmd)
+        topic = M.command_topic(equipment, cmd, self.uns_root)
         body: dict[str, Any] = {"ts": _now_iso(), "source": "batch-engine"}
         if value is not None:
             body["value"] = value
@@ -205,7 +205,7 @@ class VlaBus:
         With `max_age_s`, only values received LIVE within that window count;
         retained replays (no freshness stamp) and older values return None so
         fallback paths fabricate instead of booking a stale snapshot."""
-        topic = M.status_topic(equipment, tag)
+        topic = M.status_topic(equipment, tag, self.uns_root)
         if max_age_s is not None:
             with self._lock:
                 rx = self._rx.get(topic)

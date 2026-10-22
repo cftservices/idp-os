@@ -52,11 +52,12 @@ EQUIPMENT_IDS = ["receiving-tank-01", "process-tank-01", "cook-unit-01",
                  "cooler-01", "filler-01"]
 
 # Which equipment is Running in which batch state.
+# Rollen, niet ids: elke lijn vertaalt ze via M.LINES naar zijn eigen equipment.
 _RUNNING_IN_STATE = {
-    M.DOSING: {"receiving-tank-01", "process-tank-01"},
-    M.COOKING: {"cook-unit-01"},
-    M.COOLING: {"cooler-01"},
-    M.FILLING: {"filler-01"},
+    M.DOSING: {"receiving", "process"},
+    M.COOKING: {"cook"},
+    M.COOLING: {"cooler"},
+    M.FILLING: {"filler"},
 }
 
 # QA sample plan (06-Model: dose_check | cook_temp | hold | viscosity) is booked
@@ -68,8 +69,10 @@ class BatchRunner:
     """Creates and runs Vla batches against the recipe seed + factory model."""
 
     def __init__(self, db, bus=None, control=None,
-                 rng: Optional[random.Random] = None, orders=None, equipment=None):
+                 rng: Optional[random.Random] = None, orders=None, equipment=None,
+                 line: str = M.DEFAULT_LINE):
         self.db = db
+        self.line = M.get_line(line)
         self.bus = bus            # MQTT: telemetry READ + secondary Command fallback
         self.control = control    # OPC-UA: PRIMARY control (write/command) path
         self.rng = rng or random.Random()
@@ -80,10 +83,14 @@ class BatchRunner:
 
     def create_batch(self, recipe_id: str, planned_L: Optional[float] = None,
                      auto_start: bool = False, order_id: Optional[str] = None,
-                     operator_id: Optional[str] = None) -> dict:
+                     operator_id: Optional[str] = None,
+                     prep_set_id: Optional[str] = None) -> dict:
         recipe = M.get_recipe(recipe_id)
         if recipe is None:
             raise ValueError(f"unknown recipe_id {recipe_id!r}")
+        if recipe_id not in self.line.recipes:
+            raise ValueError(f"recipe {recipe_id!r} draait niet op "
+                             f"{self.line.line_id} ({self.line.name})")
         planned_L = float(planned_L) if planned_L else recipe.basis_L
         if planned_L <= 0:
             raise ValueError("planned_L must be > 0")
@@ -94,13 +101,13 @@ class BatchRunner:
         if status != "released":
             raise ValueError(f"recipe {recipe_id!r} is not released (status={status})")
 
-        # CIP gate (PR-29): cook-unit-01 must be clean before a new batch.
+        # CIP gate (PR-29): the cook unit must be clean before a new batch.
         # The message + structured detail live in CipRequired (equipment.py):
         # it names the counter, the limit and the CIP action that clears it.
         # NOTE: PR-code intentionally omitted from the message, it is an
         # internal traceability ref, not customer-facing text.
         if self.equipment is not None:
-            self.equipment.require_clean("cook-unit-01")
+            self.equipment.require_clean(self.line.eq("cook"), recipe_id)
 
         # Production order (PR-24): explicit order_id must exist and be open;
         # without one, an implicit order is created when a manager is wired.
@@ -124,6 +131,9 @@ class BatchRunner:
             "batch_id": batch_id,
             "recipe_id": recipe_id,
             "product_name": recipe.product_name,
+            "line": self.line.line_id,
+            "fg_material_id": M.fg_of_recipe(recipe_id),
+            "prep_set_id": prep_set_id,
             "planned_L": planned_L,
             "order_id": order_id,
             "created_by": operator_id,
@@ -227,13 +237,15 @@ class BatchRunner:
         self._event(batch_id, "production_booked",
                     {"packs": int(packs), "source": source,
                      "packs_total": total})
-        inventory.produce(self.db, self._event, M.FINISHED_GOOD_ID,
+        batch = self._raw_batch(batch_id) or {}
+        inventory.produce(self.db, self._event,
+                          M.fg_of_recipe(batch.get("recipe_id")),
                           int(packs), batch_id)
         return row
 
     def _feed_equipment_state(self, batch_state: str) -> None:
-        running = _RUNNING_IN_STATE.get(batch_state, set())
-        for eq in EQUIPMENT_IDS:
+        running = {self.line.eq(r) for r in _RUNNING_IN_STATE.get(batch_state, set())}
+        for eq in self.line.equipment_ids:
             state = "Running" if eq in running else "Idle"
             self.db.dw_equipment_state.insert_one({
                 "equipment_id": eq,
@@ -248,7 +260,7 @@ class BatchRunner:
         """PR-29: write an Allocated history row for every line equipment on
         batch create — NOT via _feed_equipment_state (that maps unknown
         states to Idle)."""
-        for eq in EQUIPMENT_IDS:
+        for eq in self.line.equipment_ids:
             self.db.dw_equipment_state.insert_one({
                 "equipment_id": eq,
                 "area": M.area_of(eq),
@@ -355,10 +367,10 @@ class BatchRunner:
             while time.monotonic() - t0 < self.FOLLOW_TIMEOUT_S:
                 st = self._bus_str("Batch", "state")
 
-                tv = self._bus_float("cook-unit-01", "temp_C")
+                tv = self._bus_float(self.line.eq("cook"), "temp_C")
                 if tv is not None:
                     peak = tv if peak is None else max(peak, tv)
-                hv = self._bus_float("cook-unit-01", "hold_elapsed_sec")
+                hv = self._bus_float(self.line.eq("cook"), "hold_elapsed_sec")
                 if hv is not None:
                     hold = max(hold, hv)
 
@@ -394,9 +406,9 @@ class BatchRunner:
             fault = None
             if peak < recipe.cook_setpoint_C - 5.0:
                 fault = "cook_undertemp"
-            end_visc = self._bus_float("cook-unit-01", "viscosity_cP")
-            packs_f = self._bus_float("filler-01", "packs_total")
-            rejects_f = self._bus_float("filler-01", "reject_count")
+            end_visc = self._bus_float(self.line.eq("cook"), "viscosity_cP")
+            packs_f = self._bus_float(self.line.eq("filler"), "packs_total")
+            rejects_f = self._bus_float(self.line.eq("filler"), "reject_count")
             batch = self._raw_batch(batch_id)
             if packs_f is None:
                 packs, rejects = self._read_packs(batch, None)
@@ -427,7 +439,7 @@ class BatchRunner:
                     {"peak_cook_temp_C": peak_temp, "hold_elapsed_sec": hold_elapsed,
                      "fault": fault})
         if fault == "cook_undertemp":
-            self._alarm(batch_id, "cook-unit-01", "cook_undertemp", M.HIGH,
+            self._alarm(batch_id, self.line.eq("cook"), "cook_undertemp", M.HIGH,
                         f"Peak cook temp capped at {peak_temp} C "
                         f"(setpoint {recipe.cook_setpoint_C} C)",
                         impact=True, resolved=False)
@@ -453,7 +465,7 @@ class BatchRunner:
                           spec_min=recipe.spec_min_cP, spec_max=recipe.spec_max_cP)
         if end_visc < recipe.spec_min_cP:
             # SOLVE trigger: out-of-spec viscosity -> CRITICAL (hold/rework)
-            self._alarm(batch_id, "cook-unit-01", "viscosity_out_of_spec", M.CRITICAL,
+            self._alarm(batch_id, self.line.eq("cook"), "viscosity_out_of_spec", M.CRITICAL,
                         f"End viscosity {end_visc} cP below spec_min "
                         f"{recipe.spec_min_cP} cP — SOLVE: hold + rework",
                         impact=True, resolved=False)
@@ -476,14 +488,16 @@ class BatchRunner:
             if telemetry and "cook_heatup_sec" in telemetry:
                 cook_heatup_sec = float(telemetry["cook_heatup_sec"])
             else:
-                meta = self.equipment.ensure_meta("cook-unit-01")
+                meta = self.equipment.ensure_meta(self.line.eq("cook"))
                 n = meta.get("batches_since_cip", 0) + 1
                 cook_heatup_sec = BASE_HEATUP_SEC * (1.0 + HEATUP_INCREASE_PER_BATCH * n)
             cook_heatup_sec = round(cook_heatup_sec, 2)
             self._update(batch_id, {"cook_heatup_sec": cook_heatup_sec})
             self._event(batch_id, "heatup_captured",
                         {"cook_heatup_sec": cook_heatup_sec})
-            self.equipment.record_batch_completed(batch_id, cook_heatup_sec)
+            self.equipment.record_batch_completed(
+                batch_id, cook_heatup_sec, equipment_id=self.line.eq("cook"),
+                recipe_id=(self._raw_batch(batch_id) or {}).get("recipe_id"))
 
         # --- verdict ---
         verdict, crit = self._verdict(batch_id)
@@ -518,11 +532,11 @@ class BatchRunner:
                     last_staged = (line.get("staged") or [{}])[-1]
                     source_equipment = last_staged.get("source_equipment", "scale-01")
                 else:
-                    # try bus tag: process-tank-01 dose_<m>_actual_kg
+                    # try bus tag: process tank dose_<m>_actual_kg
                     actual = None
                     if self.bus is not None:
                         raw = self.bus.latest_value(
-                            "process-tank-01", f"dose_{line['material_id']}_actual_kg",
+                            self.line.eq("process"), f"dose_{line['material_id']}_actual_kg",
                             max_age_s=30.0)
                         if raw is not None:
                             try:
@@ -546,7 +560,7 @@ class BatchRunner:
             })
             inventory.consume(self.db, self._event, line["material_id"], actual, batch_id)
             if not in_tol:
-                self._alarm(batch_id, "process-tank-01", "dose_out_of_tolerance",
+                self._alarm(batch_id, self.line.eq("process"), "dose_out_of_tolerance",
                             M.MEDIUM,
                             f"{line['material_id']} dose {actual} kg out of tol "
                             f"({line['tol_min']}-{line['tol_max']})",
@@ -575,7 +589,7 @@ class BatchRunner:
             # try bus, else fabricate a healthy peak near setpoint
             peak = None
             if self.bus is not None:
-                raw = self.bus.latest_value("cook-unit-01", "temp_C", max_age_s=30.0)
+                raw = self.bus.latest_value(self.line.eq("cook"), "temp_C", max_age_s=30.0)
                 if raw is not None:
                     try:
                         peak = float(raw)
@@ -589,7 +603,7 @@ class BatchRunner:
         else:
             hold_elapsed = None
             if self.bus is not None:
-                raw = self.bus.latest_value("cook-unit-01", "hold_elapsed_sec", max_age_s=30.0)
+                raw = self.bus.latest_value(self.line.eq("cook"), "hold_elapsed_sec", max_age_s=30.0)
                 if raw is not None:
                     try:
                         hold_elapsed = float(raw)
@@ -613,13 +627,13 @@ class BatchRunner:
         packs = None
         rejects = 0
         if self.bus is not None:
-            raw = self.bus.latest_value("filler-01", "packs_total", max_age_s=30.0)
+            raw = self.bus.latest_value(self.line.eq("filler"), "packs_total", max_age_s=30.0)
             if raw is not None:
                 try:
                     packs = int(float(raw))
                 except (TypeError, ValueError):
                     packs = None
-            rj = self.bus.latest_value("filler-01", "reject_count", max_age_s=30.0)
+            rj = self.bus.latest_value(self.line.eq("filler"), "reject_count", max_age_s=30.0)
             if rj is not None:
                 try:
                     rejects = int(float(rj))
@@ -769,12 +783,16 @@ class BatchRunner:
                       if batch.get("order_id") else None),
         }
 
-    def list_batches(self) -> list[dict]:
+    def list_batches(self, line: Optional[str] = None) -> list[dict]:
         out = []
         for b in self.db.dw_batches.find({}):
+            if line and M.line_of_doc(b) != line:
+                continue
             out.append({
                 "batch_id": b["batch_id"],
                 "recipe_id": b["recipe_id"],
+                "line": M.line_of_doc(b),
+                "prep_set_id": b.get("prep_set_id"),
                 "product_name": b.get("product_name"),
                 "state": b.get("state"),
                 "started_at": b.get("started_at"),
@@ -825,6 +843,7 @@ class BatchRunner:
             "alarm_id": f"A-{uuid.uuid4().hex[:8].upper()}",
             "batch_id": batch_id,
             "equipment_id": equipment_id,
+            "line": M.line_of_equipment(equipment_id),
             "alarm_type": alarm_type,
             "severity": severity,
             "message": message,

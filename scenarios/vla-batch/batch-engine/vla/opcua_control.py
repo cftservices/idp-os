@@ -54,6 +54,7 @@ BATCH_NODE_ID = "ns=2;s=DairyWorks.Vla.Batch"
 SETPOINT_TARGETS = {
     "cook.setpoint_C", "cook.hold_sec", "cooler.target_C", "mixing.agitator_rpm",
     "dose.milk", "dose.sugar", "dose.starch", "dose.cocoa", "receiving.fat",
+    "dose.vanilla", "dose.banana", "dose.caramel", "dose.strawberry",
 }
 
 

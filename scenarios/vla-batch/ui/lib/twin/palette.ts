@@ -48,6 +48,17 @@ export const TWIN_KEYS = [
   "status-warn",
   "status-alarm",
   "status-stale",
+  "flavour-chocolate",
+  "flavour-vanilla",
+  "flavour-banana",
+  "flavour-caramel",
+  "flavour-strawberry",
+  "prep-gepland",
+  "prep-afwegen",
+  "prep-premix",
+  "prep-gereed",
+  "prep-verbruikt",
+  "prep-room",
 ] as const;
 
 export type TwinKey = (typeof TWIN_KEYS)[number];

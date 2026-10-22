@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { STEPS, statusTopic } from "@/lib/domain/uns";
+import { STEPS, asLineId, equipmentOn, statusTopic } from "@/lib/domain/uns";
 
 /**
  * De L1-payload, stap-georienteerd.
@@ -50,9 +50,10 @@ function toNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const lineId = asLineId(new URL(req.url).searchParams.get("line"));
   const [live, tags, loaded] = await Promise.all([
-    engine<Record<string, unknown>>("/line/live"),
+    engine<Record<string, unknown>>(`/line/live?line=${lineId}`),
     engine<Record<string, Reading>>("/tags?verbose=1"),
     readFile(MODEL_PATH, "utf-8")
       .then((t) => ({ ok: true, model: JSON.parse(t) as Record<string, unknown> }))
@@ -123,7 +124,7 @@ export async function GET() {
   };
 
   const reading = (area: string, eq: string, tag: string): Reading | null =>
-    tags?.[statusTopic(area, eq, tag)] ?? null;
+    tags?.[statusTopic(area, eq, tag, lineId)] ?? null;
 
   /**
    * De jongste leeftijd over alle tags van een unit: de hartslag van de bron.
@@ -151,7 +152,7 @@ export async function GET() {
     if (r.retained) return true;
     if (r.quality && r.quality !== "GOOD" && r.quality !== "UNKNOWN") return true;
     if (r.age_s === null || r.age_s <= staleAfter) return false;
-    const unitAge = heartbeat.get(statusTopic(area, eq, "").split("/Status/")[0]);
+    const unitAge = heartbeat.get(statusTopic(area, eq, "", lineId).split("/Status/")[0]);
     return unitAge === undefined || unitAge > staleAfter;
   }
 
@@ -218,7 +219,7 @@ export async function GET() {
     return {
       id: s.id,
       name: s.name,
-      equipment: s.equipment,
+      equipment: equipmentOn(s.equipment, lineId),
       primary: {
         label: s.primary.label,
         unit: s.primary.unit,
@@ -240,6 +241,7 @@ export async function GET() {
 
   return Response.json(
     {
+      line_id: lineId,
       available: Boolean(live?.available) || Boolean(tags),
       engine_reachable: live !== null,
       bus_has_tags: Boolean(tags && Object.keys(tags).length),

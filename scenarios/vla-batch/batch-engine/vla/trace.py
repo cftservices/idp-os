@@ -63,6 +63,20 @@ def order_trace(db, order_id: str, now: datetime,
         if h.get("batch_id") in ids:
             c = hus.setdefault(h["batch_id"], {})
             c[h["status"]] = c.get(h["status"], 0) + 1
+    # Voorbereiding (afwegen + premix) hoort bij de batch die hem verbruikte;
+    # sets die nog niet verbruikt zijn tonen we op orderniveau.
+    preps = [x for x in db.dw_prep_orders.find({})
+             if x.get("order_id") == order_id or x.get("batch_id") in ids]
+    prep_by_batch = {x["batch_id"]: x for x in preps if x.get("batch_id")}
+
+    def _prep(x):
+        return None if not x else {
+            "prep_id": x.get("prep_id"), "state": x.get("state"),
+            "weigh_station": x.get("weigh_station"),
+            "premix_tank": x.get("premix_tank"),
+            "created_at": x.get("created_at"), "state_changed_at": x.get("state_changed_at"),
+            "history": x.get("history") or [],
+            "components": x.get("components") or []}
 
     rows = []
     for b in batches:
@@ -76,7 +90,8 @@ def order_trace(db, order_id: str, now: datetime,
             "planned_L": b.get("planned_L"), "packs": b.get("packs_total"),
             "created_at": b.get("created_at"), "started_at": b.get("started_at"),
             "completed_at": b.get("completed_at"),
-            "pallets": pallets, "hu": counts,
+            "pallets": pallets, "hu": counts, "line": M.line_of_doc(b),
+            "prep": _prep(prep_by_batch.get(bid)),
             "step": _step(b, counts, stage),
             "shipment": None if not ship else {
                 "shipment_id": ship.get("shipment_id"), "truck_id": ship.get("truck_id"),
@@ -95,6 +110,10 @@ def order_trace(db, order_id: str, now: datetime,
     return {
         "order_id": order_id, "customer": order.get("customer"),
         "status": order.get("status"), "recipe_id": order.get("recipe_id"),
+        "line": M.line_of_recipe(order.get("recipe_id")) if order.get("recipe_id") else None,
+        "product_name": M.get_recipe(order["recipe_id"]).product_name
+        if order.get("recipe_id") in M.RECIPES else None,
+        "prep_pending": [_prep(x) for x in preps if not x.get("batch_id")],
         "target_qty_L": order.get("target_qty_L"), "due_date": order.get("due_date"),
         "created_at": order.get("created_at"), "completed_at": order.get("completed_at"),
         "steps": STEPS,

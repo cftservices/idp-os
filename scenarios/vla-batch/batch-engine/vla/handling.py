@@ -93,9 +93,10 @@ class HandlingUnitManager:
                     {"hu_id": hu_id, "operator_id": operator_id})
         # finished goods leave the site: production booked the packs in,
         # dispatch books them out (without this, FG stock only ever grows)
-        inventory.consume(self.db, self._event, M.FINISHED_GOOD_ID,
-                          int(hu.get("packs_count") or 0), hu["batch_id"])
         batch = self.db.dw_batches.find_one({"batch_id": hu["batch_id"]}) or {}
+        inventory.consume(self.db, self._event,
+                          M.fg_of_recipe(batch.get("recipe_id")),
+                          int(hu.get("packs_count") or 0), hu["batch_id"])
         hu_total = sum(int(h["packs_count"]) for h in
                        self.db.dw_handling_units.find({"batch_id": hu["batch_id"]}))
         packs_total = int(batch.get("packs_total", 0))

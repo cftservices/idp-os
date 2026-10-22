@@ -35,7 +35,7 @@ import os
 from asyncua import Server, ua
 from asyncua.common.methods import uamethod
 
-from physics import VlaProcess, RECIPES
+from physics import VlaProcess, RECIPES, DOSE_MATERIALS
 
 log = logging.getLogger("vla-factory")
 logging.basicConfig(
@@ -65,15 +65,9 @@ AREA_TAGS: dict[tuple[str, str], list[tuple[str, ua.VariantType, bool]]] = {
         ("level_L", ua.VariantType.Double, False),
         ("temp_C", ua.VariantType.Double, False),
         ("agitator_rpm", ua.VariantType.Double, True),
-        ("dose_milk_actual_kg", ua.VariantType.Double, False),
-        ("dose_sugar_actual_kg", ua.VariantType.Double, False),
-        ("dose_starch_actual_kg", ua.VariantType.Double, False),
-        ("dose_cocoa_actual_kg", ua.VariantType.Double, False),
+        *[(f"dose_{m}_actual_kg", ua.VariantType.Double, False) for m in DOSE_MATERIALS],
         ("phase", ua.VariantType.String, False),
-        ("dose_milk_setpoint_kg", ua.VariantType.Double, True),
-        ("dose_sugar_setpoint_kg", ua.VariantType.Double, True),
-        ("dose_starch_setpoint_kg", ua.VariantType.Double, True),
-        ("dose_cocoa_setpoint_kg", ua.VariantType.Double, True),
+        *[(f"dose_{m}_setpoint_kg", ua.VariantType.Double, True) for m in DOSE_MATERIALS],
     ],
     ("Cook", "cook-unit-01"): [
         ("temp_C", ua.VariantType.Double, False),
@@ -97,10 +91,8 @@ AREA_TAGS: dict[tuple[str, str], list[tuple[str, ua.VariantType, bool]]] = {
 SETPOINT_TARGETS: dict[tuple[str, str, str], str] = {
     ("Receiving", "receiving-tank-01", "fat_setpoint_pct"): "receiving.fat",
     ("Mixing", "process-tank-01", "agitator_rpm"): "mixing.agitator_rpm",
-    ("Mixing", "process-tank-01", "dose_milk_setpoint_kg"): "dose.milk",
-    ("Mixing", "process-tank-01", "dose_sugar_setpoint_kg"): "dose.sugar",
-    ("Mixing", "process-tank-01", "dose_starch_setpoint_kg"): "dose.starch",
-    ("Mixing", "process-tank-01", "dose_cocoa_setpoint_kg"): "dose.cocoa",
+    **{("Mixing", "process-tank-01", f"dose_{m}_setpoint_kg"): f"dose.{m}"
+       for m in DOSE_MATERIALS},
     ("Cook", "cook-unit-01", "setpoint_C"): "cook.setpoint_C",
     ("Cook", "cook-unit-01", "hold_sec"): "cook.hold_sec",
     ("Cooling", "cooler-01", "target_C"): "cooler.target_C",
@@ -108,10 +100,8 @@ SETPOINT_TARGETS: dict[tuple[str, str, str], str] = {
 
 # nodes that mirror a live process setpoint (so the browsed value stays truthful)
 SETPOINT_READBACK = {
-    ("Mixing", "process-tank-01", "dose_milk_setpoint_kg"): lambda p: p.dose_setpoint_kg["milk"],
-    ("Mixing", "process-tank-01", "dose_sugar_setpoint_kg"): lambda p: p.dose_setpoint_kg["sugar"],
-    ("Mixing", "process-tank-01", "dose_starch_setpoint_kg"): lambda p: p.dose_setpoint_kg["starch"],
-    ("Mixing", "process-tank-01", "dose_cocoa_setpoint_kg"): lambda p: p.dose_setpoint_kg["cocoa"],
+    **{("Mixing", "process-tank-01", f"dose_{m}_setpoint_kg"):
+       (lambda p, m=m: p.dose_setpoint_kg.get(m, 0.0)) for m in DOSE_MATERIALS},
     ("Cook", "cook-unit-01", "setpoint_C"): lambda p: p.cook_setpoint_C,
     ("Cook", "cook-unit-01", "hold_sec"): lambda p: p.hold_sec,
     ("Cooling", "cooler-01", "target_C"): lambda p: p.cool_target_C,

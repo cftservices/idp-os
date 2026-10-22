@@ -20,8 +20,8 @@ HEATUP_INCREASE_PER_BATCH = 0.15
 CBM_ALERT_FACTOR = 1.35
 DIRTY_AFTER_BATCHES = 4
 
-EQUIPMENT_IDS = ["receiving-tank-01", "process-tank-01", "cook-unit-01",
-                 "cooler-01", "filler-01"]
+EQUIPMENT_IDS = list(M.ALL_EQUIPMENT_IDS)
+COOK_UNITS = {ln.eq("cook") for ln in M.LINES.values()}
 
 
 class CipRequired(ValueError):
@@ -33,15 +33,24 @@ class CipRequired(ValueError):
     `detail` becomes the HTTPException body."""
 
     def __init__(self, equipment_id: str, batches_since_cip: int, limit: int,
-                 last_cip_at: Optional[str] = None):
-        message = (f"{equipment_id} is Dirty: {batches_since_cip} of max "
-                   f"{limit} batches since the last CIP. Clean "
-                   f"{equipment_id} (CIP) before starting a new batch.")
+                 last_cip_at: Optional[str] = None,
+                 changeover: Optional[tuple] = None):
+        if changeover:
+            prev, nxt = changeover
+            message = (f"Productwissel op {equipment_id}: {prev} -> {nxt} "
+                       f"gaat van donker naar licht. Clean {equipment_id} "
+                       f"(CIP) before starting a new batch.")
+        else:
+            message = (f"{equipment_id} is Dirty: {batches_since_cip} of max "
+                       f"{limit} batches since the last CIP. Clean "
+                       f"{equipment_id} (CIP) before starting a new batch.")
         super().__init__(message)
         self.equipment_id = equipment_id
         self.detail = {
             "message": message,
-            "reason": "cip_required",
+            "reason": "productwissel" if changeover else "cip_required",
+            "previous_recipe": changeover[0] if changeover else None,
+            "next_recipe": changeover[1] if changeover else None,
             "equipment_id": equipment_id,
             "batches_since_cip": batches_since_cip,
             "limit": limit,
@@ -54,6 +63,12 @@ class CipRequired(ValueError):
         }
 
 
+def _ids(line: Optional[str] = None) -> list[str]:
+    if line and line in M.LINES:
+        return M.LINES[line].equipment_ids
+    return EQUIPMENT_IDS
+
+
 def _iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -63,9 +78,14 @@ def _parse(ts: str) -> datetime:
 
 
 class EquipmentMonitor:
-    def __init__(self, db, bus=None):
+    def __init__(self, db, bus=None, buses: Optional[dict] = None):
         self.db = db
         self.bus = bus
+        # Per lijn een eigen bus: L2-equipment publiceert onder DairyWorks/Vla-L2.
+        self.buses = dict(buses or {})
+
+    def bus_for(self, equipment_id: str):
+        return self.buses.get(M.line_of_equipment(equipment_id), self.bus)
 
     # ------------------------------------------------------------------- meta
 
@@ -112,20 +132,21 @@ class EquipmentMonitor:
     # ------------------------------------------------------------ UNS publish
 
     def on_state_change(self, equipment_id: str, state: str) -> None:
-        if self.bus is None:
+        bus = self.bus_for(equipment_id)
+        if bus is None:
             return
         area = M.area_of(equipment_id)
-        self.bus.publish_json(f"{area}/{equipment_id}/Status/state",
+        bus.publish_json(f"{area}/{equipment_id}/Status/state",
                               {"value": state, "ts": _iso()})
-        self.bus.publish_json(f"{area}/{equipment_id}/Status/running_hours",
+        bus.publish_json(f"{area}/{equipment_id}/Status/running_hours",
                               {"value": self.running_hours(equipment_id),
                                "unit": "h", "ts": _iso()})
 
     # --------------------------------------------------------------- snapshot
 
-    def snapshot(self) -> list[dict]:
+    def snapshot(self, line: Optional[str] = None) -> list[dict]:
         out = []
-        for eq in EQUIPMENT_IDS:
+        for eq in _ids(line):
             meta = self.ensure_meta(eq)
             hist = self._history(eq)
             latest = hist[-1]["state"] if hist else "Idle"
@@ -133,6 +154,7 @@ class EquipmentMonitor:
                 latest = "Dirty"
             out.append({
                 "equipment_id": eq,
+                "line": M.line_of_equipment(eq),
                 "area": meta["area"],
                 "state": latest,
                 "running_hours": self.running_hours(eq),
@@ -145,14 +167,18 @@ class EquipmentMonitor:
     # ------------------------------------------------------------ CBM fouling
 
     def record_batch_completed(self, batch_id: str,
-                               cook_heatup_sec: float) -> Optional[dict]:
+                               cook_heatup_sec: float,
+                               equipment_id: str = "cook-unit-01",
+                               recipe_id: Optional[str] = None) -> Optional[dict]:
         """PR-18/29: increment batches_since_cip for cook-unit-01, trend the
         heat-up in heatup_history (last 20), mark Dirty at
         DIRTY_AFTER_BATCHES (history row + equipment_dirty event, once on the
         transition), and raise a fouling alert once heat-up crosses
         BASE_HEATUP_SEC * CBM_ALERT_FACTOR (only one unresolved alert at a
-        time). Returns the alert row, or None."""
-        equipment_id = "cook-unit-01"
+        time). Returns the alert row, or None.
+
+        Legt ook `last_recipe` vast: de productwisselregel heeft nodig wat er
+        het laatst in de ketel zat."""
         meta = self.ensure_meta(equipment_id)
         was_dirty = bool(meta.get("dirty"))
         batches_since_cip = meta.get("batches_since_cip", 0) + 1
@@ -164,7 +190,8 @@ class EquipmentMonitor:
         self.db.dw_equipment_meta.update_one(
             {"equipment_id": equipment_id},
             {"$set": {"batches_since_cip": batches_since_cip,
-                      "heatup_history": hist, "dirty": dirty}},
+                      "heatup_history": hist, "dirty": dirty,
+                      **({"last_recipe": recipe_id} if recipe_id else {})}},
         )
 
         alert = None
@@ -182,8 +209,8 @@ class EquipmentMonitor:
                 "ts": _iso(),
             }
             self.db.dw_cbm_alerts.insert_one(alert)
-            if self.bus is not None:
-                self.bus.publish_json(
+            if self.bus_for(equipment_id) is not None:
+                self.bus_for(equipment_id).publish_json(
                     f"{M.area_of(equipment_id)}/{equipment_id}/Alert/fouling_heatup",
                     {"value": alert["message"], "ts": _iso()})
             self.db.dw_batch_events.insert_one({
@@ -205,8 +232,8 @@ class EquipmentMonitor:
                 "equipment_id": equipment_id, "area": area,
                 "state": "Dirty", "ts": _iso(),
             })
-            if self.bus is not None:
-                self.bus.publish_json(
+            if self.bus_for(equipment_id) is not None:
+                self.bus_for(equipment_id).publish_json(
                     f"{area}/{equipment_id}/Status/state",
                     {"value": "Dirty", "ts": _iso()})
             self.db.dw_batch_events.insert_one({
@@ -231,20 +258,33 @@ class EquipmentMonitor:
             "batches_since_cip": meta.get("batches_since_cip", 0),
             "limit": DIRTY_AFTER_BATCHES,
             "last_cip_at": meta.get("last_cip_at"),
+            "last_recipe": meta.get("last_recipe"),
         }
 
     def is_dirty(self, equipment_id: str) -> bool:
         return self.cip_status(equipment_id)["dirty"]
 
-    def require_clean(self, equipment_id: str) -> None:
-        """CIP gate: raise CipRequired when `equipment_id` still needs cleaning."""
+    def needs_changeover_cip(self, equipment_id: str,
+                             next_recipe: Optional[str]) -> bool:
+        st = self.cip_status(equipment_id)
+        return M.changeover_needs_cip(st.get("last_recipe"), next_recipe)
+
+    def require_clean(self, equipment_id: str,
+                      next_recipe: Optional[str] = None) -> None:
+        """CIP gate: raise CipRequired when `equipment_id` still needs cleaning,
+        of wanneer het volgende recept lichter is dan het vorige."""
         st = self.cip_status(equipment_id)
         if st["dirty"]:
             raise CipRequired(equipment_id, st["batches_since_cip"],
                               st["limit"], st["last_cip_at"])
+        if M.changeover_needs_cip(st.get("last_recipe"), next_recipe):
+            raise CipRequired(equipment_id, st["batches_since_cip"],
+                              st["limit"], st["last_cip_at"],
+                              changeover=(st["last_recipe"], next_recipe))
 
     def perform_cip(self, equipment_id: str,
-                    operator_id: Optional[str] = None) -> dict:
+                    operator_id: Optional[str] = None,
+                    reason: Optional[str] = None) -> dict:
         """PR-29: CIP cleaning action — resets the fouling counter/history,
         clears Dirty, resolves any open fouling alerts, writes an Idle
         history row, and fires a cip_performed event. Returns fresh meta."""
@@ -256,10 +296,12 @@ class EquipmentMonitor:
                 f"{equipment_id} is in use (state {latest_state}) — "
                 f"CIP not allowed during an active batch")
         now = _iso()
+        prev = self.ensure_meta(equipment_id).get("last_recipe")
         self.db.dw_equipment_meta.update_one(
             {"equipment_id": equipment_id},
             {"$set": {"batches_since_cip": 0, "dirty": False,
-                      "last_cip_at": now, "heatup_history": []}},
+                      "last_cip_at": now, "heatup_history": [],
+                      "last_recipe": None}},
         )
         for alert in self.open_alerts(equipment_id):
             self.db.dw_cbm_alerts.update_one(
@@ -272,13 +314,17 @@ class EquipmentMonitor:
             "equipment_id": equipment_id, "area": area,
             "state": "Idle", "ts": now,
         })
-        if self.bus is not None:
-            self.bus.publish_json(f"{area}/{equipment_id}/Status/state",
-                                  {"value": "Idle", "ts": now})
+        if self.bus_for(equipment_id) is not None:
+            self.bus_for(equipment_id).publish_json(
+                f"{area}/{equipment_id}/Status/state",
+                {"value": "Idle", "ts": now})
         self.db.dw_batch_events.insert_one({
             "batch_id": None,
             "event_type": "cip_performed",
-            "payload": {"equipment_id": equipment_id, "operator_id": operator_id},
+            "payload": {"equipment_id": equipment_id, "operator_id": operator_id,
+                        "line": M.line_of_equipment(equipment_id),
+                        "reason": reason or "vervuiling",
+                        "previous_recipe": prev},
             "ts": now,
         })
         log.info("CIP performed on %s (operator=%s)", equipment_id, operator_id)
@@ -332,19 +378,19 @@ class EquipmentMonitor:
                        if b.get("verdict") == M.APPROVED)
         return approved / total
 
-    def oee(self) -> list[dict]:
+    def oee(self, line: Optional[str] = None) -> list[dict]:
         """PR-21: per-equipment OEE-light — availability from state-history
         durations, performance (cook-unit-01 only, heat-up trend vs baseline,
         1.0 elsewhere / when no history), quality (plant-wide, same for every
         row). All four numbers rounded to 4 decimals."""
         quality = round(self._quality(), 4)
         out = []
-        for eq in EQUIPMENT_IDS:
+        for eq in _ids(line):
             running_sec, down_sec = self._running_and_down_seconds(eq)
             denom = running_sec + down_sec
             availability = round(running_sec / denom, 4) if denom > 0 else 1.0
 
-            if eq == "cook-unit-01":
+            if eq in COOK_UNITS:
                 hist = self.ensure_meta(eq).get("heatup_history") or []
                 if hist:
                     avg = sum(h["heatup_sec"] for h in hist) / len(hist)
@@ -357,6 +403,7 @@ class EquipmentMonitor:
             oee = round(availability * performance * quality, 4)
             out.append({
                 "equipment_id": eq,
+                "line": M.line_of_equipment(eq),
                 "availability": availability,
                 "performance": performance,
                 "quality": quality,
@@ -366,7 +413,7 @@ class EquipmentMonitor:
 
     # -------------------------------------------------------------- health
 
-    def health(self) -> list[dict]:
+    def health(self, line: Optional[str] = None) -> list[dict]:
         """PR-32: snapshot() extended per equipment with the cook heat-up
         trend (raw heatup_history) and the equipment's own open CBM alerts.
 
@@ -377,7 +424,7 @@ class EquipmentMonitor:
         divergence this project forbids for KPIs, so it is computed here, from
         CBM_ALERT_FACTOR, the same constant open_alerts() fires on."""
         out = []
-        for row in self.snapshot():
+        for row in self.snapshot(line):
             eq = row["equipment_id"]
             meta = self.ensure_meta(eq)
             trend = list(meta.get("heatup_history") or [])

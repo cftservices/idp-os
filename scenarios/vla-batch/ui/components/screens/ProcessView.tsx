@@ -54,10 +54,10 @@ const ACTIEF: Record<string, string[]> = {
   FILLING: ["cooling", "filling"],
 };
 
-export function ProcessView() {
+export function ProcessView({ lineId = "L1" }: { lineId?: "L1" | "L2" }) {
   const line = useQuery<LinePayload>({
-    queryKey: ["ui", "line"],
-    queryFn: ({ signal }) => getUi<LinePayload>("/line", signal),
+    queryKey: ["ui", "line", lineId],
+    queryFn: ({ signal }) => getUi<LinePayload>(`/line?line=${lineId}`, signal),
     refetchInterval: POLL.live,
     refetchIntervalInBackground: false,
     staleTime: 0,
@@ -120,7 +120,7 @@ export function ProcessView() {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <span className="eyebrow">Procesbeeld, level 2</span>
-          <h2 className="text-base font-semibold">Vla-lijn L1</h2>
+          <h2 className="text-base font-semibold">Vla-lijn {lineId}</h2>
         </div>
         <span className="flex items-center gap-2 text-[0.8125rem]">
           {offline ? (

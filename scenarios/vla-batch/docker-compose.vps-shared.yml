@@ -53,6 +53,10 @@ services:
     environment:
       AUTOSTART_DELAY_S: "30"
 
+  vla-factory-l2:
+    environment:
+      AUTOSTART_DELAY_S: "30"
+
   vla-batch-engine:
     environment:
       DEMO_AUTOPILOT: "1"

@@ -2,10 +2,12 @@
 
 import { CrossLink } from "@/components/nav/ScreenHeader";
 import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
+import { LineBadge } from "@/components/toolkit/LineSwitch";
 import { EMPTY, num, shortDateTime } from "@/lib/format";
 
 /**
- * Tracering van één order: order → batches → pallets → vrachtwagen → klant.
+ * Tracering van één order: order → voorbereiding → batches → pallets →
+ * vrachtwagen → klant.
  *
  * Bron is GET /orders/{id}/trace. Vertrokken vrachtwagens bewaart de engine in
  * dw_shipments, omdat de verzonden pallets na twee uur worden opgeruimd; zonder
@@ -25,8 +27,18 @@ type Shipment = {
   eta: string | null;
 };
 
+type TracePrep = {
+  prep_id: string;
+  state: string;
+  weigh_station: string | null;
+  premix_tank: string | null;
+  state_changed_at: string | null;
+};
+
 type TraceBatch = {
   batch_id: string;
+  line?: string | null;
+  prep?: TracePrep | null;
   state: string | null;
   verdict: string | null;
   packs: number | null;
@@ -39,6 +51,9 @@ type TraceBatch = {
 export type Trace = {
   order_id: string;
   customer: string | null;
+  line?: string | null;
+  product_name?: string | null;
+  prep_pending?: TracePrep[];
   steps: string[];
   batches: TraceBatch[];
   totals: {
@@ -71,7 +86,23 @@ export function OrderTrace({ trace }: { trace: Trace }) {
   const t = trace.totals;
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-2" data-testid="order-trace">
-      <span className="eyebrow">Tracering</span>
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="eyebrow">Tracering</span>
+        {trace.product_name && <span className="text-[0.75rem] font-semibold">{trace.product_name}</span>}
+        <LineBadge line={trace.line} />
+      </span>
+      {(trace.prep_pending ?? []).length > 0 && (
+        <p className="text-[0.75rem] text-ink-muted" data-testid="prep-pending">
+          In voorbereiding:{" "}
+          {(trace.prep_pending ?? []).map((p, i) => (
+            <span key={p.prep_id}>
+              {i > 0 && ", "}
+              <span className="mono">{p.prep_id}</span> ({p.state})
+            </span>
+          ))}{" "}
+          <CrossLink href="/voorbereiding">naar voorbereiding</CrossLink>
+        </p>
+      )}
       <ol className="flex flex-wrap items-center gap-1 text-[0.75rem]">
         {trace.steps.map((s, i) => (
           <li key={s} className="flex items-center gap-1">
@@ -103,7 +134,7 @@ export function OrderTrace({ trace }: { trace: Trace }) {
         <table className="w-full border-collapse text-[0.75rem]">
           <thead>
             <tr className="border-b border-line text-left">
-              {["Batch", "Verdict", "Pakken", "Pallets", "Stap", "Vrachtwagen", "Klant", "Levering"].map(
+              {["Batch", "Lijn", "Voorbereiding", "Verdict", "Pakken", "Pallets", "Stap", "Vrachtwagen", "Klant", "Levering"].map(
                 (h) => (
                   <th
                     key={h}
@@ -118,7 +149,7 @@ export function OrderTrace({ trace }: { trace: Trace }) {
           <tbody>
             {trace.batches.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-2 py-2 text-ink-muted">
+                <td colSpan={10} className="px-2 py-2 text-ink-muted">
                   Nog geen batches bij deze order.
                 </td>
               </tr>
@@ -127,6 +158,12 @@ export function OrderTrace({ trace }: { trace: Trace }) {
               <tr key={b.batch_id} className="border-b border-line last:border-b-0">
                 <td className="px-2 py-1 mono">
                   <CrossLink href={`/batches?batch=${b.batch_id}`}>{b.batch_id}</CrossLink>
+                </td>
+                <td className="px-2 py-1">
+                  <LineBadge line={b.line} />
+                </td>
+                <td className="px-2 py-1 mono" title={b.prep ? `${b.prep.weigh_station ?? ""} → ${b.prep.premix_tank ?? ""}` : undefined}>
+                  {b.prep ? `${b.prep.prep_id} · ${b.prep.state}` : EMPTY}
                 </td>
                 <td className="px-2 py-1">{b.verdict ?? EMPTY}</td>
                 <td className="px-2 py-1 num">{b.packs != null ? num(b.packs, 0) : EMPTY}</td>

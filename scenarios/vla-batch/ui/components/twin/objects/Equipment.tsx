@@ -10,7 +10,7 @@ import { statusColor, useTwin } from "../context";
 import { Pickable } from "./Pickable";
 
 /**
- * De vijf procesdelen van lijn L1, procedureel opgebouwd uit herkenbare
+ * De vijf procesdelen van een lijn (L1 in hal 1, L2 in hal 2), procedureel opgebouwd uit herkenbare
  * onderdelen (bolle bodems, mangaten, platenpakketten, kartons). Beweging
  * volgt de echte toestand: een roerwerk draait alleen als het procesdeel
  * draait, de vuller transporteert alleen tijdens FILLING. Een stilstaande
@@ -399,7 +399,7 @@ function Cooler({ eq }: { eq: TwinEquipment }) {
 }
 
 /** Gable-top melkpak van 1 liter: blok met nokdak en vouwrand. */
-function Carton({ color, roof }: { color: string; roof: string }) {
+export function Carton({ color, roof }: { color: string; roof: string }) {
   return (
     <group>
       <mesh position={[0, 0.13, 0]} castShadow>
@@ -418,8 +418,9 @@ function Carton({ color, roof }: { color: string; roof: string }) {
   );
 }
 
-function Filler({ eq, filling }: { eq: TwinEquipment; filling: boolean }) {
+function Filler({ eq, filling, packColor }: { eq: TwinEquipment; filling: boolean; packColor?: string }) {
   const { palette, reducedMotion } = useTwin();
+  const pack = packColor ?? palette.pack;
   const carousel = useRef<Group>(null);
   const packs = useRef<Group>(null);
   useFrame((_, dt) => {
@@ -451,7 +452,7 @@ function Filler({ eq, filling }: { eq: TwinEquipment; filling: boolean }) {
                 <cylinderGeometry args={[0.035, 0.05, 0.6, 8]} />
                 <meshStandardMaterial color={palette.steel} {...RVS} />
               </mesh>
-              <Carton color={palette.pack} roof={palette.milk} />
+              <Carton color={pack} roof={palette.milk} />
             </group>
           );
         })}
@@ -506,7 +507,7 @@ function Filler({ eq, filling }: { eq: TwinEquipment; filling: boolean }) {
       <group ref={packs} position={[0, 0.74, 0]}>
         {Array.from({ length: 6 }, (_, i) => (
           <group key={i} position={[-0.4 + i * 0.55, 0, 0]} visible={filling}>
-            <Carton color={palette.pack} roof={palette.milk} />
+            <Carton color={pack} roof={palette.milk} />
           </group>
         ))}
       </group>
@@ -515,7 +516,16 @@ function Filler({ eq, filling }: { eq: TwinEquipment; filling: boolean }) {
   );
 }
 
-export function EquipmentObject({ eq, batchState }: { eq: TwinEquipment; batchState: string | null }) {
+export function EquipmentObject({
+  eq,
+  batchState,
+  packColor,
+}: {
+  eq: TwinEquipment;
+  batchState: string | null;
+  /** Kleur van de pakken op de vuller; standaard het L1-pak. */
+  packColor?: string;
+}) {
   const label = { tank: 5.5, mixer: 6.2, cook: 4, cooler: 3.8, filler: 4 }[eq.kind];
   return (
     <Pickable id={`equipment:${eq.id}`} name={eq.name} visual={eq.visual} position={eq.pos} radius={1.75} labelHeight={label}>
@@ -523,7 +533,7 @@ export function EquipmentObject({ eq, batchState }: { eq: TwinEquipment; batchSt
       {eq.kind === "mixer" && <Mixer eq={eq} />}
       {eq.kind === "cook" && <CookUnit eq={eq} />}
       {eq.kind === "cooler" && <Cooler eq={eq} />}
-      {eq.kind === "filler" && <Filler eq={eq} filling={batchState === "FILLING"} />}
+      {eq.kind === "filler" && <Filler eq={eq} filling={batchState === "FILLING"} packColor={packColor} />}
     </Pickable>
   );
 }

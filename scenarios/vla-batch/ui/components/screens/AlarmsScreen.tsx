@@ -10,6 +10,7 @@ import { post } from "@/lib/client";
 import { num, shortDateTime, shortTime } from "@/lib/format";
 import { useAlarms, useKpiSummary } from "@/lib/queries";
 import type { Alarm, AlarmLoad } from "@/lib/types";
+import { LineSwitch, lineOfEquipment, useLineParam } from "@/components/toolkit/LineSwitch";
 
 /**
  * Scherm 14, alarmen (spec §14).
@@ -182,6 +183,7 @@ export function AlarmsScreen() {
   // procesdeel zien. Filteren gebeurt client-side; /alarms kent geen
   // equipment-parameter en die erbij verzinnen zou het contract oprekken.
   const equipmentFilter = params.get("equipment");
+  const lineFilter = useLineParam(true);
   const [shelving, setShelving] = useState<string | null>(null);
 
   const alarms = useAlarms(filter);
@@ -201,7 +203,10 @@ export function AlarmsScreen() {
   }
 
   const rows = ((alarms.data ?? []) as Alarm[]).filter(
-    (a) => !equipmentFilter || a.equipment_id === equipmentFilter,
+    (a) =>
+      (!equipmentFilter || a.equipment_id === equipmentFilter) &&
+      // Een alarm zonder procesdeel (batchniveau) blijft bij elke lijn zichtbaar.
+      (!lineFilter || !a.equipment_id || lineOfEquipment(a.equipment_id) === lineFilter),
   );
 
   return (
@@ -211,7 +216,7 @@ export function AlarmsScreen() {
         title="Alarmen"
         subtitle="Bevestigen en parkeren. Parkeren vraagt altijd een reden en een einddatum."
         actions={[
-          { href: "/line", label: "Lijn L1", title: "Waar het alarm vandaan komt" },
+          { href: `/line?line=${lineFilter || "L1"}`, label: `Lijn ${lineFilter || "L1"}`, title: "Waar het alarm vandaan komt" },
           { href: "/equipment", label: "Equipment" },
           { href: "/scada", label: "SCADA" },
         ]}
@@ -236,6 +241,8 @@ export function AlarmsScreen() {
           ))}
         </div>
       </ScreenHeader>
+
+      <LineSwitch allowAll />
 
       {equipmentFilter && (
         <p className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
