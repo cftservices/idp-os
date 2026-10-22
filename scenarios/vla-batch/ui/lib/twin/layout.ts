@@ -38,48 +38,54 @@ export const HALL2 = {
 };
 
 /**
- * Voorbereiding (afwegen + premix), gedeeld door beide lijnen. Ligt in de
- * strook tussen de hallen, zodat de premix naar beide mengtanks kan.
+ * Voorbereiding (afwegen + premix), gedeeld door beide lijnen. Een eigen
+ * ruimte achter (ten westen van) de twee hallen, op de oude plek van de
+ * silo's: de premix gaat over de westwanden naar beide mengtanks.
  */
-export const PREP_ROOM = { min: [-14, -10.2] as [number, number], max: [-2, -6.8] as [number, number], wall: 1.2 };
+export const PREP_ROOM = { min: [-21.5, -12.6] as [number, number], max: [-15.5, -1.4] as [number, number], wall: 1.2 };
 
 export const PREP_STATIONS = [
-  { id: "weigh-station-01", kind: "weigh", name: "Weegstation 1", pos: [-12.4, 0, -8.5] as Vec3 },
-  { id: "weigh-station-02", kind: "weigh", name: "Weegstation 2", pos: [-10.2, 0, -8.5] as Vec3 },
-  { id: "premix-tank-01", kind: "premix", name: "Premixtank 1", pos: [-7.6, 0, -8.5] as Vec3 },
-  { id: "premix-tank-02", kind: "premix", name: "Premixtank 2", pos: [-4.6, 0, -8.5] as Vec3 },
+  { id: "weigh-station-01", kind: "weigh", name: "Weegstation 1", pos: [-18.8, 0, -11] as Vec3 },
+  { id: "weigh-station-02", kind: "weigh", name: "Weegstation 2", pos: [-18.8, 0, -8.8] as Vec3 },
+  { id: "premix-tank-01", kind: "premix", name: "Premixtank 1", pos: [-18.8, 0, -6.1] as Vec3 },
+  { id: "premix-tank-02", kind: "premix", name: "Premixtank 2", pos: [-18.8, 0, -3.1] as Vec3 },
 ] as const;
 
 export type PrepStationLayout = (typeof PREP_STATIONS)[number];
 
 /** Silo's voor de grondstoffen, in de volgorde waarin /inventory ze levert. */
 export const SILO_SLOTS: Vec3[] = [
-  [-21, 0, -4],
-  [-21, 0, 0.5],
-  [-17.5, 0, -4],
-  [-17.5, 0, 0.5],
+  [-27, 0, -4],
+  [-27, 0, 0.5],
+  [-23.5, 0, -4],
+  [-23.5, 0, 0.5],
 ];
 
 export const HALL = { min: [-14, -5.5] as [number, number], max: [13.5, 5.5] as [number, number], wall: 1.4 };
 
+/** Elke lijn heeft een eigen palletiser met robot aan het eind van de band. */
 export const PALLETISER: Vec3 = [12, 0, 2.6];
+export const PALLETISER_L2: Vec3 = [12, 0, HALL2_Z + 2.6];
+export const PALLETISERS: Record<string, Vec3> = { L1: PALLETISER, L2: PALLETISER_L2 };
 
 export const COLDSTORE = {
-  min: [16, -8] as [number, number],
-  max: [30, 4.5] as [number, number],
+  min: [16, -19.5] as [number, number],
+  max: [37.5, 4.5] as [number, number],
   wall: 4.8,
-  /** Opening in de westwand (z-bereik) waardoor de heftruck van de palletiser binnenrijdt. */
+  /** Openingen in de westwand (z-bereik): de heftruck van L1 komt door de zuidelijke, die van L2 door de noordelijke. */
   door: [1.6, 4.5] as [number, number],
+  door2: [-14.9, -12.5] as [number, number],
 };
 
 /**
- * Stellingen: enkelzijdige rijen langs x, elk bereikbaar vanuit het pad aan
- * de zuidkant. Vier rijen, zes vakken, vier niveaus = 96 palletplaatsen.
- * RACK_SLOTS moet gelijk zijn aan RACK_SLOTS in batch-engine/vla/warehouse.py:
- * de engine kiest het vak en zet het op de HU.
+ * Stellingen: enkelzijdige rijen langs x. Acht rijen, zes vakken, vier
+ * niveaus = 192 palletplaatsen. Rij 0-3 bereik je vanaf het hoofdpad (zuid),
+ * rij 4-7 vanaf het L2-pad (noord). RACK_SLOTS moet gelijk zijn aan
+ * RACK_SLOTS in batch-engine/vla/warehouse.py: de engine kiest het vak en zet
+ * het op de HU; L1 vult de eerste helft (RACK_ZONE_SLOTS), L2 de tweede.
  */
 export const RACK = {
-  rows: [-6.9, -4.3, -1.7, 0.9] as number[],
+  rows: [-6.9, -4.3, -1.7, 0.9, -9.5, -12.1, -15.3, -17.9] as number[],
   xStart: 18.4,
   slotsPerRow: 6,
   pitch: 1.75,
@@ -88,6 +94,7 @@ export const RACK = {
   depth: 1.1,
 };
 export const RACK_SLOTS = RACK.rows.length * RACK.slotsPerRow * RACK.levels;
+export const RACK_ZONE_SLOTS = RACK_SLOTS / 2;
 
 /** Hoogte van de onderkant van een pallet op een niveau. */
 export function rackLevelY(level: number): number {
@@ -108,22 +115,33 @@ export function rackSlotPosition(slot: number): Vec3 {
 
 /** Hoofdpad langs de voorgevel, waar de heftruck van en naar de docks rijdt. */
 export const MAIN_AISLE_Z = 3.3;
-/** Waar de heftruck stopt om een pallet in een rij te zetten: de pallet (op CARRY_OFFSET voor de truck) staat dan precies in het vak. */
+/** Pad aan de noordkant, recht tegenover de palletiser van L2. */
+export const L2_AISLE_Z = PALLETISER_L2[2] + (MAIN_AISLE_Z - PALLETISER[2]);
+/** Dwarspad noord-zuid ten oosten van de stellingen, tussen hoofdpad en L2-pad. */
+export const SPINE_X = 29.6;
+
+/** Vanaf welk pad een rij bereikt wordt, en waar de truck stopt zodat de pallet (op CARRY_OFFSET) precies in het vak staat. */
+export function rowAccess(row: number): { aisle: number; stop: number } {
+  const z = RACK.rows[row] ?? 0;
+  if (row < 4) return { aisle: MAIN_AISLE_Z, stop: z + 1.3 };
+  return z > L2_AISLE_Z ? { aisle: L2_AISLE_Z, stop: z - 1.3 } : { aisle: L2_AISLE_Z, stop: z + 1.3 };
+}
 export function aisleStopZ(row: number): number {
-  return (RACK.rows[row] ?? 0) + 1.3;
+  return rowAccess(row).stop;
 }
 /** De pallet op de draaitafel van de palletiser. */
 export const PALLETISER_PICK: [number, number] = [PALLETISER[0], PALLETISER[2]];
+export const PALLETISER_PICK_L2: [number, number] = [PALLETISER_L2[0], PALLETISER_L2[2]];
 
-export const MAX_DOCKS = 4;
+export const MAX_DOCKS = 6;
 /** Docks aan de zuidgevel van het koelmagazijn; trucks staan er met de neus naar de weg. */
 export function dockPosition(i: number): Vec3 {
   return [18.5 + i * 3.4, 0, COLDSTORE.max[1]];
 }
 
 export const ROAD_Z = 13;
-export const ROAD_X = [-34, 46] as [number, number];
+export const ROAD_X = [-40, 48] as [number, number];
 
 /** Twee hallen hoog en laag in beeld: het doel schuift naar het midden tussen hal 1 en hal 2. */
-export const CAMERA_HOME: Vec3 = [33, 54, 60];
-export const CAMERA_TARGET: Vec3 = [5, 0, -5];
+export const CAMERA_HOME: Vec3 = [25, 60, 66];
+export const CAMERA_TARGET: Vec3 = [-4, 0, -6];

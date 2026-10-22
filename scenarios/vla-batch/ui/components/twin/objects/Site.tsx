@@ -74,7 +74,8 @@ function HallProps({ x0, x1, z0, z1 }: { x0: number; x1: number; z0: number; z1:
 }
 
 /**
- * Voorbereidingsruimte tussen de hallen: vloer, lage wand en bord. De
+ * Voorbereidingsruimte west van de hallen, op het oude siloplein: vloer,
+ * lage wanden en bord. De
  * stations zelf (klikbaar, met status) staan in Prep.tsx.
  */
 function PrepRoomShell() {
@@ -96,10 +97,14 @@ function PrepRoomShell() {
           roughness={0.85}
         />
       </mesh>
-      {/* lage wanden west en oost, open naar beide hallen voor de premixleidingen */}
-      {[x0, x1].map((x) => (
-        <mesh key={x} position={[x, PREP_ROOM.wall / 2, (z0 + z1) / 2]} castShadow receiveShadow>
-          <boxGeometry args={[0.25, PREP_ROOM.wall, z1 - z0]} />
+      {/* lage wanden west, noord en zuid; oost open naar de hallen voor de premixleidingen */}
+      <mesh position={[x0, PREP_ROOM.wall / 2, (z0 + z1) / 2]} castShadow receiveShadow>
+        <boxGeometry args={[0.25, PREP_ROOM.wall, z1 - z0]} />
+        <meshStandardMaterial color={palette["prep-room"]} metalness={0.3} roughness={0.6} />
+      </mesh>
+      {[z0, z1].map((z) => (
+        <mesh key={z} position={[(x0 + x1) / 2, PREP_ROOM.wall / 2, z]} castShadow receiveShadow>
+          <boxGeometry args={[x1 - x0, PREP_ROOM.wall, 0.25]} />
           <meshStandardMaterial color={palette["prep-room"]} metalness={0.3} roughness={0.6} />
         </mesh>
       ))}

@@ -10,9 +10,11 @@ labels them as simulated in the API (`source: "demo-sim"`).
              the rack. The customer is the one on the batch's customer order
              (autopilot orders carry one); the city is fixed per customer.
              Both are fictitious (anonymisation rule: no real company names).
-  forklifts  HT-01 puts away, HT-02 loads trucks. Each move drains the
-             battery; below CHARGE_BELOW_PCT a truck goes to the charger and
-             the other one takes over its work. Trips reset at midnight.
+  forklifts  four trucks: HT-01 puts away at the L1 palletiser, HT-03 at
+             the L2 palletiser, HT-02 and HT-04 load trucks (whichever had
+             the fewest trips). Each move drains the battery; below
+             CHARGE_BELOW_PCT a truck goes to the charger and another one
+             takes over its work. Trips reset at midnight.
   inbound    one supplier vehicle per raw material, ordered when its silo
              drops below half (en_route -> unloading -> gone): a milk tanker,
              bulk trucks for sugar and starch, a pallet truck for cocoa.
@@ -108,9 +110,11 @@ def destination_of(customer: str) -> tuple[str, int]:
 
 
 class Forklift:
-    def __init__(self, fid: str, role: str, battery: float):
+    def __init__(self, fid: str, role: str, battery: float,
+                 line: Optional[str] = None):
         self.id = fid
         self.role = role
+        self.line = line
         self.battery = battery
         self.charging = False
         self.trips_today = 0
@@ -120,7 +124,7 @@ class Forklift:
     def snapshot(self) -> dict:
         state = "charging" if self.charging else (
             "busy" if self.last_move is not None else "idle")
-        return {"id": self.id, "role": self.role, "state": state,
+        return {"id": self.id, "role": self.role, "line": self.line, "state": state,
                 "battery_pct": round(self.battery, 1),
                 "trips_today": self.trips_today, "last_task": self.last_task,
                 "last_move": self.last_move.isoformat() if self.last_move else None}
@@ -131,8 +135,11 @@ class LogisticsSim:
         self.db = db
         self.operator_id = operator_id
         self.events = events or (lambda *_: None)
-        self.forklifts = {"putaway": Forklift("HT-01", "putaway", 88.0),
-                          "loader": Forklift("HT-02", "loader", 64.0)}
+        # Keys: the putaway truck per line ("putaway" is L1) and two loaders.
+        self.forklifts = {"putaway": Forklift("HT-01", "putaway", 88.0, "L1"),
+                          "loader": Forklift("HT-02", "loader", 64.0),
+                          "putaway-L2": Forklift("HT-03", "putaway", 76.0, "L2"),
+                          "loader-2": Forklift("HT-04", "loader", 52.0)}
         self._clock: Optional[datetime] = None
         self._day: Optional[str] = None
         self._deliveries: dict[str, dict] = {}   # material_id -> current/last vehicle
@@ -159,24 +166,35 @@ class LogisticsSim:
             for f in self.forklifts.values():
                 f.trips_today = 0
 
-    def _worker(self, role: str) -> Forklift:
-        """The truck that does this role now; the other covers while it charges."""
-        own = self.forklifts[role]
-        if not own.charging:
-            return own
-        other = self.forklifts["loader" if role == "putaway" else "putaway"]
-        return other if not other.charging else own
+    def _worker(self, role: str, line: Optional[str] = None) -> Forklift:
+        """The truck that does this move now. Putaway goes to the truck of
+        the line, loading to the loader with the fewest trips today. A truck
+        on the charger is covered by one of the same role, then by any."""
+        if role == "putaway":
+            own = [f for f in self.forklifts.values()
+                   if f.role == "putaway" and f.line == (line or M.DEFAULT_LINE)]
+        else:
+            own = sorted((f for f in self.forklifts.values() if f.role == "loader"),
+                         key=lambda f: f.trips_today)
+        for pool in (own,
+                     [f for f in self.forklifts.values() if f.role == role],
+                     list(self.forklifts.values())):
+            for f in pool:
+                if not f.charging:
+                    return f
+        return own[0] if own else self.forklifts["putaway"]
 
     def record(self, moved: list[str], now: Optional[datetime] = None) -> None:
         """Called with what WarehouseSim.step() did ("putaway HU-..", "ship HU-..")."""
         now = now or datetime.now(timezone.utc)
         self._advance(now)
         for m in moved:
-            kind, _, hu = m.partition(" ")
-            role = {"putaway": "putaway", "ship": "loader"}.get(kind)
+            parts = m.split()
+            role = {"putaway": "putaway", "ship": "loader"}.get(parts[0] if parts else "")
             if role is None:
                 continue
-            f = self._worker(role)
+            line = parts[2] if len(parts) > 2 else None
+            f = self._worker(role, line)
             if not f.charging:
                 # both trucks on the charger (critical): the move happens
                 # anyway, without draining a battery that is charging
@@ -184,9 +202,9 @@ class LogisticsSim:
             f.trips_today += 1
             f.last_task = m
             f.last_move = now
-            other = next(o for o in self.forklifts.values() if o is not f)
+            charger_busy = any(o.charging for o in self.forklifts.values() if o is not f)
             if not f.charging and f.battery < CHARGE_BELOW_PCT and (
-                    not other.charging or f.battery < CHARGE_CRITICAL_PCT):
+                    not charger_busy or f.battery < CHARGE_CRITICAL_PCT):
                 f.charging = True
         if self.db is not None:
             self._supply(now)

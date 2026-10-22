@@ -51,7 +51,8 @@ def test_forklift_charges_and_other_takes_over():
     assert ht1.charging and ht1.trips_today == 1
     logi.record(["putaway HU-2"], T0 + timedelta(seconds=10))
     assert ht1.trips_today == 1
-    assert logi.forklifts["loader"].trips_today == 1
+    # de putaway-truck van L2 (HT-03) neemt het over
+    assert logi.forklifts["putaway-L2"].trips_today == 1
     # charges back up and returns to work
     logi.record([], T0 + timedelta(minutes=30))
     assert not ht1.charging and ht1.battery >= LS.CHARGE_UNTIL_PCT
@@ -83,6 +84,7 @@ def test_second_truck_waits_for_the_charger():
     logi.record(["ship HU-1"], T0)
     assert not ht2.charging            # waits: one charger, HT-01 is on it
     ht2.battery = LS.CHARGE_CRITICAL_PCT - 1
+    logi.forklifts["loader-2"].trips_today = 99   # laadjobs gaan naar de minst gebruikte loader: HT-02
     logi.record(["ship HU-2"], T0 + timedelta(seconds=5))
     assert ht2.charging                # critical: goes anyway
 
@@ -193,6 +195,14 @@ def test_snapshot_is_labelled_demo_sim(monkeypatch):
     logi = LogisticsSim(db, OPERATOR)
     snap = logi.snapshot(T0)
     assert snap["source"] == "demo-sim"
-    assert {f["id"] for f in snap["forklifts"]} == {"HT-01", "HT-02"}
+    assert {f["id"] for f in snap["forklifts"]} == {"HT-01", "HT-02", "HT-03", "HT-04"}
     assert snap["inbound"] is None or snap["inbound"]["kind"] == "melktankwagen"
     assert _hus(db, M.HU_SHIPPED) == []
+
+
+def test_putaway_per_line_goes_to_its_own_truck():
+    logi = LogisticsSim(db=None, operator_id=OPERATOR)
+    logi.record(["putaway HU-1 L1", "putaway HU-2 L2"], T0)
+    assert logi.forklifts["putaway"].trips_today == 1
+    assert logi.forklifts["putaway-L2"].trips_today == 1
+    assert {f.snapshot()["line"] for f in logi.forklifts.values() if f.role == "putaway"} == {"L1", "L2"}

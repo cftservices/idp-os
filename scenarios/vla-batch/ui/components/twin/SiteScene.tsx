@@ -35,36 +35,33 @@ import { positionOf } from "./selection";
 const ACTIVE_STATES = new Set(["DOSING", "COOKING", "COOLING", "FILLING"]);
 
 /*
- * Premixleidingen: een verzamelleiding boven de twee premixtanks, met een
- * aftakking naar de mengtank van L1 (zuid) en die van L2 (noord). Boven de
- * achterwand van hal 1 langs, dus op 3,5 m.
+ * Premixleidingen: een verzamelleiding boven de twee premixtanks in de
+ * voorbereiding (west van de hallen), met een aftakking door de westwand naar
+ * de mengtank van L1 (zuid) en die van L2 (noord). Op 3,5 m.
  */
 const PIPE_Y = 3.5;
+const PREP_X = -18.8;
 const PREMIX_HEADER: Vec3[] = [
-  [-7.6, 2.2, -8.5],
-  [-7.6, PIPE_Y, -8.5],
-  [-4.6, PIPE_Y, -8.5],
-  [-4.6, 2.2, -8.5],
+  [PREP_X, 2.2, -6.1],
+  [PREP_X, PIPE_Y, -6.1],
+  [PREP_X, PIPE_Y, -3.1],
+  [PREP_X, 2.2, -3.1],
 ];
 const PREMIX_TO_L1: Vec3[] = [
-  [-6, PIPE_Y, -8.5],
+  [PREP_X, PIPE_Y, -4.6],
+  [-6, PIPE_Y, -4.6],
   [-6, PIPE_Y, -1.3],
 ];
 const PREMIX_TO_L2: Vec3[] = [
-  [-6, PIPE_Y, -8.5],
+  [PREP_X, PIPE_Y, -6.1],
+  [-15, PIPE_Y, -6.1],
+  [-15, PIPE_Y, HALL2_Z + 1.3],
   [-6, PIPE_Y, HALL2_Z + 1.3],
 ];
-/** Band van de weegstations naar de premixtanks. */
+/** Band van de weegstations naar de premixtanks, langs de oostkant van de ruimte. */
 const WEIGH_BELT: Vec3[] = [
-  [-12.4, 0.7, -9.7],
-  [-4.6, 0.7, -9.7],
-];
-/** L2-uitvoer: van de vuller in hal 2 naar de westwand van hetzelfde koelmagazijn. */
-const L2_OUTFEED: Vec3[] = [
-  [12.3, 0.74, HALL2_Z],
-  [14.8, 0.74, HALL2_Z],
-  [14.8, 0.74, -6],
-  [16.1, 0.74, -6],
+  [-17.4, 0.7, -11],
+  [-17.4, 0.7, -6.1],
 ];
 
 /**
@@ -186,6 +183,12 @@ export default function SiteScene({
   const xs = LINE_EQUIPMENT.map((e) => e.pos[0]);
   const lv = model.logisticsVisual;
   const transit = useRef(new Set<string>());
+  const forks = model.sim?.forklifts ?? [];
+  const putaways = {
+    L1: forks.find((f) => f.role === "putaway" && (f.line ?? "L1") === "L1"),
+    L2: forks.find((f) => f.role === "putaway" && f.line === "L2"),
+  };
+  const loaders = forks.filter((f) => f.role === "loader");
 
   return (
     <Canvas
@@ -236,7 +239,7 @@ export default function SiteScene({
           <ProcessPipe key={x} from={x + 1.2} to={xs[i + 1] - 1.2} flowing={flowing} />
         ))}
 
-        {/* Hal 2: lijn L2, dezelfde machines met -02, en de uitvoer naar het koelmagazijn. */}
+        {/* Hal 2: lijn L2, dezelfde machines met -02 en een eigen palletiser. */}
         {l2.equipment.map((eq) => (
           <EquipmentObject key={eq.id} eq={eq} batchState={l2.batch?.state ?? null} packColor={l2Pack} />
         ))}
@@ -245,9 +248,8 @@ export default function SiteScene({
             <ProcessPipe key={x} from={x + 1.2} to={xs[i + 1] - 1.2} flowing={flowing2} />
           ))}
         </group>
-        <Conveyor points={L2_OUTFEED} color={l2Pack} running={l2.batch?.state === "FILLING"} />
 
-        {/* Voorbereiding tussen de hallen: afwegen, premix, en de leidingen naar beide mengtanks. */}
+        {/* Voorbereiding west van de hallen: afwegen, premix, en de leidingen naar beide mengtanks. */}
         {model.prep.map((st) => (
           <PrepStationObject key={st.id} st={st} />
         ))}
@@ -256,9 +258,12 @@ export default function SiteScene({
         <PolyPipe points={PREMIX_TO_L1} flowing={model.batch?.state === "DOSING"} />
         <PolyPipe points={PREMIX_TO_L2} flowing={l2.batch?.state === "DOSING"} />
 
-        <Palletiser logistics={model.logistics} visual={lv.palletiser} />
-        <PutawayForklift logistics={model.logistics} transit={transit} sim={model.sim?.forklifts.find((f) => f.role === "putaway")} />
-        <LoaderForklift logistics={model.logistics} transit={transit} sim={model.sim?.forklifts.find((f) => f.role === "loader")} />
+        <Palletiser logistics={model.logistics} visual={lv.palletiser} line="L1" />
+        <Palletiser logistics={model.logistics} visual={lv.palletiserL2} line="L2" />
+        <PutawayForklift logistics={model.logistics} transit={transit} line="L1" sim={putaways.L1} />
+        <PutawayForklift logistics={model.logistics} transit={transit} line="L2" sim={putaways.L2} />
+        <LoaderForklift logistics={model.logistics} transit={transit} index={0} sim={loaders[0]} />
+        <LoaderForklift logistics={model.logistics} transit={transit} index={1} sim={loaders[1]} />
         <ColdStore logistics={model.logistics} visual={lv.coldstore} transit={transit} />
 
         {Array.from({ length: MAX_DOCKS }, (_, i) => {

@@ -6,9 +6,11 @@ the same APPROVED gate, events and checks apply as for a manual booking. It
 paces itself on the wall clock and moves at most one HU per stage per tick,
 so the rack fills and drains gradually instead of jumping:
 
-  wrap     one pallet every WRAP_EVERY_S from the oldest recently completed
-           autopilot batch (palletiser), until its packs are on pallets;
-  putaway  the oldest wrapped HU after WRAP_DWELL_S, into a free rack slot;
+  wrap     per line one pallet every WRAP_EVERY_S from the oldest recently
+           completed autopilot batch of that line (each line has its own
+           conveyor and palletiser), until its packs are on pallets;
+  putaway  per line the oldest wrapped HU after WRAP_DWELL_S, into a free
+           rack slot (each line has its own putaway forklift);
   ship     a batch whose pallets have all been in the cold store for
            STORE_DWELL_S is loaded one HU per SHIP_EVERY_S (one truck at a
            time); a nearly full rack ships the oldest batch earlier.
@@ -29,7 +31,7 @@ from . import model as M
 log = logging.getLogger("vla.warehouse")
 
 PACKS_PER_PALLET = 480      # 1 L packs: 12 per tray, 40 trays per pallet
-RACK_SLOTS = 96             # must match RACK_SLOTS in ui/lib/twin/layout.ts
+RACK_SLOTS = 192            # must match RACK_SLOTS in ui/lib/twin/layout.ts
 WRAP_EVERY_S = 9.0
 WRAP_DWELL_S = 5.0
 PUTAWAY_EVERY_S = 9.0
@@ -41,7 +43,9 @@ LOOKBACK_S = 15 * 60.0      # older completed batches are not palletised
 # shipment stays visible as "delivered" after its drive time (was 30 min:
 # the delivery history vanished almost as soon as it arrived).
 KEEP_SHIPPED_S = 2 * 60 * 60.0
-MAX_AT_PALLETISER = 4
+MAX_AT_PALLETISER = 4       # per line
+ZONE_SLOTS = 96             # first half of the rack belongs to L1 (ui: RACK_ZONE_SLOTS)
+LINES = ("L1", "L2")
 PRESSURE_FREE_SLOTS = 12
 
 
@@ -77,7 +81,10 @@ class WarehouseSim:
         hus = [h for h in self.db.dw_handling_units.find({})
                if h.get("operator_id") == self.operator_id]
         done = []
-        for stage in (self._ship, self._putaway, self._wrap):
+        stages = [self._ship]
+        stages += [lambda h, n, ln=ln: self._putaway(h, n, ln) for ln in LINES]
+        stages += [lambda h, n, ln=ln: self._wrap(h, n, ln) for ln in LINES]
+        for stage in stages:
             r = stage(hus, now)
             if r:
                 done.append(r)
@@ -90,17 +97,22 @@ class WarehouseSim:
 
     # ---------------------------------------------------------------- stages
 
-    def _wrap(self, hus: list[dict], now: datetime) -> Optional[str]:
-        if not self._due("wrap", now, WRAP_EVERY_S):
+    @staticmethod
+    def _line(hu: dict) -> str:
+        return hu.get("line") or M.DEFAULT_LINE
+
+    def _wrap(self, hus: list[dict], now: datetime, line: str = M.DEFAULT_LINE) -> Optional[str]:
+        if not self._due(f"wrap:{line}", now, WRAP_EVERY_S):
             return None
-        if sum(1 for h in hus if h["status"] == M.HU_WRAPPED) >= MAX_AT_PALLETISER:
+        if sum(1 for h in hus if h["status"] == M.HU_WRAPPED
+               and self._line(h) == line) >= MAX_AT_PALLETISER:
             return None
         cutoff = now - timedelta(seconds=LOOKBACK_S)
         candidates = []
         for b in self.db.dw_batches.find({"created_by": self.operator_id}):
             done_at = _parse(b.get("completed_at"))
             if b.get("state") != M.COMPLETE or b.get("verdict") != M.APPROVED \
-                    or done_at is None or done_at < cutoff:
+                    or done_at is None or done_at < cutoff or M.line_of_doc(b) != line:
                 continue
             on_pallets = sum(int(h["packs_count"]) for h in
                              self.db.dw_handling_units.find({"batch_id": b["batch_id"]}))
@@ -112,13 +124,14 @@ class WarehouseSim:
         _, batch_id, left = min(candidates)
         hu = self.handling.create_hu(batch_id, min(PACKS_PER_PALLET, left),
                                      self.operator_id)
-        self._mark("wrap", now)
-        return f"wrap {hu['hu_id']}"
+        self._mark(f"wrap:{line}", now)
+        return f"wrap {hu['hu_id']} {line}"
 
-    def _putaway(self, hus: list[dict], now: datetime) -> Optional[str]:
-        if not self._due("putaway", now, PUTAWAY_EVERY_S):
+    def _putaway(self, hus: list[dict], now: datetime, line: str = M.DEFAULT_LINE) -> Optional[str]:
+        if not self._due(f"putaway:{line}", now, PUTAWAY_EVERY_S):
             return None
         wrapped = sorted((h for h in hus if h["status"] == M.HU_WRAPPED
+                          and self._line(h) == line
                           and (_parse(h["ts"]) or now) <= now - timedelta(seconds=WRAP_DWELL_S)),
                          key=lambda h: (h["ts"], h["hu_id"]))
         if not wrapped:
@@ -127,11 +140,14 @@ class WarehouseSim:
         free = [s for s in range(RACK_SLOTS) if s not in used]
         if not free:
             return None
+        # Zones: L1 fills the southern rows (slots 0..ZONE_SLOTS-1), L2 the
+        # northern rows next to its palletiser; a full zone spills over.
+        zone = [s for s in free if (s < ZONE_SLOTS) == (line == M.DEFAULT_LINE)]
         hu = wrapped[0]
         self.handling.putaway(hu["hu_id"], self.operator_id,
-                              slot=self.rng.choice(free))
-        self._mark("putaway", now)
-        return f"putaway {hu['hu_id']}"
+                              slot=self.rng.choice(zone or free))
+        self._mark(f"putaway:{line}", now)
+        return f"putaway {hu['hu_id']} {line}"
 
     def _ship(self, hus: list[dict], now: datetime) -> Optional[str]:
         if not self._due("ship", now, SHIP_EVERY_S):

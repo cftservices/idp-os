@@ -159,7 +159,21 @@ export type Hu = {
   ts: string;
   /** Stellingvak, gezet door de magazijnstroom van de engine. */
   slot?: number | null;
+  /** Lijn waarvan de pallet komt; oude HU's zonder veld zijn van L1. */
+  line?: string | null;
 };
+
+export const LOGISTICS_LINES = ["L1", "L2"] as const;
+export type LogisticsLine = (typeof LOGISTICS_LINES)[number];
+export function huLine(hu: Pick<Hu, "line">): LogisticsLine {
+  return hu.line === "L2" ? "L2" : "L1";
+}
+/** Welke van de twee laadtrucks een pallet uitlaadt: vast per HU, zodat beide rijden. */
+export function loaderOf(hu: Pick<Hu, "hu_id">): 0 | 1 {
+  let h = 0;
+  for (let i = 0; i < hu.hu_id.length; i++) h = (h * 31 + hu.hu_id.charCodeAt(i)) >>> 0;
+  return (h % 2) as 0 | 1;
+}
 
 export type DockSlot = {
   dock: number;
@@ -178,14 +192,20 @@ export type Departure = { batch_id: string; hus: number; packs: number; ts: stri
 export type Move = { hu: Hu; slot: number; dock?: number };
 
 export type Logistics = {
+  /** Alle gewikkelde pallets, beide lijnen; per lijn in `palletisers`. */
   palletiser: Hu[];
+  palletisers: Record<LogisticsLine, Hu[]>;
   rack: Array<{ slot: number; hu: Hu }>;
   rackOverflow: number;
   docks: DockSlot[];
   docksOverflow: number;
   departures: Departure[];
   lastPutaway: Move | null;
+  /** Laatste putaway per lijn: elke lijn heeft een eigen heftruck. */
+  lastPutawayByLine: Record<LogisticsLine, Move | null>;
   lastLoad: Move | null;
+  /** Laatste laadrit per laadtruck (zie loaderOf). */
+  lastLoads: [Move | null, Move | null];
   totals: { wrapped: number; stored: number; shipped: number; packsStored: number };
 };
 
@@ -311,21 +331,38 @@ export function deriveLogistics(hus: Hu[] | null | undefined, now: number): Logi
   departures.sort((a, b) => a.ageMs - b.ageMs);
 
   const newest = (hs: Hu[]) => hs.reduce<Hu | null>((m, h) => (!m || t(h.ts) > t(m.ts) ? h : m), null);
-  const putHu = newest(rack.map((r) => r.hu));
-  const lastPutaway = putHu ? { hu: putHu, slot: slotOf.get(putHu.hu_id)! } : null;
-  const loadHu = newest(shipped.filter((h) => validSlot(h.slot)));
-  const loadDock = loadHu ? docks.find((d) => d.batch_id === loadHu.batch_id) : undefined;
-  const lastLoad = loadHu && loadDock ? { hu: loadHu, slot: loadHu.slot as number, dock: loadDock.dock } : null;
+  const putOf = (hs: Hu[]): Move | null => {
+    const h = newest(hs);
+    return h ? { hu: h, slot: slotOf.get(h.hu_id)! } : null;
+  };
+  const lastPutaway = putOf(rack.map((r) => r.hu));
+  const lastPutawayByLine = {
+    L1: putOf(rack.map((r) => r.hu).filter((h) => huLine(h) === "L1")),
+    L2: putOf(rack.map((r) => r.hu).filter((h) => huLine(h) === "L2")),
+  };
+  const loadOf = (hs: Hu[]): Move | null => {
+    const h = newest(hs.filter((x) => validSlot(x.slot)));
+    const d = h ? docks.find((x) => x.batch_id === h.batch_id) : undefined;
+    return h && d ? { hu: h, slot: h.slot as number, dock: d.dock } : null;
+  };
+  const lastLoad = loadOf(shipped);
+  const lastLoads: [Move | null, Move | null] = [
+    loadOf(shipped.filter((h) => loaderOf(h) === 0)),
+    loadOf(shipped.filter((h) => loaderOf(h) === 1)),
+  ];
 
   return {
     palletiser: wrapped,
+    palletisers: { L1: wrapped.filter((h) => huLine(h) === "L1"), L2: wrapped.filter((h) => huLine(h) === "L2") },
     rack,
     rackOverflow: overflow,
     docks,
     docksOverflow: Math.max(0, atDock.length - MAX_DOCKS),
     departures,
     lastPutaway,
+    lastPutawayByLine,
     lastLoad,
+    lastLoads,
     totals: {
       wrapped: wrapped.length,
       stored: stored.length,
@@ -346,15 +383,13 @@ export function departureProgress(ageMs: number): number {
  */
 export function logisticsVisuals(log: Logistics, available: boolean, engineReachable: boolean | null) {
   const none = visual("unknown", "geen data", []);
-  if (!available) return { palletiser: none, coldstore: none, dock: none, truck: none };
+  if (!available) return { palletiser: none, palletiserL2: none, coldstore: none, dock: none, truck: none };
   const stale = engineReachable === false;
   const st = (v: Visual) => (stale ? visual("stale", "verouderd", ["engine niet bereikbaar"]) : v);
+  const pal = (hs: Hu[]) => (hs.length > 0 ? visual("run", `${hs.length} HU gewikkeld`, []) : visual("idle", "geen pallets", []));
   return {
-    palletiser: st(
-      log.totals.wrapped > 0
-        ? visual("run", `${log.totals.wrapped} HU gewikkeld`, [])
-        : visual("idle", "geen pallets", []),
-    ),
+    palletiser: st(pal(log.palletisers?.L1 ?? log.palletiser)),
+    palletiserL2: st(pal(log.palletisers?.L2 ?? [])),
     coldstore: st(
       log.rackOverflow > 0
         ? visual("warn", "stelling vol", [`${log.rackOverflow} HU buiten de getekende vakken`])

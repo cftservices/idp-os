@@ -121,7 +121,7 @@ const PREP_ROWS = PREP_STATIONS.map((s) => s.id);
 const PREP_BOARD: Vec3 = [
   PREP_STATIONS.reduce((a, s) => a + s.pos[0], 0) / PREP_STATIONS.length,
   0,
-  PREP_STATIONS[0].pos[2],
+  PREP_STATIONS.reduce((a, s) => a + s.pos[2], 0) / PREP_STATIONS.length,
 ];
 
 /** Chipje voor een station met een set: state · product · lijn. */
