@@ -26,6 +26,12 @@ DOMEIN=${DOMEIN:-milkdemo.techflow24.com}
 UPSTREAM=${UPSTREAM:-vla-ui:3000}
 GRAFANA_UPSTREAM=${GRAFANA_UPSTREAM:-grafana:3000}
 AUTH_FILE=${AUTH_FILE:-/root/idp-os/.milkdemo-auth}
+# Losse hostnamen. grafana.* verwijst door naar /grafana (Grafana kent maar één root_url);
+# tdengine.* is taos-explorer, achter hetzelfde basic-auth-slot plus de TDengine-login.
+GRAFANA_DOMEIN=${GRAFANA_DOMEIN:-grafana.techflow24.com}
+TDENGINE_DOMEIN=${TDENGINE_DOMEIN:-tdengine.techflow24.com}
+TDENGINE_UPSTREAM=${TDENGINE_UPSTREAM:-vla-tdengine:6060}
+GATE_FILE=${GATE_FILE:-/root/idp-os/.tdengine-gate}
 
 BEGIN="# >>> vla begin (beheerd door attach-ingress-caddy.sh, niet met de hand bewerken)"
 EIND="# <<< vla eind"
@@ -43,6 +49,15 @@ AUTH_PASS=$(cut -d: -f2- "$AUTH_FILE")
 # niet opnieuw. Een $$-escape in de waarde komt dus als $$ in de Caddyfile,
 # en dan weigert basic_auth elk wachtwoord met een kale 401.
 AUTH_HASH=$(docker exec "$CADDY_CONTAINER" caddy hash-password --plaintext "$AUTH_PASS" < /dev/null)
+# taos-explorer zet bij elke API-aanroep zijn eigen Authorization-header, dus basic auth
+# kan alleen de eerste stap bewaken. Wie die passeert krijgt een geheime cookie; verzoeken
+# mét die cookie gaan zonder basic auth door. Alleen [A-Za-z0-9], zodat hij letterlijk in
+# een regex past.
+if [ ! -f "$GATE_FILE" ]; then
+    (umask 077; openssl rand -hex 24 > "$GATE_FILE")
+    echo "• nieuwe toegangscookie gegenereerd in ${GATE_FILE}"
+fi
+GATE=$(tr -dc 'A-Za-z0-9' < "$GATE_FILE")
 
 # --- 1. netwerk ------------------------------------------------------------
 docker network inspect "$NETWERK" >/dev/null 2>&1 \
@@ -76,16 +91,18 @@ with open(pad, "w", encoding="utf-8") as bestand:  # zelfde inode
     bestand.writelines(uit)
 PY
 
-if grep -q "^[[:space:]]*${DOMEIN}[[:space:]]*{" "$CADDYFILE"; then
-    echo "FOUT: ${DOMEIN} staat al in de Caddyfile buiten ons blok." >&2
-    cp -- "${CADDYFILE}.voor-vla" "$CADDYFILE"
-    exit 1
-fi
+for host in "$DOMEIN" "$GRAFANA_DOMEIN" "$TDENGINE_DOMEIN"; do
+    if grep -q "^[[:space:]]*${host}[[:space:]]*{" "$CADDYFILE"; then
+        echo "FOUT: ${host} staat al in de Caddyfile buiten ons blok." >&2
+        cp -- "${CADDYFILE}.voor-vla" "$CADDYFILE"
+        exit 1
+    fi
+done
 
 vul_in() {
     python3 -c 'import os, string, sys; sys.stdout.write(string.Template(sys.stdin.read()).safe_substitute(os.environ))'
 }
-export BEGIN EIND DOMEIN UPSTREAM GRAFANA_UPSTREAM AUTH_USER AUTH_HASH
+export BEGIN EIND DOMEIN UPSTREAM GRAFANA_UPSTREAM AUTH_USER AUTH_HASH GRAFANA_DOMEIN TDENGINE_DOMEIN TDENGINE_UPSTREAM GATE
 
 vul_in >> "$CADDYFILE" <<'SJABLOON'
 
@@ -131,9 +148,49 @@ ${DOMEIN} {
 		-Server
 	}
 }
+
+# Grafana kent één root_url (milkdemo/grafana); doorverwijzen in plaats van een tweede
+# ingang met eigen cookies. Het pad gaat mee: /d/<uid> → /grafana/d/<uid>.
+${GRAFANA_DOMEIN} {
+	redir https://${DOMEIN}/grafana{uri} 302
+	header -Server
+}
+
+# taos-explorer. Slot 1: basic auth, die bij succes de toegangscookie zet. Slot 2: de
+# TDengine-login van explorer zelf (gebruiker uit de database). De API-aanroepen van
+# explorer dragen hun eigen Authorization-header en komen binnen op de cookie.
+${TDENGINE_DOMEIN} {
+	encode zstd gzip
+
+	@poort header_regexp vlagate Cookie (^|;\s*)vla_gate=${GATE}(;|$)
+	handle @poort {
+		reverse_proxy ${TDENGINE_UPSTREAM} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		basic_auth {
+			${AUTH_USER} ${AUTH_HASH}
+		}
+		header Set-Cookie "vla_gate=${GATE}; Path=/; Max-Age=43200; Secure; HttpOnly; SameSite=Strict"
+		reverse_proxy ${TDENGINE_UPSTREAM} {
+			header_up -Authorization
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
 ${EIND}
 SJABLOON
-echo "• vla-blok toegevoegd voor ${DOMEIN} → ${UPSTREAM} (+ /grafana → ${GRAFANA_UPSTREAM})"
+echo "• vla-blok toegevoegd voor ${DOMEIN} → ${UPSTREAM} (+ /grafana → ${GRAFANA_UPSTREAM}), ${GRAFANA_DOMEIN} → doorverwijzing, ${TDENGINE_DOMEIN} → ${TDENGINE_UPSTREAM}"
 
 # --- 3. controleren en herladen --------------------------------------------
 if ! docker exec "$CADDY_CONTAINER" caddy validate --config /etc/caddy/Caddyfile \
