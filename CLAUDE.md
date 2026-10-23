@@ -80,7 +80,8 @@
 | Next.js webapp | techflow24.com | Live PLC data dashboard |
 | MonsterMQ | mqtt.techflow24.com | MQTT broker + OPC-UA client + web UI |
 | FastAPI | api.techflow24.com | REST API voor process data (Grafana datasource) |
-| Grafana | milkdemo.techflow24.com/grafana | Time-series dashboards + ad-hoc queries (`grafana.*` heeft geen vhost meer) |
+| Grafana | milkdemo.techflow24.com/grafana | Time-series dashboards + ad-hoc queries (`grafana.techflow24.com` verwijst hierheen) |
+| TDengine explorer | tdengine.techflow24.com | Ruwe historian-data; basic auth + TDengine-login (zie `scenarios/vla-batch/DEPLOY.md`) |
 | Portainer | portainer.techflow24.com | Container management UI |
 | OPC-UA sim | intern (port 4840) | 3 gesimuleerde PLCs (asyncua) |
 | MongoDB | intern | Process data store |
@@ -195,6 +196,13 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
 ---
 
 ## Changelog
+
+### 2026-10-23: grafana.* en tdengine.* werkend
+- **Nieuw:** `grafana.techflow24.com` verwijst door naar `milkdemo…/grafana`; `tdengine.techflow24.com`
+  toont taos-explorer achter basic auth plus een geheim gate-cookie, daarna de TDengine-login
+  (`deploy/attach-ingress-caddy.sh`)
+- **Les:** TDengine OSS 3.3.6 handhaaft `grant read`/`createdb 0` niet — het account `lezer` kan
+  gewoon schrijven. Beveiliging zit in het slot ervoor, niet in TDengine-rechten.
 
 ### 2026-10-22: vla-batch beheer, Grafana, lokale AI
 - **Nieuw:** `deploy/stack.sh` — offline, online, back-up en herstel van de hele stack in één commando

@@ -50,6 +50,21 @@ Caddyfile wordt geschreven door [`deploy/attach-ingress-caddy.sh`](deploy/attach
 - `/api/ui/model` → zonder login (healthcheck)
 - `/grafana*` → `grafana:3000`, achter dezelfde basic auth **én** de eigen Grafana-login. De
   proxy haalt de `Authorization`-header weg, zodat het demowachtwoord nooit een Grafana-login is.
+- `grafana.<domain>` → 302 naar `milkdemo.<domain>/grafana{uri}` (Grafana kent één `root_url`,
+  dus dit is een doorverwijzing, geen tweede ingang).
+- `tdengine.<domain>` → `vla-tdengine:6060` (taos-explorer), achter een **dubbel slot**:
+  1. Basic auth (zelfde `demo`-account). Na succes zet Caddy het cookie `vla_gate`
+     (geheim uit `/root/idp-os/.tdengine-gate`, 48 hex, `Secure; HttpOnly; SameSite=Strict`,
+     12 uur). Met dat cookie mag een verzoek zonder basic auth door, want de explorer zet op
+     elke API-aanroep zijn eigen `Authorization`-header en zou anders met basic auth botsen.
+  2. De TDengine-login van de explorer: gebruiker `lezer` (wachtwoord in
+     `/root/idp-os/.tdengine-lezer`) of `root` (`TD_PASS` in `.env`).
+  - ⚠ **`lezer` is géén alleen-lezenaccount.** Gemeten op 2026-10-23: TDengine OSS 3.3.6
+    handhaaft `grant read` en `createdb 0` niet; `create database` en `create table` slagen
+    gewoon. Het verschil met root: geen gebruikersbeheer en `sysinfo 0`. De bescherming zit
+    dus in het slot ervoor, niet in de rechten.
+  - Getest van buitenaf: zonder auth, met fout wachtwoord en met een nepcookie 401; zonder
+    cookie op `/rest/sql` 401; `root:taosdata` geweigerd.
 - ⚠ Nooit de Caddyfile met de hand bewerken: bind-mount op een inode.
 
 **Beveiliging (gecontroleerd 2026-10-22, van buitenaf).** Alle interne poorten zijn dicht;
@@ -58,7 +73,8 @@ de 0.0.0.0-poorten van `aios-openfga` en `portainer` worden door `DOCKER-USER` g
 anoniem uit, sign-up uit, eigen basic-auth uit, cookie `Secure` + `SameSite=Strict`, geen
 externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
 
-**Secrets** staan alleen op de VPS: `/root/idp-os/.env` en `/root/idp-os/.milkdemo-auth`.
+**Secrets** staan alleen op de VPS: `/root/idp-os/.env`, `/root/idp-os/.milkdemo-auth`,
+`/root/idp-os/.tdengine-gate` en `/root/idp-os/.tdengine-lezer`.
 `stack.sh backup` neemt ze mee (chmod 600) maar ze gaan nooit in git.
 
 ### Offline halen en terugzetten
@@ -94,9 +110,8 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
 ### Fabrieksdashboards (Grafana)
 
 Zeven dashboards in de map *Vla Batch Demo*, op `https://milkdemo.<domain>/grafana/d/<uid>`
-(basic auth plus Grafana-login). `grafana.<domain>` heeft geen vhost meer; het DNS-record is
-een overblijfsel uit de Traefik-tijd. TDengine heeft bewust géén publieke URL (alleen via een
-ssh-tunnel naar `127.0.0.1:6041`).
+(basic auth plus Grafana-login); `https://grafana.<domain>/d/<uid>` verwijst daarheen door.
+De ruwe TDengine-data bekijk je in de explorer op `https://tdengine.<domain>` (zie *Ingress*).
 
 | uid | Inhoud | Bron |
 |---|---|---|
