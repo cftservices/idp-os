@@ -197,6 +197,22 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
 
 ## Changelog
 
+### 2026-11-17: autopilot hersteld, spreiding, koppeling met aios CI
+- **Autopilot stond sinds 29-10 (L1) en 31-10 (L2) stil.** Oorzaak: een CBM-werkorder en een
+  storingswerkorder deelden een nummer; de update op `wo_id` raakte steeds het CBM-document, de
+  storing bleef `reported`, de machine `Down`, de autopilot wachtte op reparatie. Fix in
+  `batch-engine/vla/cmms.py`: update per document (equipment, kind, reported_at), unieke nummers
+  van 8 tekens, unieke index op `wo_id`. Data: twee CBM-orders hernummerd (`renumbered_from`),
+  back-up `/root/backups/vla-wo-backup-20261117.json`. Les: een fabriek die "busy" meldt is niet
+  per se de oorzaak; meet de fabriek rechtstreeks (OPC-UA) en de bus apart.
+- **`SIM_VARIATION`** in `factory/physics.py` (aan in `docker-compose.vla.yml`, seed 46/47): per
+  batch kleine spreiding in kooktemperatuur en verstijfseling. Zonder dit eindigt elke goede batch
+  op precies 260,0 cP en heeft SPC niets te tonen.
+- **`vla-ci-sync`** (`ci-sync/`): pusht batchhistorie en dagelijkse KPI-inputs naar de aios-workspace
+  "DairyWorks (demo)" (Continuous Improvement). Token in `ci-sync/.env`, niet in git.
+- **Scenario** `scripts/scenario_steam_valve.py` (container `vla-scenario-8d`): vastlopende
+  stoomklep op L1 voor een 8D-demo; antwoordsleutel in `/root/vla-scenario-logs/`.
+
 ### 2026-10-23: grafana.* en tdengine.* werkend
 - **Nieuw:** `grafana.techflow24.com` verwijst door naar `milkdemo…/grafana`; `tdengine.techflow24.com`
   toont taos-explorer achter basic auth plus een geheim gate-cookie, daarna de TDengine-login
