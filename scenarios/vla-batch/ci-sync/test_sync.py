@@ -58,7 +58,9 @@ class FakeAios:
             return [a for a in self.analyses if a["worksheet_id"] == wid]
         if method == "POST" and path.endswith("/analyses"):
             self.analyses.append({"analysis_id": body["analysis_id"], "created_at": "2026-11-17T08:00:00",
-                                  "channel": "api", "worksheet_id": body["worksheet_id"]})
+                                  "channel": "api", "worksheet_id": body["worksheet_id"],
+                                  # the server fills in defaults; ours must still match as a subset
+                                  "params": {**body["params"], "tests": [1, 2, 5, 6]}})
             return {}
         if method == "GET" and path.endswith("/worksheets"):
             return [{"id": s["id"], "name": n} for n, s in self.sheets.items()]
@@ -155,9 +157,20 @@ def test_daily_runs_once_per_day() -> None:
     sync = S.Sync(eng, aios, "ws", ["L1"], scale=15.0, ideal=S.parse_ideal("L1:10042"), now=now)
     sync.run_once()
     first = sync.run_daily()
-    assert sum(v == "ran" for v in first.values()) == 5  # 3 KPI series, I-MR, capability
+    # 3 KPI series, I-MR viscosity, I-MR cook temperature, capability
+    assert sum(v == "ran" for v in first.values()) == 6, first
+    assert "daily Vla L1 · batches / imr_chart peak_cook_temp_C" in first
     second = sync.run_daily()
     assert all(v == "already ran today" for v in second.values())
+
+
+def test_same_run_tells_the_two_imr_charts_apart() -> None:
+    stored = {"analysis_id": "imr_chart", "params": {"column": "end_viscosity_cP", "label_column": "batch_id",
+                                                     "base_n": 20, "tests": [1, 2, 5, 6]}}
+    assert S.same_run(stored, "imr_chart", {"column": "end_viscosity_cP", "label_column": "batch_id", "base_n": 20})
+    assert not S.same_run(stored, "imr_chart", {"column": "peak_cook_temp_C", "label_column": "batch_id", "base_n": 20})
+    assert not S.same_run(stored, "capability_normal", {"column": "end_viscosity_cP"})
+    assert not S.same_run({"analysis_id": "imr_chart"}, "imr_chart", {"column": "end_viscosity_cP"})
 
 
 def test_planned_hours_of_a_running_day_end_at_the_last_completed_batch() -> None:

@@ -15,9 +15,12 @@ Worksheets per line (L1, L2):
   "Vla <line> · KPI-PRD-001 OEE"              per day: the five OEE inputs (only with an ideal rate)
 
 Once per UTC day (the first sync of the day) the sync also runs and stores the daily analyses
-in aios: the KPI series of every KPI worksheet, and an I-MR chart and a capability analysis
-against the recipe spec on the viscosity of each line. A day that already has its run is
-skipped, so a restart does not run it twice. SYNC_DAILY_RUNS=0 switches this off.
+in aios: the KPI series of every KPI worksheet, an I-MR chart and a capability analysis against
+the recipe spec on the viscosity of each line, and an I-MR chart on the peak cook temperature
+(the cause, which signals before the viscosity does: first 8D, 2026-11-17). The I-MR limits come
+from the first DAILY_BASE_N batches and are then held, so a later incident does not widen them.
+A day that already has a run with the same analysis and parameters is skipped, so a restart does
+not run it twice. SYNC_DAILY_RUNS=0 switches this off.
 
 Pack counts follow the factory: packs_total counts GOOD packs only, filled = packs_total +
 reject_count. OEE times are process hours: wall-clock hours times SYNC_TIME_SCALE (the demo runs
@@ -220,6 +223,19 @@ def daily_oee(rows: list[dict[str, Any]], since: str, now: datetime, scale: floa
     ]
 
 
+# Limits of the daily I-MR charts: estimated from the first N batches since SYNC_FROM, then held.
+DAILY_BASE_N = 20
+
+
+def same_run(stored: dict[str, Any], analysis_id: str, params: dict[str, Any]) -> bool:
+    """A stored analysis is the same daily run when its id matches and it has our parameters.
+
+    The server stores the parameters with defaults filled in, so ours are a subset of them.
+    """
+    sp = stored.get("params") or {}
+    return stored.get("analysis_id") == analysis_id and all(sp.get(k) == v for k, v in params.items())
+
+
 def daily_runs(line: str, recipe_spec: str) -> list[tuple[str, str, dict[str, Any]]]:
     """The analyses run once a day per line: (worksheet name, analysis id, params)."""
     runs: list[tuple[str, str, dict[str, Any]]] = [
@@ -228,7 +244,9 @@ def daily_runs(line: str, recipe_spec: str) -> list[tuple[str, str, dict[str, An
     runs.append((f"Vla {line} · KPI-PRD-001 OEE", "kpi_series",
                  {"kpi_id": "KPI-PRD-001", "period_column": "periode"}))
     runs.append((f"Vla {line} · batches", "imr_chart",
-                 {"column": "end_viscosity_cP", "label_column": "batch_id"}))
+                 {"column": "end_viscosity_cP", "label_column": "batch_id", "base_n": DAILY_BASE_N}))
+    runs.append((f"Vla {line} · batches", "imr_chart",
+                 {"column": "peak_cook_temp_C", "label_column": "batch_id", "base_n": DAILY_BASE_N}))
     runs.append((f"Vla {line} · batches", "capability_normal",
                  {"column": "end_viscosity_cP", "lsl": 150, "usl": 300, "spec_source": recipe_spec}))
     return runs
@@ -316,13 +334,13 @@ class Sync:
         report: dict[str, str] = {}
         for line in self.lines:
             for name, analysis_id, params in daily_runs(line, RECIPE_SPEC):
-                key = f"daily {name} / {analysis_id}"
+                key = f"daily {name} / {analysis_id}" + (f" {params['column']}" if "column" in params else "")
                 meta = sheets.get(name)
                 if meta is None:
                     report[key] = "no worksheet"
                     continue
                 done = self.aios.call("GET", f"{self.ci}/analyses?worksheet_id={meta['id']}&limit=50")
-                if any(a.get("analysis_id") == analysis_id and (a.get("created_at") or "")[:10] == today
+                if any(same_run(a, analysis_id, params) and (a.get("created_at") or "")[:10] == today
                        and a.get("channel") == "api" for a in done):
                     report[key] = "already ran today"
                     continue
