@@ -13,7 +13,7 @@ script's log (stdout, and a JSON lines file) is the answer key, kept apart from 
 investigator works with.
 
 Runs in its own container on the milkdemo network with the factory image (asyncua inside):
-  docker run -d --name vla-scenario-8d --network idp-network \
+  docker run -d --name vla-scenario-8d --restart on-failure --network idp-network \
     -v /root/idp-os/scenarios/vla-batch/scripts:/s:ro -v /root/vla-scenario-logs:/logs \
     techflow/vla-factory:latest python -u /s/scenario_steam_valve.py
 """
@@ -63,9 +63,10 @@ async def act(action) -> None:
     async with Client(OPCUA) as cl:
         node = cl.get_node(BATCH)
         if action == "clear":
-            rc = await node.call_method(f"{BATCH}.ClearFault")
+            rc = await node.call_method(cl.get_node(f"{BATCH}.ClearFault"))
         else:
-            rc = await node.call_method(f"{BATCH}.InjectFault", ua.Variant("cook_undertemp", ua.VariantType.String),
+            rc = await node.call_method(cl.get_node(f"{BATCH}.InjectFault"),
+                                        ua.Variant("cook_undertemp", ua.VariantType.String),
                                         ua.Variant(float(action), ua.VariantType.Double))
         log("factory_call", action=action, rc=rc)
 
