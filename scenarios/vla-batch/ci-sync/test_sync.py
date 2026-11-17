@@ -103,3 +103,15 @@ def test_batches_before_sync_from_are_left_out() -> None:
         if p.startswith("/batches?") else eng.batches[p.rsplit("/", 1)[1]])
     rep = S.Sync(eng, aios, "ws", ["L1"], since="2026-11-17T00:00:00").run_once()
     assert rep["Vla L1 · batches"] == "created, 1 new"
+
+
+def test_a_column_added_in_aios_survives_the_next_sync() -> None:
+    aios = FakeAios()
+    sync = S.Sync(FakeEngine([_b("B1", "2026-11-16", 5000, 20)]), aios, "ws", ["L1"])
+    sync.run_once()
+    sheet = aios.sheets["Vla L1 · batches"]
+    sheet["columns"].append({"name": "stage", "type": "text", "values": ["before"]})
+    sync.engine = FakeEngine([_b("B1", "2026-11-16", 5000, 20), _b("B2", "2026-11-17", 5000, 10)])
+    sync.run_once()
+    rows = S.columns_to_rows(aios.sheets["Vla L1 · batches"]["columns"])
+    assert [(r["batch_id"], r["stage"]) for r in rows] == [("B1", "before"), ("B2", None)]

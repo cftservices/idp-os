@@ -86,8 +86,17 @@ def merge_rows(existing: list[dict[str, Any]], new: list[dict[str, Any]]) -> lis
     return sorted(by_id.values(), key=lambda r: (r.get("completed_at") or "", r["batch_id"]))
 
 
-def rows_to_columns(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [{"name": n, "type": t, "values": [r.get(n) for r in rows]} for n, t in BATCH_COLUMNS]
+def rows_to_columns(rows: list[dict[str, Any]],
+                    extra: list[tuple[str, str]] | None = None) -> list[dict[str, Any]]:
+    """The batch columns, plus columns a person added in aios (for example a stage column
+    for before and after a repair). Those are kept; new rows get an empty cell there."""
+    cols = list(BATCH_COLUMNS) + list(extra or [])
+    return [{"name": n, "type": t, "values": [r.get(n) for r in rows]} for n, t in cols]
+
+
+def extra_columns(columns: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    own = {n for n, _ in BATCH_COLUMNS}
+    return [(c["name"], c["type"]) for c in columns if c["name"] not in own]
 
 
 def columns_to_rows(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -187,15 +196,17 @@ class Sync:
         for line in self.lines:
             name = f"Vla {line} · batches"
             existing: list[dict[str, Any]] = []
+            extra: list[tuple[str, str]] = []
             if name in sheets:
-                existing = columns_to_rows(self.aios.call("GET", f"{self.ci}/worksheets/{sheets[name]['id']}")["data"])
+                data = self.aios.call("GET", f"{self.ci}/worksheets/{sheets[name]['id']}")["data"]
+                existing, extra = columns_to_rows(data), extra_columns(data)
             known = {r["batch_id"] for r in existing}
             listed = self.engine.call("GET", f"/batches?line={line}")
             new = [batch_row(self.engine.call("GET", f"/batches/{b['batch_id']}"))
                    for b in listed if b.get("state") == "COMPLETE" and b["batch_id"] not in known
                    and (b.get("completed_at") or "") >= self.since]
             rows = merge_rows(existing, new)
-            report[name] = f"{self._write(sheets, name, rows_to_columns(rows))}, {len(new)} new"
+            report[name] = f"{self._write(sheets, name, rows_to_columns(rows, extra))}, {len(new)} new"
             for kpi_id, (title, _, _) in KPIS.items():
                 kname = f"Vla {line} · {kpi_id} {title}"
                 report[kname] = self._write(sheets, kname, daily_kpi(rows, kpi_id))
