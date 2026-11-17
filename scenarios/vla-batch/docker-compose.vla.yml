@@ -256,9 +256,9 @@ services:
     working_dir: /app
     command: ["python", "-u", "/app/sync.py"]
     volumes:
-      - ./ci-sync:/app:ro
+      - ./scenarios/vla-batch/ci-sync:/app:ro
     env_file:
-      - path: ./ci-sync/.env
+      - path: ./scenarios/vla-batch/ci-sync/.env
         required: false
     environment:
       BATCH_ENGINE_URL: http://vla-batch-engine:8000/api/v1
