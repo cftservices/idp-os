@@ -88,7 +88,7 @@ class CmmsAdapter(Protocol):
     name: str
 
     def create(self, wo: dict) -> dict: ...
-    def update(self, wo_id: str, fields: dict) -> None: ...
+    def update(self, wo_id: str, fields: dict, scope: Optional[dict] = None) -> None: ...
     def get(self, wo_id: str) -> Optional[dict]: ...
     def all(self) -> list[dict]: ...
 
@@ -106,8 +106,10 @@ class DemoCmmsAdapter:
         self.db.dw_work_orders.insert_one(dict(wo))
         return wo
 
-    def update(self, wo_id: str, fields: dict) -> None:
-        self.db.dw_work_orders.update_one({"wo_id": wo_id}, {"$set": fields})
+    def update(self, wo_id: str, fields: dict, scope: Optional[dict] = None) -> None:
+        # scope (equipment_id, kind, reported_at) pins the update to ONE document,
+        # also when an older document carries the same number (incident 17-11-2026).
+        self.db.dw_work_orders.update_one({"wo_id": wo_id, **(scope or {})}, {"$set": fields})
 
     def get(self, wo_id: str) -> Optional[dict]:
         return self.db.dw_work_orders.find_one({"wo_id": wo_id})
@@ -137,6 +139,17 @@ class CmmsConnector:
         self.status = {"adapter": self.adapter.name, "auto_breakdowns": auto_breakdowns,
                        "last_tick": None, "created": 0, "completed": 0,
                        "last_error": None}
+        self._ensure_unique_index()
+
+    def _ensure_unique_index(self) -> None:
+        """A work order number is unique in the store. If duplicates already exist
+        the index cannot be built: say so loudly instead of failing silently."""
+        try:
+            self.db.dw_work_orders.create_index("wo_id", unique=True)
+        except Exception as e:  # pragma: no cover - only with a real Mongo
+            log.error("cmms: unique index on wo_id not created (%s); duplicate "
+                      "work order numbers exist and must be renumbered", e)
+            self.status["last_error"] = f"duplicate wo_id: {e}"
 
     # ------------------------------------------------------------ lifecycle
 
@@ -194,7 +207,7 @@ class CmmsConnector:
         if equipment_id not in M.ALL_EQUIPMENT_IDS:
             raise ValueError(f"unknown equipment: {equipment_id}")
         wo = {
-            "wo_id": f"WO-{uuid.uuid4().hex[:6].upper()}",
+            "wo_id": self._new_wo_id(),
             "equipment_id": equipment_id,
             "line": M.line_of_equipment(equipment_id),
             "area": M.area_of(equipment_id),
@@ -219,6 +232,13 @@ class CmmsConnector:
         self._event(wo, "work_order_created")
         log.info("werkorder %s: %s %s (%s)", wo["wo_id"], kind, equipment_id, cause)
         return wo
+
+    def _new_wo_id(self) -> str:
+        for _ in range(20):
+            wo_id = f"WO-{uuid.uuid4().hex[:8].upper()}"
+            if self.adapter.get(wo_id) is None:
+                return wo_id
+        raise RuntimeError("could not find a free work order number")
 
     def report_breakdown(self, equipment_id: str, cause: Optional[str] = None,
                          repair_s: Optional[float] = None) -> dict:
@@ -269,7 +289,9 @@ class CmmsConnector:
         upd = {"status": status, "history": hist, **fields}
         if key:
             upd[key] = ts
-        self.adapter.update(wo["wo_id"], upd)
+        self.adapter.update(wo["wo_id"], upd, scope={
+            "equipment_id": wo["equipment_id"], "kind": wo["kind"],
+            "reported_at": wo.get("reported_at")})
         wo = dict(wo, **upd)
         self._publish(wo)
         self._event(wo, f"work_order_{status}")
