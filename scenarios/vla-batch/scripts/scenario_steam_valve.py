@@ -5,7 +5,7 @@ cook temperature). Phases, counted in completed L1 batches after the start of th
 
   stable       25 batches, no fault                  -> base period for the control limits
   drift        10 batches, magnitude 0.06 (~-1 C)     -> still in spec, a control chart should see it
-  out_of_spec   2 batches, magnitude 0.5 (~-9 C)      -> viscosity below 150 cP, verdict HOLD
+  out_of_spec   2 batches, magnitude 0.5 (~-9 C)      -> viscosity below 150 cP, verdict REJECTED
   repaired     15 batches, fault cleared              -> verification of the corrective action
 
 The batch engine and the MES are not told anything: they only see what the factory does. This
