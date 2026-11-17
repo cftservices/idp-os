@@ -11,8 +11,15 @@ worksheets from that history. Nothing in the batch engine is changed.
 Worksheets per line (L1, L2):
   "Vla <line> · batches"                     one row per completed batch
   "Vla <line> · KPI-QUA-001 Defectpercentage" per day: rejected packs / filled packs
-  "Vla <line> · KPI-PRD-005 First Pass Yield" per day: packs of approved batches minus their
-                                              rejects / all filled packs
+  "Vla <line> · KPI-PRD-005 First Pass Yield" per day: good packs of approved batches / filled packs
+  "Vla <line> · KPI-PRD-001 OEE"              per day: the five OEE inputs (only with an ideal rate)
+
+Pack counts follow the factory: packs_total counts GOOD packs only, filled = packs_total +
+reject_count. OEE times are process hours: wall-clock hours times SYNC_TIME_SCALE (the demo runs
+faster than real time, like the MES's KPI_TIME_SCALE). Planned hours assume the line is planned
+around the clock from SYNC_FROM on (the autopilot runs continuously); the ideal rate per line
+comes from SYNC_IDEAL_PACKS_PER_H ("L1:10042,L2:10080"), measured as the fault-free batch cycle
+of the factory model. Without an ideal rate there is no OEE worksheet.
 
 Environment: BATCH_ENGINE_URL, AIOS_URL, AIOS_WORKSPACE_ID, AIOS_PAT, SYNC_LINES (L1,L2),
 SYNC_INTERVAL_S (900), SYNC_FROM (ISO time; batches completed earlier are left out, for
@@ -30,12 +37,14 @@ import time
 import urllib.error
 import urllib.request
 from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 log = logging.getLogger("ci-sync")
 
 BATCH_COLUMNS: list[tuple[str, str]] = [
     ("batch_id", "text"),
+    ("started_at", "text"),
     ("completed_at", "text"),
     ("recipe_id", "text"),
     ("peak_cook_temp_C", "numeric"),
@@ -81,8 +90,15 @@ def merge_rows(existing: list[dict[str, Any]], new: list[dict[str, Any]]) -> lis
     """Existing rows plus new batches, one row per batch_id, in completion order."""
     by_id: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
     for r in existing + new:
-        if r.get("batch_id"):
-            by_id.setdefault(r["batch_id"], r)
+        if not r.get("batch_id"):
+            continue
+        old = by_id.get(r["batch_id"])
+        if old is None:
+            by_id[r["batch_id"]] = dict(r)
+        else:  # a stored value is never rewritten; an empty stored cell is filled
+            for k, v in r.items():
+                if old.get(k) is None and v is not None:
+                    old[k] = v
     return sorted(by_id.values(), key=lambda r: (r.get("completed_at") or "", r["batch_id"]))
 
 
@@ -112,16 +128,16 @@ def daily_kpi(rows: list[dict[str, Any]], kpi_id: str) -> list[dict[str, Any]]:
     days: "OrderedDict[str, list[float]]" = OrderedDict()
     for r in sorted(rows, key=lambda r: r.get("completed_at") or ""):
         day = (r.get("completed_at") or "")[:10]
-        packs, rejects = r.get("packs_total"), r.get("reject_count")
-        if not day or packs is None:
+        good, rejects = r.get("packs_total"), r.get("reject_count")
+        if not day or good is None:
             continue
         acc = days.setdefault(day, [0.0, 0.0])
         rejects = rejects or 0.0
         if kpi_id == "KPI-QUA-001":
             acc[0] += rejects
         else:
-            acc[0] += (packs - rejects) if r.get("verdict") == "APPROVED" else 0.0
-        acc[1] += packs
+            acc[0] += good if r.get("verdict") == "APPROVED" else 0.0
+        acc[1] += good + rejects  # filled packs
     cols = [
         {"name": "periode", "type": "text", "values": list(days), "kpi_id": kpi_id, "rol": "periode"},
         {"name": num_name, "type": "numeric", "values": [v[0] for v in days.values()],
@@ -130,6 +146,79 @@ def daily_kpi(rows: list[dict[str, Any]], kpi_id: str) -> list[dict[str, Any]]:
          "kpi_id": kpi_id, "rol": "noemer"},
     ]
     return cols
+
+
+def _dt(v: str | None) -> datetime | None:
+    if not v:
+        return None
+    try:
+        d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _union_seconds(spans: list[tuple[datetime, datetime]]) -> float:
+    total, cur_s, cur_e = 0.0, None, None
+    for a, z in sorted(spans):
+        if cur_e is None or a > cur_e:
+            if cur_e is not None:
+                total += (cur_e - cur_s).total_seconds()
+            cur_s, cur_e = a, z
+        elif z > cur_e:
+            cur_e = z
+    if cur_e is not None:
+        total += (cur_e - cur_s).total_seconds()
+    return total
+
+
+def daily_oee(rows: list[dict[str, Any]], since: str, now: datetime, scale: float,
+              ideal_per_h: float) -> list[dict[str, Any]]:
+    """Per day the five inputs of KPI-PRD-001, in process hours and packs."""
+    start = _dt(since)
+    days: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+    for r in sorted(rows, key=lambda r: r.get("completed_at") or ""):
+        s_, e_ = _dt(r.get("started_at")), _dt(r.get("completed_at"))
+        good, rejects = r.get("packs_total"), r.get("reject_count") or 0.0
+        if not e_ or good is None:
+            continue
+        d = days.setdefault(e_.date().isoformat(), {"spans": [], "filled": 0.0, "good": 0.0})
+        d["filled"] += good + rejects
+        d["good"] += good if r.get("verdict") == "APPROVED" else 0.0
+        if s_ and e_ > s_:
+            d["spans"].append((s_, e_))
+    periods, planned, run, ideal, good, produced = [], [], [], [], [], []
+    for day, d in days.items():
+        lo = datetime.fromisoformat(day).replace(tzinfo=timezone.utc)
+        hi = lo + timedelta(days=1)
+        lo, hi = (max(lo, start) if start else lo), min(hi, now)
+        plan_h = max(0.0, (hi - lo).total_seconds()) / 3600 * scale
+        spans = [(max(a, lo), min(z, hi)) for a, z in d["spans"] if min(z, hi) > max(a, lo)]
+        run_h = _union_seconds(spans) / 3600 * scale
+        periods.append(day)
+        planned.append(round(plan_h, 4))
+        run.append(round(run_h, 4))
+        ideal.append(round(run_h * ideal_per_h, 1))
+        good.append(d["good"])
+        produced.append(d["filled"])
+    k = "KPI-PRD-001"
+    return [
+        {"name": "periode", "type": "text", "values": periods, "kpi_id": k, "rol": "periode"},
+        {"name": "ideal_units_at_run", "type": "numeric", "values": ideal, "kpi_id": k},
+        {"name": "planned_hours", "type": "numeric", "values": planned, "kpi_id": k},
+        {"name": "run_hours", "type": "numeric", "values": run, "kpi_id": k},
+        {"name": "units_good", "type": "numeric", "values": good, "kpi_id": k},
+        {"name": "units_produced", "type": "numeric", "values": produced, "kpi_id": k},
+    ]
+
+
+def parse_ideal(spec: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for part in (spec or "").split(","):
+        if ":" in part:
+            line, v = part.split(":", 1)
+            out[line.strip()] = float(v)
+    return out
 
 
 # --------------------------------------------------------------------------- HTTP
@@ -163,8 +252,12 @@ class Http:
 
 class Sync:
     def __init__(self, engine: Http, aios: Http, workspace_id: str, lines: list[str],
-                 dry_run: bool = False, since: str = "") -> None:
+                 dry_run: bool = False, since: str = "", scale: float = 1.0,
+                 ideal: dict[str, float] | None = None, now=None) -> None:
         self.since = since
+        self.scale = scale
+        self.ideal = ideal or {}
+        self.now = now or (lambda: datetime.now(timezone.utc))
         self.engine = engine
         self.aios = aios
         self.ci = f"/api/v1/workspaces/{workspace_id}/ci"
@@ -201,15 +294,23 @@ class Sync:
                 data = self.aios.call("GET", f"{self.ci}/worksheets/{sheets[name]['id']}")["data"]
                 existing, extra = columns_to_rows(data), extra_columns(data)
             known = {r["batch_id"] for r in existing}
+            complete = {r["batch_id"] for r in existing if r.get("started_at")}
             listed = self.engine.call("GET", f"/batches?line={line}")
             new = [batch_row(self.engine.call("GET", f"/batches/{b['batch_id']}"))
-                   for b in listed if b.get("state") == "COMPLETE" and b["batch_id"] not in known
+                   for b in listed if b.get("state") == "COMPLETE" and b["batch_id"] not in complete
                    and (b.get("completed_at") or "") >= self.since]
             rows = merge_rows(existing, new)
-            report[name] = f"{self._write(sheets, name, rows_to_columns(rows, extra))}, {len(new)} new"
+            fresh = len([r for r in new if r["batch_id"] not in known])
+            report[name] = f"{self._write(sheets, name, rows_to_columns(rows, extra))}, {fresh} new"
             for kpi_id, (title, _, _) in KPIS.items():
                 kname = f"Vla {line} · {kpi_id} {title}"
                 report[kname] = self._write(sheets, kname, daily_kpi(rows, kpi_id))
+            oname = f"Vla {line} · KPI-PRD-001 OEE"
+            if line in self.ideal:
+                report[oname] = self._write(sheets, oname, daily_oee(
+                    rows, self.since, self.now(), self.scale, self.ideal[line]))
+            else:
+                report[oname] = "skipped: no ideal rate for this line"
         return report
 
 
@@ -228,7 +329,9 @@ def main(argv: list[str] | None = None) -> int:
                 Http(env["AIOS_URL"].rstrip("/"), env["AIOS_PAT"]),
                 env["AIOS_WORKSPACE_ID"],
                 [x.strip() for x in env.get("SYNC_LINES", "L1,L2").split(",") if x.strip()],
-                dry_run=args.dry_run, since=env.get("SYNC_FROM", ""))
+                dry_run=args.dry_run, since=env.get("SYNC_FROM", ""),
+                scale=float(env.get("SYNC_TIME_SCALE", "1")),
+                ideal=parse_ideal(env.get("SYNC_IDEAL_PACKS_PER_H", "")))
     interval = float(env.get("SYNC_INTERVAL_S", "900"))
     while True:
         try:

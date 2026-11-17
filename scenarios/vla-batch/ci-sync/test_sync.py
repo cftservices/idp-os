@@ -5,7 +5,8 @@ import sync as S
 
 
 def _b(i: str, day: str, packs: float, rejects: float, verdict: str = "APPROVED", visc: float = 260.0) -> dict:
-    return {"batch_id": i, "completed_at": f"{day}T10:00:0{i[-1]}+00:00", "recipe_id": "chocolate-vla-1L",
+    return {"batch_id": i, "started_at": f"{day}T09:58:0{i[-1]}+00:00",
+            "completed_at": f"{day}T10:00:0{i[-1]}+00:00", "recipe_id": "chocolate-vla-1L",
             "peak_cook_temp_C": 88.0, "hold_elapsed_sec": 300.0, "cook_heatup_sec": 150.0,
             "end_viscosity_cP": visc, "spec_min_cP": 150, "spec_max_cP": 300, "packs_total": packs,
             "reject_count": rejects, "verdict": verdict, "fault": None, "unrelated": "x"}
@@ -37,11 +38,11 @@ def test_daily_kpis_hold_inputs_never_a_percentage() -> None:
     qua = {c["name"]: c for c in S.daily_kpi(rows, "KPI-QUA-001")}
     assert qua["periode"]["values"] == ["2026-11-16", "2026-11-17"]
     assert qua["units_defective"]["values"] == [320.0, 40.0]
-    assert qua["units_inspected"]["values"] == [10000.0, 4000.0]
+    assert qua["units_inspected"]["values"] == [10320.0, 4040.0]  # filled = good + rejected
     assert qua["units_defective"]["rol"] == "teller" and qua["periode"]["kpi_id"] == "KPI-QUA-001"
     fpy = {c["name"]: c for c in S.daily_kpi(rows, "KPI-PRD-005")}
-    assert fpy["units_first_pass"]["values"] == [4980.0, 3960.0]  # the HOLD batch counts as not first pass
-    assert fpy["units_produced"]["values"] == [10000.0, 4000.0]
+    assert fpy["units_first_pass"]["values"] == [5000.0, 4000.0]  # good packs of approved batches only
+    assert fpy["units_produced"]["values"] == [10320.0, 4040.0]
 
 
 class FakeAios:
@@ -115,3 +116,24 @@ def test_a_column_added_in_aios_survives_the_next_sync() -> None:
     sync.run_once()
     rows = S.columns_to_rows(aios.sheets["Vla L1 · batches"]["columns"])
     assert [(r["batch_id"], r["stage"]) for r in rows] == [("B1", "before"), ("B2", None)]
+
+
+def test_daily_oee_inputs_in_process_hours() -> None:
+    from datetime import datetime, timezone
+    rows = [S.batch_row(b) for b in (_b("B1", "2026-11-17", 4980, 20), _b("B2", "2026-11-17", 4000, 1000, "HOLD"))]
+    now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+    cols = {c["name"]: c["values"] for c in S.daily_oee(rows, "2026-11-17T10:00:00+00:00", now, 15.0, 10000.0)}
+    assert cols["periode"] == ["2026-11-17"]
+    assert cols["planned_hours"] == [30.0]              # 10:00 to 12:00 wall, times 15
+    # B1 09:58:01-10:00:01, B2 09:58:02-10:00:02, clipped at 10:00 -> 2 s wall -> 30 s process
+    assert cols["run_hours"] == [round(2 / 3600 * 15, 4)]
+    assert cols["units_produced"] == [10000.0] and cols["units_good"] == [4980.0]
+    assert cols["ideal_units_at_run"] == [round(2 / 3600 * 15 * 10000.0, 1)]
+
+
+def test_oee_sheet_only_with_an_ideal_rate() -> None:
+    aios = FakeAios()
+    eng = FakeEngine([_b("B1", "2026-11-16", 4980, 20)])
+    rep = S.Sync(eng, aios, "ws", ["L1", "L2"], scale=15.0, ideal=S.parse_ideal("L1:10042")).run_once()
+    assert rep["Vla L1 · KPI-PRD-001 OEE"] == "created"
+    assert rep["Vla L2 · KPI-PRD-001 OEE"].startswith("skipped")

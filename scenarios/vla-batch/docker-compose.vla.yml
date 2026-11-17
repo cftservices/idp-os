@@ -266,6 +266,12 @@ services:
       SYNC_LINES: L1,L2
       SYNC_INTERVAL_S: "900"
       SYNC_FROM: "2026-11-17T14:10:00+00:00"   # SIM_VARIATION aan; eerdere batches waren deterministisch
+      # OEE (KPI-PRD-001) in procesuren: zelfde factor als KPI_TIME_SCALE van de engine.
+      SYNC_TIME_SCALE: "15"
+      # Ideaal tempo per lijn in gevulde packs per procesuur: de storingsvrije batchcyclus
+      # van het fabrieksmodel met deze rates (5000 packs in 1792,5 s chocolade, 1785,8 s
+      # vanille; gemeten 17-11-2026). Wijzigen de rates, meet dit dan opnieuw.
+      SYNC_IDEAL_PACKS_PER_H: "L1:10042,L2:10080"
     depends_on:
       - vla-batch-engine
     mem_limit: 96m
