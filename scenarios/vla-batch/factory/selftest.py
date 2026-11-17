@@ -173,6 +173,39 @@ def main() -> int:
     all_ok &= check("temp_C changes during a batch", len(temps) > 1,
                     f"{len(temps)} distinct values")
 
+    # ---- natural variation (SIM_VARIATION) ---------------------------------
+    # Twelve batches with the seeded variation on: the viscosity must vary (or a
+    # control chart has nothing to show), stay in spec without a fault, and be
+    # reproducible from the seed. A fault must still push a batch out of spec.
+    def visc_series(seed: int, n: int = 12) -> list[float]:
+        pv = VlaProcess(variation=True, seed=seed)
+        out = []
+        for i in range(n):
+            pv.start_batch(RECIPE, batch_id=f"SELFTEST-VAR-{i}")
+            t = 0
+            while pv.state != COMPLETE and t < MAX_TICKS:
+                pv.tick(DT)
+                t += 1
+            out.append(round(pv.viscosity_cP, 2))
+        return out
+
+    var_a, var_b = visc_series(46), visc_series(46)
+    spread = max(var_a) - min(var_a)
+    all_ok &= check("viscosity varies batch to batch", spread > 2.0,
+                    f"min {min(var_a):.1f}, max {max(var_a):.1f} cP")
+    all_ok &= check("varied batches stay in spec",
+                    all(SPEC_MIN <= v <= SPEC_MAX for v in var_a), "")
+    all_ok &= check("variation is reproducible from the seed", var_a == var_b, "")
+    pf = VlaProcess(variation=True, seed=46)
+    pf.start_batch(RECIPE, batch_id="SELFTEST-VAR-FAULT")
+    pf.inject_fault("cook_undertemp", 0.6)
+    t = 0
+    while pf.state != COMPLETE and t < MAX_TICKS:
+        pf.tick(DT)
+        t += 1
+    all_ok &= check("fault still out of spec with variation on", pf.viscosity_cP < SPEC_MIN,
+                    f"{pf.viscosity_cP:.1f} cP")
+
     # ---- verdict ------------------------------------------------------------
     print()
     if all_ok:

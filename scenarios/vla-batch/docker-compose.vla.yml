@@ -83,6 +83,11 @@ services:
       #   De fysica ondersteunde AUTOSTART_RECIPE al die tijd gewoon; alleen
       #   deze env-regel ontbrak. Niet nog een keer weghalen.
       AUTOSTART_RECIPE: chocolate-vla-1L
+      # Natuurlijke spreiding per batch (kooktemperatuur, zetmeelkwaliteit), met vaste
+      # seed: zonder dit eindigt elke goede batch op precies 260,0 cP en heeft een
+      # regelkaart niets te laten zien. Zie SIM_VARIATION in factory/physics.py.
+      SIM_VARIATION: "1"
+      SIM_SEED: "46"
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
     mem_limit: 256m
@@ -109,6 +114,11 @@ services:
       # Doorlopend proces, om dezelfde reden als L1 (zie daar). De engine
       # start de echte batches met het juiste recept; dit is de terugval.
       AUTOSTART_RECIPE: vanilla-vla-1L
+      # Natuurlijke spreiding per batch (kooktemperatuur, zetmeelkwaliteit), met vaste
+      # seed: zonder dit eindigt elke goede batch op precies 260,0 cP en heeft een
+      # regelkaart niets te laten zien. Zie SIM_VARIATION in factory/physics.py.
+      SIM_VARIATION: "1"
+      SIM_SEED: "47"
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
     mem_limit: 256m

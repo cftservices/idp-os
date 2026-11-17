@@ -26,6 +26,7 @@ Contract references (vla-build-contract.md):
 from __future__ import annotations
 
 import os
+import random
 import time
 
 
@@ -166,6 +167,19 @@ VISC_SPEC_MIN_cP = _envf("VISC_SPEC_MIN_cP", 150.0)      # matches factory-model
 AMBIENT_C = 20.0
 PACK_SIZE_L = 1.0
 
+# --- natural batch-to-batch variation (off by default) ----------------------
+# Without it every good batch ends at exactly 260.0 cP, and a control chart on
+# the line has nothing to show but "no variation". A real line varies a little:
+#   * the cook temperature controller settles a fraction off its setpoint
+#     (steam supply), so the reached temperature differs per batch;
+#   * starch and milk differ per delivery, so the gelatinisation gain differs.
+# Both are drawn once per batch from a seeded generator, so a run is
+# reproducible. Faults (cook_undertemp, ...) still come on top as special causes.
+SIM_VARIATION = os.environ.get("SIM_VARIATION", "0").strip().lower() in ("1", "true", "yes", "on")
+SIM_SEED = int(_envf("SIM_SEED", 46))
+SIM_COOK_TEMP_SD_C = _envf("SIM_COOK_TEMP_SD_C", 0.3)   # sd of the reached cook temperature
+SIM_GEL_SD = _envf("SIM_GEL_SD", 0.02)                  # relative sd of the gelatinisation gain
+
 # --- rauwmelksilo (receiving-tank-01) -------------------------------------
 # De silo trok tot nu toe NIETS af bij het doseren: de regel deed
 # `receiving_level_L - budget * 0.0`, dus de vermenigvuldiging met nul haalde
@@ -187,7 +201,13 @@ RECEIVING_WARM_RATE_PER_S = _envf("RECEIVING_WARM_RATE_PER_S", 0.0008)
 class VlaProcess:
     """One production line running one batch at a time through the 6-state lifecycle."""
 
-    def __init__(self) -> None:
+    def __init__(self, variation: bool | None = None, seed: int | None = None) -> None:
+        # natural variation per batch (see SIM_VARIATION)
+        self.variation: bool = SIM_VARIATION if variation is None else bool(variation)
+        self._rng = random.Random(SIM_SEED if seed is None else seed)
+        self._cook_offset_C: float = 0.0
+        self._gel_factor: float = 1.0
+
         # control / lifecycle
         self.state: str = IDLE
         self.batch_id: str = ""
@@ -281,6 +301,11 @@ class VlaProcess:
         self._packs_f = 0.0
         self.reject_count = 0
         self.samples = []
+        if self.variation:
+            self._cook_offset_C = clamp(self._rng.gauss(0.0, SIM_COOK_TEMP_SD_C), -1.5, 1.5)
+            self._gel_factor = clamp(self._rng.gauss(1.0, SIM_GEL_SD), 0.9, 1.1)
+        else:
+            self._cook_offset_C, self._gel_factor = 0.0, 1.0
 
         self.state = DOSING
         self.phase = "dosing"
@@ -499,7 +524,7 @@ class VlaProcess:
     def _tick_cooking(self, pdt: float) -> None:
         self.phase = "cooking"
         # effective heat target respects a cook_undertemp cap if present
-        target = self.cook_setpoint_C
+        target = self.cook_setpoint_C + self._cook_offset_C
         if self._cook_temp_cap_C is not None:
             target = min(target, self._cook_temp_cap_C)
 
@@ -586,7 +611,7 @@ class VlaProcess:
         g_temp = clamp((self.peak_cook_temp_C - GEL_TEMP_MIN) / (GEL_TEMP_REF - GEL_TEMP_MIN), 0.0, 1.0)
         g_hold = clamp(self.hold_elapsed_sec / self.hold_sec, 0.0, 1.0) if self.hold_sec > 0 else 0.0
         g = g_temp * g_hold
-        return VISC_BASE_cP + g * VISC_GAIN_cP
+        return VISC_BASE_cP + g * VISC_GAIN_cP * self._gel_factor
 
     # ------------------------------------------------------------------ snapshot
     def read(self) -> dict:
