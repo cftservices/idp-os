@@ -15,7 +15,8 @@ Worksheets per line (L1, L2):
                                               rejects / all filled packs
 
 Environment: BATCH_ENGINE_URL, AIOS_URL, AIOS_WORKSPACE_ID, AIOS_PAT, SYNC_LINES (L1,L2),
-SYNC_INTERVAL_S (900). Run once with --once; --dry-run prints and writes nothing.
+SYNC_INTERVAL_S (900), SYNC_FROM (ISO time; batches completed earlier are left out, for
+example the deterministic batches from before SIM_VARIATION was switched on). Run once with --once; --dry-run prints and writes nothing.
 Standard library only.
 """
 from __future__ import annotations
@@ -153,7 +154,8 @@ class Http:
 
 class Sync:
     def __init__(self, engine: Http, aios: Http, workspace_id: str, lines: list[str],
-                 dry_run: bool = False) -> None:
+                 dry_run: bool = False, since: str = "") -> None:
+        self.since = since
         self.engine = engine
         self.aios = aios
         self.ci = f"/api/v1/workspaces/{workspace_id}/ci"
@@ -190,7 +192,8 @@ class Sync:
             known = {r["batch_id"] for r in existing}
             listed = self.engine.call("GET", f"/batches?line={line}")
             new = [batch_row(self.engine.call("GET", f"/batches/{b['batch_id']}"))
-                   for b in listed if b.get("state") == "COMPLETE" and b["batch_id"] not in known]
+                   for b in listed if b.get("state") == "COMPLETE" and b["batch_id"] not in known
+                   and (b.get("completed_at") or "") >= self.since]
             rows = merge_rows(existing, new)
             report[name] = f"{self._write(sheets, name, rows_to_columns(rows))}, {len(new)} new"
             for kpi_id, (title, _, _) in KPIS.items():
@@ -214,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
                 Http(env["AIOS_URL"].rstrip("/"), env["AIOS_PAT"]),
                 env["AIOS_WORKSPACE_ID"],
                 [x.strip() for x in env.get("SYNC_LINES", "L1,L2").split(",") if x.strip()],
-                dry_run=args.dry_run)
+                dry_run=args.dry_run, since=env.get("SYNC_FROM", ""))
     interval = float(env.get("SYNC_INTERVAL_S", "900"))
     while True:
         try:

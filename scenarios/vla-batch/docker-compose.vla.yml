@@ -265,6 +265,7 @@ services:
       AIOS_URL: https://enterprise-ai.techflow24.com
       SYNC_LINES: L1,L2
       SYNC_INTERVAL_S: "900"
+      SYNC_FROM: "2026-11-17T14:10:00+00:00"   # SIM_VARIATION aan; eerdere batches waren deterministisch
     depends_on:
       - vla-batch-engine
     mem_limit: 96m

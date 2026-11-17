@@ -91,3 +91,15 @@ def test_sync_creates_then_appends_and_survives_engine_pruning() -> None:
     rows = S.columns_to_rows(aios.sheets["Vla L1 · batches"]["columns"])
     assert [r["batch_id"] for r in rows] == ["B1", "B2"]
     assert sync.run_once()["Vla L1 · batches"] == "unchanged, 0 new"
+
+
+def test_batches_before_sync_from_are_left_out() -> None:
+    aios = FakeAios()
+    eng = FakeEngine([_b("B1", "2026-07-22", 5000, 0), _b("B2", "2026-11-17", 5000, 10)])
+    for b in eng.batches.values():
+        b["state"] = "COMPLETE"
+    eng.call = lambda m, p, body=None: (
+        [{"batch_id": i, "state": "COMPLETE", "completed_at": b["completed_at"]} for i, b in eng.batches.items()]
+        if p.startswith("/batches?") else eng.batches[p.rsplit("/", 1)[1]])
+    rep = S.Sync(eng, aios, "ws", ["L1"], since="2026-11-17T00:00:00").run_once()
+    assert rep["Vla L1 · batches"] == "created, 1 new"
