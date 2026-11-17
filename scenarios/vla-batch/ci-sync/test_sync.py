@@ -49,9 +49,17 @@ class FakeAios:
     def __init__(self) -> None:
         self.sheets: dict[str, dict] = {}
         self.calls: list[tuple[str, str]] = []
+        self.analyses: list[dict] = []
 
     def call(self, method: str, path: str, body=None):
         self.calls.append((method, path))
+        if method == "GET" and "/analyses" in path:  # the server filters on worksheet_id
+            wid = path.split("worksheet_id=")[1].split("&")[0]
+            return [a for a in self.analyses if a["worksheet_id"] == wid]
+        if method == "POST" and path.endswith("/analyses"):
+            self.analyses.append({"analysis_id": body["analysis_id"], "created_at": "2026-11-17T08:00:00",
+                                  "channel": "api", "worksheet_id": body["worksheet_id"]})
+            return {}
         if method == "GET" and path.endswith("/worksheets"):
             return [{"id": s["id"], "name": n} for n, s in self.sheets.items()]
         if method == "GET":
@@ -124,7 +132,7 @@ def test_daily_oee_inputs_in_process_hours() -> None:
     now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
     cols = {c["name"]: c["values"] for c in S.daily_oee(rows, "2026-11-17T10:00:00+00:00", now, 15.0, 10000.0)}
     assert cols["periode"] == ["2026-11-17"]
-    assert cols["planned_hours"] == [30.0]              # 10:00 to 12:00 wall, times 15
+    assert cols["planned_hours"] == [round(2 / 3600 * 15, 4)]  # running day: 10:00 to the last batch (10:00:02)
     # B1 09:58:01-10:00:01, B2 09:58:02-10:00:02, clipped at 10:00 -> 2 s wall -> 30 s process
     assert cols["run_hours"] == [round(2 / 3600 * 15, 4)]
     assert cols["units_produced"] == [10000.0] and cols["units_good"] == [4980.0]
@@ -137,3 +145,24 @@ def test_oee_sheet_only_with_an_ideal_rate() -> None:
     rep = S.Sync(eng, aios, "ws", ["L1", "L2"], scale=15.0, ideal=S.parse_ideal("L1:10042")).run_once()
     assert rep["Vla L1 · KPI-PRD-001 OEE"] == "created"
     assert rep["Vla L2 · KPI-PRD-001 OEE"].startswith("skipped")
+
+
+def test_daily_runs_once_per_day() -> None:
+    from datetime import datetime, timezone
+    aios = FakeAios()
+    eng = FakeEngine([_b("B1", "2026-11-17", 4980, 20)])
+    now = lambda: datetime(2026, 11, 17, 8, 0, tzinfo=timezone.utc)  # noqa: E731
+    sync = S.Sync(eng, aios, "ws", ["L1"], scale=15.0, ideal=S.parse_ideal("L1:10042"), now=now)
+    sync.run_once()
+    first = sync.run_daily()
+    assert sum(v == "ran" for v in first.values()) == 5  # 3 KPI series, I-MR, capability
+    second = sync.run_daily()
+    assert all(v == "already ran today" for v in second.values())
+
+
+def test_planned_hours_of_a_running_day_end_at_the_last_completed_batch() -> None:
+    from datetime import datetime, timezone
+    rows = [S.batch_row(_b("B1", "2026-11-17", 4980, 20))]  # completed 10:00:01
+    now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+    cols = {c["name"]: c["values"] for c in S.daily_oee(rows, "2026-11-17T09:00:00+00:00", now, 15.0, 10000.0)}
+    assert cols["planned_hours"] == [round((3600 + 1) / 3600 * 15, 4)]  # 09:00 to 10:00:01, not to 12:00

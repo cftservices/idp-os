@@ -14,6 +14,11 @@ Worksheets per line (L1, L2):
   "Vla <line> · KPI-PRD-005 First Pass Yield" per day: good packs of approved batches / filled packs
   "Vla <line> · KPI-PRD-001 OEE"              per day: the five OEE inputs (only with an ideal rate)
 
+Once per UTC day (the first sync of the day) the sync also runs and stores the daily analyses
+in aios: the KPI series of every KPI worksheet, and an I-MR chart and a capability analysis
+against the recipe spec on the viscosity of each line. A day that already has its run is
+skipped, so a restart does not run it twice. SYNC_DAILY_RUNS=0 switches this off.
+
 Pack counts follow the factory: packs_total counts GOOD packs only, filled = packs_total +
 reject_count. OEE times are process hours: wall-clock hours times SYNC_TIME_SCALE (the demo runs
 faster than real time, like the MES's KPI_TIME_SCALE). Planned hours assume the line is planned
@@ -182,7 +187,8 @@ def daily_oee(rows: list[dict[str, Any]], since: str, now: datetime, scale: floa
         good, rejects = r.get("packs_total"), r.get("reject_count") or 0.0
         if not e_ or good is None:
             continue
-        d = days.setdefault(e_.date().isoformat(), {"spans": [], "filled": 0.0, "good": 0.0})
+        d = days.setdefault(e_.date().isoformat(), {"spans": [], "filled": 0.0, "good": 0.0, "last": e_})
+        d["last"] = max(d["last"], e_)
         d["filled"] += good + rejects
         d["good"] += good if r.get("verdict") == "APPROVED" else 0.0
         if s_ and e_ > s_:
@@ -191,7 +197,9 @@ def daily_oee(rows: list[dict[str, Any]], since: str, now: datetime, scale: floa
     for day, d in days.items():
         lo = datetime.fromisoformat(day).replace(tzinfo=timezone.utc)
         hi = lo + timedelta(days=1)
-        lo, hi = (max(lo, start) if start else lo), min(hi, now)
+        # A day still running ends at its last completed batch: a batch in progress is not
+        # yet run time, so counting planned time up to "now" would understate availability.
+        lo, hi = (max(lo, start) if start else lo), (d["last"] if hi > now else hi)
         plan_h = max(0.0, (hi - lo).total_seconds()) / 3600 * scale
         spans = [(max(a, lo), min(z, hi)) for a, z in d["spans"] if min(z, hi) > max(a, lo)]
         run_h = _union_seconds(spans) / 3600 * scale
@@ -210,6 +218,24 @@ def daily_oee(rows: list[dict[str, Any]], since: str, now: datetime, scale: floa
         {"name": "units_good", "type": "numeric", "values": good, "kpi_id": k},
         {"name": "units_produced", "type": "numeric", "values": produced, "kpi_id": k},
     ]
+
+
+def daily_runs(line: str, recipe_spec: str) -> list[tuple[str, str, dict[str, Any]]]:
+    """The analyses run once a day per line: (worksheet name, analysis id, params)."""
+    runs: list[tuple[str, str, dict[str, Any]]] = [
+        (f"Vla {line} · {k} {t}", "kpi_series", {"kpi_id": k, "period_column": "periode"})
+        for k, (t, _, _) in KPIS.items()]
+    runs.append((f"Vla {line} · KPI-PRD-001 OEE", "kpi_series",
+                 {"kpi_id": "KPI-PRD-001", "period_column": "periode"}))
+    runs.append((f"Vla {line} · batches", "imr_chart",
+                 {"column": "end_viscosity_cP", "label_column": "batch_id"}))
+    runs.append((f"Vla {line} · batches", "capability_normal",
+                 {"column": "end_viscosity_cP", "lsl": 150, "usl": 300, "spec_source": recipe_spec}))
+    return runs
+
+
+RECIPE_SPEC = ("recipe spec 150-300 cP (spec_min_cP / spec_max_cP of the recipe in the milkdemo MES; "
+               "also columns of this worksheet)")
 
 
 def parse_ideal(spec: str) -> dict[str, float]:
@@ -283,6 +309,34 @@ class Sync:
                        {"name": name, "columns": columns, "version": current["version"]})
         return f"updated to v{current['version'] + 1}"
 
+    def run_daily(self) -> dict[str, str]:
+        """Once per UTC day: run and store the daily analyses, unless today's run exists."""
+        today = self.now().date().isoformat()
+        sheets = self._sheets()
+        report: dict[str, str] = {}
+        for line in self.lines:
+            for name, analysis_id, params in daily_runs(line, RECIPE_SPEC):
+                key = f"daily {name} / {analysis_id}"
+                meta = sheets.get(name)
+                if meta is None:
+                    report[key] = "no worksheet"
+                    continue
+                done = self.aios.call("GET", f"{self.ci}/analyses?worksheet_id={meta['id']}&limit=50")
+                if any(a.get("analysis_id") == analysis_id and (a.get("created_at") or "")[:10] == today
+                       and a.get("channel") == "api" for a in done):
+                    report[key] = "already ran today"
+                    continue
+                if self.dry_run:
+                    report[key] = "dry-run"
+                    continue
+                try:
+                    self.aios.call("POST", f"{self.ci}/analyses",
+                                   {"worksheet_id": meta["id"], "analysis_id": analysis_id, "params": params})
+                    report[key] = "ran"
+                except RuntimeError as e:  # for example too few points yet; try again tomorrow
+                    report[key] = f"not run: {e}"
+        return report
+
     def run_once(self) -> dict[str, str]:
         sheets = self._sheets()
         report: dict[str, str] = {}
@@ -337,6 +391,10 @@ def main(argv: list[str] | None = None) -> int:
         try:
             for name, outcome in sync.run_once().items():
                 log.info("%s: %s", name, outcome)
+            if env.get("SYNC_DAILY_RUNS", "1") == "1":
+                for name, outcome in sync.run_daily().items():
+                    if outcome != "already ran today":
+                        log.info("%s: %s", name, outcome)
         except Exception as e:  # keep running; the next run tries again
             log.error("sync failed: %s", e)
             if args.once:
