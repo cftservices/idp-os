@@ -298,7 +298,7 @@ class BatchRunner:
         batch = self._raw_batch(batch_id)
         if batch is None:
             raise ValueError(f"unknown batch {batch_id!r}")
-        if batch["state"] in (M.COMPLETE,):
+        if batch["state"] in M.FINISHED_STATES:
             return self.get_batch(batch_id)
 
         recipe = M.get_recipe(batch["recipe_id"])
@@ -400,15 +400,12 @@ class BatchRunner:
                     self._event(batch_id, "factory_stopped_early", {})
                     break
                 elif not saw_running and time.monotonic() - t0 > self.START_TIMEOUT_S:
-                    log.warning("factory never left IDLE for %s — "
-                                "falling back to instant simulation", batch_id)
+                    # The factory never took this batch (busy, restarting, or deaf). Do not
+                    # fill it in with simulated values: that books production, samples and a
+                    # verdict for a batch that was never made (B-20261118-7E4392).
+                    log.warning("factory never left IDLE for %s — aborting the batch", batch_id)
                     self._event(batch_id, "factory_start_timeout", {})
-                    batch = self._raw_batch(batch_id)
-                    self._book_doses(batch_id, None)
-                    p, h, fault, _m = self._read_cook(recipe, None)
-                    packs, rejects = self._read_packs(batch, None)
-                    self._finalize(batch_id, recipe, p, h, fault,
-                                   end_visc=None, packs=packs, rejects=rejects)
+                    self._abort(batch_id, "factory_start_timeout")
                     return
                 time.sleep(self.POLL_S)
 
@@ -436,6 +433,13 @@ class BatchRunner:
                 self._event(batch_id, "live_follow_error", {"error": str(e)})
             except Exception:
                 pass
+
+    def _abort(self, batch_id: str, reason: str) -> None:
+        """End a batch the factory never ran. Books nothing: no doses (the materials never
+        left), no production, no samples, no verdict. The line is idle again."""
+        self._update(batch_id, {"state": M.ABORTED, "aborted_at": _iso(),
+                                "abort_reason": reason})
+        self._event(batch_id, "batch_aborted", {"reason": reason})
 
     # ---------------------------------------------------------------- finalize
 

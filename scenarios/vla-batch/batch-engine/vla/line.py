@@ -60,7 +60,7 @@ def _active_batch(db, line: Optional[str] = None) -> Optional[dict]:
                if line is None or M.line_of_doc(b) == line]
     if not batches:
         return None
-    active = [b for b in batches if b.get("state") not in (None, M.COMPLETE, "IDLE")]
+    active = [b for b in batches if b.get("state") not in (None, "IDLE", *M.FINISHED_STATES)]
     if active:
         return sorted(active, key=lambda b: b.get("started_at") or "", reverse=True)[0]
     return sorted(batches, key=lambda b: b.get("started_at") or "", reverse=True)[0]
