@@ -18,7 +18,9 @@ Contract (vla-build-contract.md §OPC-UA, §ISA-95):
 Env:
     OPCUA_ENDPOINT   default opc.tcp://0.0.0.0:4840/DairyWorks
     WRITE_INTERVAL   status write cadence in seconds (default 0.5)
-    TICK_INTERVAL    physics tick cadence in seconds (default 0.2)
+    TICK_INTERVAL    physics tick cadence in seconds (default 0.2); simulated time follows
+                     the wall clock, a slow loop catches up in TICK_INTERVAL steps
+    MAX_CATCHUP_S    most simulated seconds replayed after a stall (default 10)
     AUTOSTART_RECIPE if set (e.g. chocolate-vla-1L) auto-start a batch at boot
     AUTOSTART_DELAY_S seconds a COMPLETE batch waits before the factory chains
                      its own next batch (default 0). Gives the batch-engine
@@ -31,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 
 from asyncua import Server, ua
 from asyncua.common.methods import uamethod
@@ -50,6 +53,8 @@ LINE = "Vla"
 ENDPOINT = os.environ.get("OPCUA_ENDPOINT", "opc.tcp://0.0.0.0:4840/DairyWorks")
 WRITE_INTERVAL = float(os.environ.get("WRITE_INTERVAL", "0.5"))
 TICK_INTERVAL = float(os.environ.get("TICK_INTERVAL", "0.2"))
+# Most simulated time the tick loop replays after a stall; more is dropped with a warning.
+MAX_CATCHUP_S = float(os.environ.get("MAX_CATCHUP_S", "10"))
 AUTOSTART_RECIPE = os.environ.get("AUTOSTART_RECIPE") or None
 AUTOSTART_DELAY_S = float(os.environ.get("AUTOSTART_DELAY_S", "0"))
 
@@ -315,26 +320,47 @@ class VlaServer:
                 rc = self.p.start_batch(AUTOSTART_RECIPE)
                 log.info("autostart recipe %s -> rc=%d", AUTOSTART_RECIPE, rc)
             last_write = 0.0
-            elapsed = 0.0
-            complete_since: float | None = None
+            self._elapsed = 0.0
+            self._complete_since = None
+            # Simulated time follows the wall clock. Before 2026-11-18 every loop advanced a
+            # fixed TICK_INTERVAL, so on a CPU-starved host (steal of 50-67 % on the VPS) each
+            # loop took longer than that and a batch stretched in wall time: same packs, more
+            # clock hours, and an OEE drop that came from the host, not the plant. Now the
+            # loop measures the real time that passed and catches up in fixed TICK_INTERVAL
+            # steps, so the physics per step is unchanged (selftest results stay the same).
+            clock = time.monotonic()
+            backlog = 0.0
             while True:
-                self.p.tick(TICK_INTERVAL)
-                elapsed += TICK_INTERVAL
-                if elapsed - last_write >= WRITE_INTERVAL:
+                now = time.monotonic()
+                backlog += now - clock
+                clock = now
+                if backlog > MAX_CATCHUP_S:  # a paused container: do not replay minutes at once
+                    log.warning("tick loop %.1fs behind, dropping %.1fs of simulated time",
+                                backlog, backlog - MAX_CATCHUP_S)
+                    backlog = MAX_CATCHUP_S
+                while backlog >= TICK_INTERVAL:
+                    self._step()
+                    backlog -= TICK_INTERVAL
+                if self._elapsed - last_write >= WRITE_INTERVAL:
                     await self._apply_writable_setpoints()
                     await self._write_status()
-                    last_write = elapsed
-                # continuous demo: chain a fresh batch when one completes,
-                # after AUTOSTART_DELAY_S so an engine StartBatch can win.
-                if self.p.state == "COMPLETE":
-                    if complete_since is None:
-                        complete_since = elapsed
-                    if AUTOSTART_RECIPE and elapsed - complete_since >= AUTOSTART_DELAY_S:
-                        self.p.start_batch(AUTOSTART_RECIPE)
-                        complete_since = None
-                else:
-                    complete_since = None
+                    last_write = self._elapsed
                 await asyncio.sleep(TICK_INTERVAL)
+
+    def _step(self) -> None:
+        """One physics tick of TICK_INTERVAL, plus the autostart of the next batch."""
+        self.p.tick(TICK_INTERVAL)
+        self._elapsed += TICK_INTERVAL
+        # continuous demo: chain a fresh batch when one completes,
+        # after AUTOSTART_DELAY_S so an engine StartBatch can win.
+        if self.p.state == "COMPLETE":
+            if self._complete_since is None:
+                self._complete_since = self._elapsed
+            if AUTOSTART_RECIPE and self._elapsed - self._complete_since >= AUTOSTART_DELAY_S:
+                self.p.start_batch(AUTOSTART_RECIPE)
+                self._complete_since = None
+        else:
+            self._complete_since = None
 
 
 def _vtype_for(area: str, eq: str, tag: str) -> ua.VariantType:
