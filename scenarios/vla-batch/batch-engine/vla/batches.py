@@ -372,16 +372,27 @@ class BatchRunner:
             t0 = time.monotonic()
 
             ended_at: Optional[datetime] = None
+            foreign_seen = False
             while time.monotonic() - t0 < self.FOLLOW_TIMEOUT_S:
                 st = self._bus_str("Batch", "state")
                 seen_at = _now()  # equipment time: when this state was read, before any write
 
-                tv = self._bus_float(self.line.eq("cook"), "temp_C")
-                if tv is not None:
-                    peak = tv if peak is None else max(peak, tv)
-                hv = self._bus_float(self.line.eq("cook"), "hold_elapsed_sec")
-                if hv is not None:
-                    hold = max(hold, hv)
+                if not saw_running and st in (M.COOKING, M.COOLING, M.FILLING):
+                    # Our batch starts in DOSING. A factory already further along runs a batch
+                    # of its own (self-chained, or one this engine lost at a restart, when the
+                    # busy check had an empty tag cache): never adopt it (B-20261118-8521C2).
+                    if not foreign_seen:
+                        foreign_seen = True
+                        self._event(batch_id, "factory_busy_foreign_batch", {"state": st})
+                    st = None
+
+                if saw_running or st == M.DOSING:  # only our own run, never a foreign batch
+                    tv = self._bus_float(self.line.eq("cook"), "temp_C")
+                    if tv is not None:
+                        peak = tv if peak is None else max(peak, tv)
+                    hv = self._bus_float(self.line.eq("cook"), "hold_elapsed_sec")
+                    if hv is not None:
+                        hold = max(hold, hv)
 
                 if st in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
                     if not saw_running:

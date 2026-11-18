@@ -98,3 +98,80 @@ def test_aborted_batch_is_not_the_active_batch_of_the_line(monkeypatch):
                               "batch_id": "B-NEWER", "state": M.COMPLETE,
                               "started_at": "2999-01-01T00:00:00+00:00"})
     assert L._active_batch(db)["batch_id"] == "B-NEWER"
+
+
+class BusyFactory(DeafFactory):
+    """Already halfway through a batch of its own (FILLING) when the engine starts one; it
+    ignores the StartBatch, completes its own batch 26 s later and then stays IDLE. This is
+    what the engine met after its restart on 2026-11-18 (B-20261118-8521C2). At t = 0 the tag
+    cache is still empty, as right after a restart, so the engine's busy check passes."""
+
+    def __init__(self, clock):
+        self.clock = clock
+
+    def latest_value(self, equipment, tag, max_age_s=None):
+        if self.clock.t == 0.0:
+            return None
+        if (equipment, tag) == ("Batch", "state"):
+            if self.clock.t < 26.0:
+                return "FILLING"
+            return "COMPLETE" if self.clock.t < 40.0 else "IDLE"
+        return {"temp_C": 22.5, "hold_elapsed_sec": 0.0, "viscosity_cP": 30.0,
+                "packs_total": 4980, "reject_count": 20}.get(tag)
+
+
+def test_engine_does_not_adopt_a_batch_the_factory_was_already_running(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(B.time, "monotonic", lambda: clock.t)
+    monkeypatch.setattr(B.time, "sleep", lambda d: setattr(clock, "t", clock.t + d))
+    monkeypatch.setattr(B.threading, "Thread", SyncThread)
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    runner = B.BatchRunner(db, bus=BusyFactory(clock), rng=random.Random(3))
+    batch_id = runner.create_batch("chocolate-vla-1L")["batch_id"]
+    runner.start_batch(batch_id)
+    b = db.dw_batches.find_one({"batch_id": batch_id})
+    assert b["state"] == M.ABORTED
+    assert b.get("verdict") is None and not b.get("packs_total")
+    assert list(db.dw_production.find({"batch_id": batch_id})) == []
+    assert list(db.dw_samples.find({"batch_id": batch_id})) == []
+    events = [e["event_type"] for e in db.dw_batch_events.find({"batch_id": batch_id})]
+    assert "factory_busy_foreign_batch" in events
+
+
+class BusyThenOurs(BusyFactory):
+    """A hotter foreign batch until 26 s, idle, then our batch from 30 s (DOSING .. FILLING,
+    30 s each) at a normal cook temperature."""
+
+    def latest_value(self, equipment, tag, max_age_s=None):
+        t = self.clock.t
+        if t == 0.0:
+            return None
+        if t < 26.0:
+            state, temp, hold = "FILLING", 95.0, 400.0
+        elif t < 30.0:
+            state, temp, hold = "IDLE", 25.0, 0.0
+        elif t < 150.0:
+            state = ("DOSING", "COOKING", "COOLING", "FILLING")[int((t - 30.0) // 30)]
+            temp, hold = (88.0, 300.0) if state != "DOSING" else (25.0, 0.0)
+        else:
+            state, temp, hold = "COMPLETE", 22.0, 300.0
+        return {("Batch", "state"): state}.get((equipment, tag)) or \
+            {"temp_C": temp, "hold_elapsed_sec": hold, "viscosity_cP": 258.0,
+             "packs_total": 4980, "reject_count": 20}.get(tag)
+
+
+def test_cook_values_of_a_foreign_batch_do_not_leak_into_ours(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(B.time, "monotonic", lambda: clock.t)
+    monkeypatch.setattr(B.time, "sleep", lambda d: setattr(clock, "t", clock.t + d))
+    monkeypatch.setattr(B.threading, "Thread", SyncThread)
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    runner = B.BatchRunner(db, bus=BusyThenOurs(clock), rng=random.Random(3))
+    batch_id = runner.create_batch("chocolate-vla-1L")["batch_id"]
+    runner.start_batch(batch_id)
+    b = db.dw_batches.find_one({"batch_id": batch_id})
+    assert b["state"] == M.COMPLETE
+    assert b["peak_cook_temp_C"] == 88.0
+    assert b["hold_elapsed_sec"] == 300.0
