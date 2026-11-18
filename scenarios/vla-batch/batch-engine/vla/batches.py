@@ -309,8 +309,12 @@ class BatchRunner:
             if fstate in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
                 raise ValueError("factory line is busy with another batch")
 
+        # started_at is provisional here: the moment of the command. In live mode the follow
+        # thread moves it to the moment the factory is seen running, so the batch duration is
+        # the equipment's run and not the engine's own latency (commanded_at keeps the first).
         started = _now()
-        self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started)})
+        self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started),
+                                "commanded_at": _iso(started)})
         self._event(batch_id, "batch_started",
                     {"mode": "live" if live else "instant"})
         if self.orders is not None and batch.get("order_id"):
@@ -367,8 +371,10 @@ class BatchRunner:
             saw_running = False
             t0 = time.monotonic()
 
+            ended_at: Optional[datetime] = None
             while time.monotonic() - t0 < self.FOLLOW_TIMEOUT_S:
                 st = self._bus_str("Batch", "state")
+                seen_at = _now()  # equipment time: when this state was read, before any write
 
                 tv = self._bus_float(self.line.eq("cook"), "temp_C")
                 if tv is not None:
@@ -378,15 +384,19 @@ class BatchRunner:
                     hold = max(hold, hv)
 
                 if st in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
+                    if not saw_running:
+                        self._update(batch_id, {"started_at": _iso(seen_at)})
                     saw_running = True
                     if st != mirrored:
                         mirrored = st
                         self._update(batch_id, {"state": st})
                         self._event(batch_id, "phase_mirrored", {"state": st})
                 elif st == M.COMPLETE and saw_running:
+                    ended_at = seen_at
                     break
                 elif st == M.IDLE and saw_running:
                     # factory aborted/stopped mid-batch — finalize with what we saw
+                    ended_at = seen_at
                     self._event(batch_id, "factory_stopped_early", {})
                     break
                 elif not saw_running and time.monotonic() - t0 > self.START_TIMEOUT_S:
@@ -418,7 +428,8 @@ class BatchRunner:
             else:
                 packs, rejects = int(packs_f), int(rejects_f or 0)
             self._finalize(batch_id, recipe, round(peak, 2), round(hold, 2),
-                           fault, end_visc=end_visc, packs=packs, rejects=rejects)
+                           fault, end_visc=end_visc, packs=packs, rejects=rejects,
+                           completed_at=ended_at)
         except Exception as e:  # pragma: no cover - defensive: thread must not die silent
             log.exception("live follow failed for %s", batch_id)
             try:
@@ -431,9 +442,12 @@ class BatchRunner:
     def _finalize(self, batch_id: str, recipe: M.Recipe, peak_temp: float,
                   hold_elapsed: float, fault: Optional[str],
                   end_visc: Optional[float], packs: int, rejects: int,
-                  telemetry: Optional[dict] = None) -> None:
+                  telemetry: Optional[dict] = None,
+                  completed_at: Optional[datetime] = None) -> None:
         """Shared tail of the lifecycle: cook capture -> viscosity/Solve ->
-        filling -> COMPLETE -> verdict. `end_visc` None = compute via physics."""
+        filling -> COMPLETE -> verdict. `end_visc` None = compute via physics.
+        `completed_at` is the moment the factory was seen COMPLETE (live mode); the
+        bookkeeping below can take seconds on a busy host and must not count as run time."""
         self._update(batch_id, {
             "peak_cook_temp_C": peak_temp,
             "hold_elapsed_sec": hold_elapsed,
@@ -482,7 +496,9 @@ class BatchRunner:
                     {"packs_total": packs, "reject_count": rejects})
 
         # --- COMPLETE ---
-        self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(_now())})
+        self._update(batch_id, {"state": M.COMPLETE,
+                                "completed_at": _iso(completed_at or _now()),
+                                "booked_at": _iso()})
         self._event(batch_id, "batch_complete", {})
 
         # --- CBM fouling (PR-18): capture heat-up + trend it on the monitor.
