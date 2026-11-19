@@ -212,6 +212,11 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
   en een intake-pasteur met regeneratie en vervuiling in `factory/physics.py`. Energie uit
   m·cp·ΔT (klopt per batch ondanks 15x versnelling). Engine: `vla/meters.py` (`METERS=1`) bemonstert,
   rekent U en Rf zelf uit de signalen; CIP bij Rf ≥ 0,06 (~12 batches), vangnet 16 batches.
+- **Spreiding in de vervuiling** (met `SIM_VARIATION`): het vervuilingstempo krijgt een factor per
+  reinigingscyclus (`SIM_FOUL_CYCLE_SD` 0,15) en per batch (`SIM_FOUL_BATCH_SD` 0,20), uit een eigen
+  generator zodat de kook- en verstijfselingstrekkingen van een seed niet verschuiven. Daarvoor stond
+  `past_run_h` bij elke CIP op precies 1,768 u; nu 10 tot 17 batches per cyclus (seed 46). Zonder
+  variatie is de kromme exact de oude (selftest: 13 batches).
 - **Les: een constante komt maar één keer langs.** De OPC-UA-koppeling publiceert alleen bij
   verandering, dus `hold_t_C` (75 °C), de CIP-teller en de watermeter vóór de eerste CIP bereikten
   een later gestarte engine nooit; de sampler schreef daardoor niets en meldde geen fout. Nu valt

@@ -206,6 +206,37 @@ def main() -> int:
     all_ok &= check("fault still out of spec with variation on", pf.viscosity_cP < SPEC_MIN,
                     f"{pf.viscosity_cP:.1f} cP")
 
+    # Fouling rate: with variation on, the number of batches until the CIP limit differs
+    # per cleaning cycle (no metronome), stays plausible, and comes back from the seed.
+    def batches_to_limit(seed: int, cycles: int = 8, run_h: float = 0.126,
+                         limit: float = 0.06) -> list[int]:
+        pv = VlaProcess(variation=True, seed=seed)
+        out = []
+        for _ in range(cycles):
+            n = 0
+            while pv._past_rf() < limit and n < 100:
+                pv._draw_foul_batch()
+                pv._foul(run_h)
+                n += 1
+            out.append(n)
+            pv._clean()
+        return out
+
+    foul_a, foul_b = batches_to_limit(46), batches_to_limit(46)
+    flat = VlaProcess(variation=False)
+    n_flat = 0
+    while flat._past_rf() < 0.06:
+        flat._draw_foul_batch()
+        flat._foul(0.126)
+        n_flat += 1
+    all_ok &= check("fouling rate varies per cleaning cycle", len(set(foul_a)) >= 3,
+                    f"batches to Rf 0.06: {foul_a} (without variation {n_flat})")
+    all_ok &= check("fouling cycles stay plausible (7 to 20 batches)",
+                    all(7 <= n <= 20 for n in foul_a), "")
+    all_ok &= check("fouling spread is reproducible from the seed", foul_a == foul_b, "")
+    all_ok &= check("without variation the fouling curve is unchanged", n_flat == 13,
+                    f"{n_flat} batches")
+
     # ---- utilities, intake pasteuriser, CIP (fase 3) ------------------------
     print("\n-- utilities, pasteur en CIP --")
     import physics as P

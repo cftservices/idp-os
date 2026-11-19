@@ -149,6 +149,8 @@ zodat hij per batch klopt ondanks de versnelling. De engine bemonstert dat in
 [`batch-engine/vla/meters.py`](batch-engine/vla/meters.py) (`METERS=1`) naar `dw_meter_readings`,
 `dw_pasteur_samples` en `dw_cip_cycles`, rekent U en Rf zelf uit temperaturen en debiet, en
 reinigt als Rf ≥ `CIP_RF_LIMIT` (0,06, ~12 batches); `CIP_AFTER_BATCHES=16` is het vangnet.
+Met `SIM_VARIATION=1` vervuilt elke reinigingscyclus in een eigen tempo, plus een kleine afwijking
+per batch (`SIM_FOUL_CYCLE_SD`, `SIM_FOUL_BATCH_SD`), zodat de CIP niet als een metronoom komt.
 De autopilot start dan `StartCip` in de fabriek en wacht (`wait_cip`).
 Uitrollen vraagt na een nieuwe tag ook de init-containers opnieuw:
 `… up --no-deps --force-recreate vla-opcua-init vla-l2-opcua-init`. Die voegen sinds 19-11

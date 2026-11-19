@@ -228,6 +228,14 @@ PAST_REGEN_RF_LOSS = 0.4      # verlies regeneratierendement per m2K/kW
 # ~0,126 procesuur pasteurtijd per batch haalt Rf de grens 0,06 rond 12 batches.
 PAST_RF_MAX = _envf("PAST_RF_MAX", 0.12)                  # m2K/kW
 PAST_RF_TAU_H = _envf("PAST_RF_TAU_H", 2.2)
+# Spreiding in het vervuilingstempo, alleen met SIM_VARIATION. Zonder spreiding bereikt
+# Rf de grens altijd na precies dezelfde draaitijd en reinigt de lijn als een metronoom.
+# Echt vervuilt een pasteur per periode anders (eiwitgehalte en zuurgraad van de melk,
+# seizoen, hoe grondig de vorige reiniging was) en per batch iets anders (per levering).
+# Het tempo is een factor k op 1/tau: dRf/dt = k (RF_MAX - Rf) / tau. Met k = 1 is dat
+# precies de vaste kromme hierboven.
+SIM_FOUL_CYCLE_SD = _envf("SIM_FOUL_CYCLE_SD", 0.15)     # per reinigingscyclus
+SIM_FOUL_BATCH_SD = _envf("SIM_FOUL_BATCH_SD", 0.20)     # per batch
 CIP_RINSE_IN_C = 15.0
 # (stap, procesduur s, water L, loog kg, zuur kg, temperatuur C of None)
 CIP_STEPS = [
@@ -259,6 +267,10 @@ class VlaProcess:
         self._rng = random.Random(SIM_SEED if seed is None else seed)
         self._cook_offset_C: float = 0.0
         self._gel_factor: float = 1.0
+        # own generator for fouling, so adding it did not shift the cook/gel draws of a seed
+        self._foul_rng = random.Random((SIM_SEED if seed is None else seed) + 1000)
+        self._foul_cycle: float = 1.0
+        self._foul_batch: float = 1.0
 
         # control / lifecycle
         self.state: str = IDLE
@@ -325,6 +337,8 @@ class VlaProcess:
         # --- intake-pasteur ---
         self.past_flow_kg_s: float = 0.0
         self.past_run_h: float = 0.0              # procesuren sinds de laatste CIP
+        self.past_rf: float = 0.0                 # vervuilingsweerstand m2K/kW
+        self._draw_foul_cycle()
         self.past_cold_in_C: float = MILK_DELIVERY_C
         self.past_regen_out_C: float = MILK_DELIVERY_C
         self.past_hold_C: float = PAST_HOLD_C
@@ -384,6 +398,7 @@ class VlaProcess:
             self._gel_factor = clamp(self._rng.gauss(1.0, SIM_GEL_SD), 0.9, 1.1)
         else:
             self._cook_offset_C, self._gel_factor = 0.0, 1.0
+        self._draw_foul_batch()
 
         self.state = DOSING
         self.phase = "dosing"
@@ -510,9 +525,28 @@ class VlaProcess:
     def _batch_mass_kg(self) -> float:
         return sum(self.dose_actual_kg.values())
 
+    def _draw_foul_cycle(self) -> None:
+        self._foul_cycle = (clamp(self._foul_rng.gauss(1.0, SIM_FOUL_CYCLE_SD), 0.7, 1.4)
+                            if self.variation else 1.0)
+
+    def _draw_foul_batch(self) -> None:
+        self._foul_batch = (clamp(self._foul_rng.gauss(1.0, SIM_FOUL_BATCH_SD), 0.5, 1.6)
+                            if self.variation else 1.0)
+
     def _past_rf(self) -> float:
+        return self.past_rf
+
+    def _foul(self, run_h: float) -> None:
+        """Grow Rf over run_h hours at this cycle's and batch's rate (exact for a constant rate)."""
         import math
-        return PAST_RF_MAX * (1.0 - math.exp(-self.past_run_h / PAST_RF_TAU_H))
+        k = self._foul_cycle * self._foul_batch
+        self.past_rf = PAST_RF_MAX - (PAST_RF_MAX - self.past_rf) * math.exp(-run_h * k / PAST_RF_TAU_H)
+
+    def _clean(self) -> None:
+        """End of a CIP: the fouling is gone and the next period fouls at its own rate."""
+        self.past_run_h = 0.0
+        self.past_rf = 0.0
+        self._draw_foul_cycle()
 
     def _tick_pasteuriser(self, pdt: float, milk_kg: float) -> None:
         """Milk from the silo through the intake pasteuriser while it is dosed.
@@ -531,6 +565,7 @@ class VlaProcess:
             return
         run_s = milk_kg / flow_kg_s
         self.past_run_h += run_s / 3600.0
+        self._foul(run_s / 3600.0)
         rf = self._past_rf()
         cold = self.receiving_temp_C
         hold = PAST_HOLD_C
@@ -573,7 +608,7 @@ class VlaProcess:
             if self._cip_i >= len(CIP_STEPS):
                 self.cip_count += 1
                 self.cip_last = {k: round(v, 3) for k, v in self._cip_acc.items()}
-                self.past_run_h = 0.0          # clean: fouling gone
+                self._clean()                  # fouling gone, next period draws its rate
                 self.cip_step = "gereed"
                 self.state, self.phase = IDLE, "idle"
                 self._log_event("cip_complete", dict(self.cip_last))
