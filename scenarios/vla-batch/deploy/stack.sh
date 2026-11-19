@@ -38,9 +38,11 @@ SITE=${SITE:-https://milkdemo.techflow24.com}
 SERVICES=(
     mongo monstermq vla-tdengine
     vla-factory vla-opcua-init vla-factory-l2 vla-l2-opcua-init
-    vla-batch-engine vla-tdengine-bridge
+    vla-batch-engine vla-tdengine-bridge vla-scenario
     vla-ollama vla-ai grafana vla-ui
 )
+# Antwoordsleutel van het stoomklep-scenario (vla-scenario); gaat mee in de back-up.
+SCENARIO_LOGS=${VLA_SCENARIO_LOGS:-/root/vla-scenario-logs}
 # Volumes die als tar worden bewaard (mongo gaat via mongodump).
 TAR_VOLUMES=(grafana-data monstermq-data)
 HISTORIAN_VOLUMES=(vla-tdengine-data)
@@ -149,6 +151,7 @@ cmd_backup(){
     echo "• code + secrets"
     tar czf "$doel/code.tgz" --exclude=node_modules --exclude=.next \
         --exclude='*.bak*' --exclude=.env --exclude=.milkdemo-auth -C "$ROOT" .
+    [ -d "$SCENARIO_LOGS" ] && tar czf "$doel/scenario-logs.tgz" -C "$SCENARIO_LOGS" .
     install -m 600 .env "$doel/env"
     [ -f .milkdemo-auth ] && install -m 600 .milkdemo-auth "$doel/milkdemo-auth"
 
