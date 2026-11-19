@@ -1,0 +1,444 @@
+{
+  "uid": "fabriek-kpi-proces",
+  "title": "Fabriek — KPI procesvoering",
+  "description": "KPI's procesvoering uit de BVIP-catalogus: verloop (rollend 8 uur), de exacte waarde over de gekozen periode en de inputs.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "lijn",
+        "label": "Lijn",
+        "type": "custom",
+        "hide": 0,
+        "query": "Fabriek : PLANT,L1 : L1,L2 : L2",
+        "current": {
+          "text": "Fabriek",
+          "value": "PLANT"
+        },
+        "options": [
+          {
+            "text": "Fabriek",
+            "value": "PLANT",
+            "selected": true
+          },
+          {
+            "text": "L1",
+            "value": "L1",
+            "selected": false
+          },
+          {
+            "text": "L2",
+            "value": "L2",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Links het verloop van de rollende waarde (8 uur). Midden de waarde over de **gekozen periode**: de inputs opgeteld en dan de catalogusformule, dus exact, ook over een week. Rechts die inputs. Uren zijn procesuren."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Warmtestroom (PAC-100)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Warmtestroom** · `KPI-PAC-100`\n\n**Niet aantoonbaar** · ontbreekt: `product_flow_kg_s`, `product_t_in`, `product_t_out`\n\nEr is nog geen warmtewisselaar met debietmeting. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Warmteoverdrachtscoëfficiënt U (PAC-101)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Warmteoverdrachtscoëfficiënt U** · `KPI-PAC-101`\n\n**Niet aantoonbaar** · ontbreekt: `product_flow_kg_s`, `hot_t_in`, `hot_t_out`, `hx_area_m2`\n\nEr is nog geen warmtewisselaar met debietmeting. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Vervuilingsweerstand (PAC-102)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Vervuilingsweerstand** · `KPI-PAC-102`\n\n**Niet aantoonbaar** · ontbreekt: `u_actual`, `u_clean_at_flow`\n\nDe opwarmtijd van de kookunit is een vervuilingssignaal, geen U-waarde; die komt met de pasteur. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Genormaliseerde drukval (PAC-103)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 9,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Genormaliseerde drukval** · `KPI-PAC-103`\n\n**Niet aantoonbaar** · ontbreekt: `dp_bar`, `product_flow_kg_s`\n\nEr is nog geen drukverschilmeting. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Warmteterugwinning (PAC-104)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Warmteterugwinning** · `KPI-PAC-104`\n\n**Niet aantoonbaar** · ontbreekt: `regen_t_out`, `cold_t_in`, `hold_t`\n\nEr is nog geen regeneratiesectie. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Looptijd tussen reinigingen (PAC-105)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-105' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 8
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 12
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Productieve uren van de kookunit tussen twee CIP's (cip_performed), gemiddeld over de afgeronde cycli in de periode. Procesuren.\nLet op: Kookunit in plaats van een warmtewisselaar; de pasteur volgt.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-105' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 8
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 12
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Productieve uren van de kookunit tussen twee CIP's (cip_performed), gemiddeld over de afgeronde cycli in de periode. Procesuren.\nLet op: Kookunit in plaats van een warmtewisselaar; de pasteur volgt.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Reinigingskosten per cyclus (PAC-106)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 16,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Reinigingskosten per cyclus** · `KPI-PAC-106`\n\n**Niet aantoonbaar** · ontbreekt: `cip_chemicals_eur`, `cip_water_eur`, `cip_energy_eur`, `cip_labor_eur`\n\nCIP heeft nog geen verbruik of duur. volgt in fase 3 (fabriekssimulatie)."
+      }
+    }
+  ]
+}

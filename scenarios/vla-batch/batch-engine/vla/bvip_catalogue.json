@@ -1,0 +1,850 @@
+{
+  "_bron": "business-value-platform/040_Bron/kpi_catalogue.yaml",
+  "_sha256": "fa541b551d7c9ec43d26021bb0e30219ac8520bcee90e25ea8da8b0a4e988eea",
+  "_let_op": "Gegenereerd door tools/sync-bvip-catalogue.py. Niet met de hand wijzigen.",
+  "kpis": [
+    {
+      "id": "KPI-PRD-001",
+      "naam": "OEE",
+      "naam_nl": "Overall Equipment Effectiveness",
+      "eenheid": "%",
+      "formule": "(run_hours / planned_hours) * (units_produced / ideal_units_at_run) * (units_good / units_produced) * 100",
+      "agg": "per lijn dan gewogen",
+      "richting": "hoger",
+      "doel": 80,
+      "waarsch": 70,
+      "krit": 60,
+      "doelstelling": "Combineert beschikbaarheid, prestatie en kwaliteit.",
+      "interpretatie": "De drie factoren apart tonen, anders is de oorzaak niet te zien.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "run_hours",
+          "eenheid": "h",
+          "omschrijving": "Productie-uren"
+        },
+        {
+          "naam": "planned_hours",
+          "eenheid": "h",
+          "omschrijving": "Geplande productie-uren"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        },
+        {
+          "naam": "ideal_units_at_run",
+          "eenheid": "unit",
+          "omschrijving": "Eenheden bij nominaal tempo in de draaiuren"
+        },
+        {
+          "naam": "units_good",
+          "eenheid": "unit",
+          "omschrijving": "Goede eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-002",
+      "naam": "Downtime Percentage",
+      "naam_nl": "Stilstandpercentage",
+      "eenheid": "%",
+      "formule": "downtime_hours / planned_hours * 100",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 8,
+      "waarsch": 12,
+      "krit": 18,
+      "doelstelling": "Bewaakt het verlies aan geplande productietijd.",
+      "interpretatie": "Uitsplitsen naar lijn en storing.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "downtime_hours",
+          "eenheid": "h",
+          "omschrijving": "Stilstanduren"
+        },
+        {
+          "naam": "planned_hours",
+          "eenheid": "h",
+          "omschrijving": "Geplande productie-uren"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-003",
+      "naam": "Throughput",
+      "naam_nl": "Doorzet",
+      "eenheid": "unit/h",
+      "formule": "units_produced / run_hours",
+      "agg": "sum per periode",
+      "richting": "hoger",
+      "doel": 6,
+      "waarsch": 5.5,
+      "krit": 5,
+      "doelstelling": "Bewaakt de productiesnelheid.",
+      "interpretatie": "Daling bij gelijke uren wijst op prestatieverlies.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        },
+        {
+          "naam": "run_hours",
+          "eenheid": "h",
+          "omschrijving": "Productie-uren"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-004",
+      "naam": "Capacity Utilization",
+      "naam_nl": "Capaciteitsbenutting",
+      "eenheid": "%",
+      "formule": "units_produced / ideal_units * 100",
+      "agg": "sum per periode",
+      "richting": "hoger",
+      "doel": 80,
+      "waarsch": 70,
+      "krit": 60,
+      "doelstelling": "Toont hoeveel capaciteit wordt benut.",
+      "interpretatie": "Hoge benutting maakt stilstand duurder.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        },
+        {
+          "naam": "ideal_units",
+          "eenheid": "unit",
+          "omschrijving": "Maximale capaciteit bij nominaal tempo"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-005",
+      "naam": "First Pass Yield",
+      "naam_nl": "First Pass Yield",
+      "eenheid": "%",
+      "formule": "units_first_pass / units_produced * 100",
+      "agg": "sum per periode",
+      "richting": "hoger",
+      "doel": 96,
+      "waarsch": 94,
+      "krit": 90,
+      "doelstelling": "Bewaakt het aandeel dat in één keer goed is.",
+      "interpretatie": "Daling kost materiaal en capaciteit.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "units_first_pass",
+          "eenheid": "unit",
+          "omschrijving": "Goed zonder herbewerking"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-006",
+      "naam": "Rework Rate",
+      "naam_nl": "Herbewerkingsgraad",
+      "eenheid": "%",
+      "formule": "units_reworked / units_produced * 100",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 2,
+      "waarsch": 3,
+      "krit": 5,
+      "doelstelling": "Bewaakt het aandeel dat opnieuw moet.",
+      "interpretatie": "De KPI-prompt geeft 4% (productie) en 3% (kwaliteit); het is één definitie.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "units_reworked",
+          "eenheid": "unit",
+          "omschrijving": "Herbewerkte eenheden"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-007",
+      "naam": "Changeover Time",
+      "naam_nl": "Omsteltijd",
+      "eenheid": "h",
+      "formule": "changeover_hours",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 500,
+      "waarsch": 600,
+      "krit": 750,
+      "doelstelling": "Bewaakt het productieverlies door omstellingen.",
+      "interpretatie": "Per order of productwissel vergelijken.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "changeover_hours",
+          "eenheid": "h",
+          "omschrijving": "Omsteluren"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PRD-008",
+      "naam": "Schedule Adherence",
+      "naam_nl": "Planningsbetrouwbaarheid",
+      "eenheid": "%",
+      "formule": "orders_on_time / orders_planned * 100",
+      "agg": "sum per periode",
+      "richting": "hoger",
+      "doel": 92,
+      "waarsch": 88,
+      "krit": 80,
+      "doelstelling": "Bewaakt of orders op tijd gereed zijn.",
+      "interpretatie": "Lage waarde raakt klantbehoud.",
+      "domein": "PRD",
+      "inputs": [
+        {
+          "naam": "orders_on_time",
+          "eenheid": "aantal",
+          "omschrijving": "Op tijd gereede orders"
+        },
+        {
+          "naam": "orders_planned",
+          "eenheid": "aantal",
+          "omschrijving": "Geplande orders"
+        }
+      ]
+    },
+    {
+      "id": "KPI-QUA-001",
+      "naam": "Defect Rate",
+      "naam_nl": "Defectpercentage",
+      "eenheid": "%",
+      "formule": "units_defective / units_inspected * 100",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 2,
+      "waarsch": 3,
+      "krit": 5,
+      "doelstelling": "Bewaakt het aandeel defecte producten.",
+      "interpretatie": "Koppel aan leverancier, batch en machine.",
+      "domein": "QUA",
+      "inputs": [
+        {
+          "naam": "units_defective",
+          "eenheid": "unit",
+          "omschrijving": "Defecte producten"
+        },
+        {
+          "naam": "units_inspected",
+          "eenheid": "unit",
+          "omschrijving": "Gecontroleerde producten"
+        }
+      ]
+    },
+    {
+      "id": "KPI-QUA-002",
+      "naam": "Cost of Poor Quality",
+      "naam_nl": "Kosten van slechte kwaliteit",
+      "eenheid": "EUR",
+      "formule": "scrap_cost + rework_cost + other_quality_cost",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 120000,
+      "waarsch": 180000,
+      "krit": 250000,
+      "doelstelling": "Maakt kwaliteitsverlies zichtbaar in geld.",
+      "interpretatie": "Overlapt met afval en herbewerking, let op dubbeltelling.",
+      "domein": "QUA",
+      "inputs": [
+        {
+          "naam": "scrap_cost",
+          "eenheid": "EUR",
+          "omschrijving": "Afkeurkosten"
+        },
+        {
+          "naam": "rework_cost",
+          "eenheid": "EUR",
+          "omschrijving": "Herbewerkingskosten"
+        },
+        {
+          "naam": "other_quality_cost",
+          "eenheid": "EUR",
+          "omschrijving": "Overige kwaliteitskosten"
+        }
+      ]
+    },
+    {
+      "id": "KPI-QUA-003",
+      "naam": "Supplier Defect Rate",
+      "naam_nl": "Defecten per leverancier",
+      "eenheid": "%",
+      "formule": "components_defective / components_received * 100",
+      "agg": "per leverancier",
+      "richting": "lager",
+      "doel": 1,
+      "waarsch": 2,
+      "krit": 4,
+      "doelstelling": "Bewaakt de kwaliteit van ingekochte delen.",
+      "interpretatie": "Grondslag voor gesprek met de leverancier.",
+      "domein": "QUA",
+      "inputs": [
+        {
+          "naam": "components_defective",
+          "eenheid": "unit",
+          "omschrijving": "Defecte componenten"
+        },
+        {
+          "naam": "components_received",
+          "eenheid": "unit",
+          "omschrijving": "Ontvangen componenten"
+        }
+      ]
+    },
+    {
+      "id": "KPI-QUA-004",
+      "naam": "Audit Findings",
+      "naam_nl": "Auditbevindingen",
+      "eenheid": "aantal",
+      "formule": "audit_findings",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 10,
+      "waarsch": 15,
+      "krit": 25,
+      "doelstelling": "Toont het aantal auditbevindingen.",
+      "interpretatie": "Ernst weegt zwaarder dan aantal.",
+      "domein": "QUA",
+      "inputs": [
+        {
+          "naam": "audit_findings",
+          "eenheid": "aantal",
+          "omschrijving": "Auditbevindingen"
+        }
+      ]
+    },
+    {
+      "id": "KPI-QUA-005",
+      "naam": "Corrective Action Closure Rate",
+      "naam_nl": "Afsluiting corrigerende acties",
+      "eenheid": "%",
+      "formule": "corrective_actions_closed / corrective_actions_total * 100",
+      "agg": "sum per periode",
+      "richting": "hoger",
+      "doel": 90,
+      "waarsch": 80,
+      "krit": 65,
+      "doelstelling": "Bewaakt of bevindingen worden opgevolgd.",
+      "interpretatie": "Te laag betekent herhaalrisico.",
+      "domein": "QUA",
+      "inputs": [
+        {
+          "naam": "corrective_actions_closed",
+          "eenheid": "aantal",
+          "omschrijving": "Afgesloten corrigerende acties"
+        },
+        {
+          "naam": "corrective_actions_total",
+          "eenheid": "aantal",
+          "omschrijving": "Corrigerende acties"
+        }
+      ]
+    },
+    {
+      "id": "KPI-MNT-001",
+      "naam": "MTBF",
+      "naam_nl": "Gemiddelde tijd tussen storingen",
+      "eenheid": "h",
+      "formule": "operating_hours / failures",
+      "agg": "per asset",
+      "richting": "hoger",
+      "doel": 500,
+      "waarsch": 300,
+      "krit": 150,
+      "doelstelling": "Bewaakt hoe betrouwbaar assets draaien.",
+      "interpretatie": "Per asset vergelijken.",
+      "domein": "MNT",
+      "inputs": [
+        {
+          "naam": "operating_hours",
+          "eenheid": "h",
+          "omschrijving": "Bedrijfsuren"
+        },
+        {
+          "naam": "failures",
+          "eenheid": "aantal",
+          "omschrijving": "Storingen"
+        }
+      ]
+    },
+    {
+      "id": "KPI-MNT-002",
+      "naam": "Maintenance Cost Ratio",
+      "naam_nl": "Onderhoudskostenratio",
+      "eenheid": "%",
+      "formule": "maintenance_costs / asset_replacement_value * 100",
+      "agg": "per jaar",
+      "richting": "lager",
+      "doel": 3,
+      "waarsch": 4,
+      "krit": 6,
+      "doelstelling": "Vergelijkt onderhoudskosten met de vervangingswaarde.",
+      "interpretatie": "Te laag kan op uitgesteld onderhoud wijzen.",
+      "domein": "MNT",
+      "inputs": [
+        {
+          "naam": "maintenance_costs",
+          "eenheid": "EUR",
+          "omschrijving": "Onderhoudskosten"
+        },
+        {
+          "naam": "asset_replacement_value",
+          "eenheid": "EUR",
+          "omschrijving": "Vervangingswaarde assets"
+        }
+      ]
+    },
+    {
+      "id": "KPI-MNT-003",
+      "naam": "Repeat Failure Rate",
+      "naam_nl": "Herhaalstoringen",
+      "eenheid": "%",
+      "formule": "repeat_failures / failures * 100",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 10,
+      "waarsch": 15,
+      "krit": 25,
+      "doelstelling": "Toont hoe vaak dezelfde storing terugkomt.",
+      "interpretatie": "Hoog betekent dat de oorzaak niet is weggenomen.",
+      "domein": "MNT",
+      "inputs": [
+        {
+          "naam": "repeat_failures",
+          "eenheid": "aantal",
+          "omschrijving": "Herhaalstoringen"
+        },
+        {
+          "naam": "failures",
+          "eenheid": "aantal",
+          "omschrijving": "Storingen"
+        }
+      ]
+    },
+    {
+      "id": "KPI-MNT-004",
+      "naam": "Maintenance Cost per Unit",
+      "naam_nl": "Onderhoudskosten per eenheid",
+      "eenheid": "EUR/unit",
+      "formule": "maintenance_costs / units_produced",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 3,
+      "waarsch": 4,
+      "krit": 5,
+      "doelstelling": "Koppelt onderhoudskosten aan de productie.",
+      "interpretatie": "Stijgt ook bij lager volume, dus samen met volume lezen.",
+      "domein": "MNT",
+      "inputs": [
+        {
+          "naam": "maintenance_costs",
+          "eenheid": "EUR",
+          "omschrijving": "Onderhoudskosten"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-ENE-001",
+      "naam": "Energy Consumption per Unit",
+      "naam_nl": "Energie per eenheid",
+      "eenheid": "kWh/unit",
+      "formule": "energy_kwh / units_produced",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 2,
+      "waarsch": 2.1,
+      "krit": 2.3,
+      "doelstelling": "Bewaakt het energieverbruik per eenheid.",
+      "interpretatie": "Altijd normaliseren naar volume en productmix.",
+      "domein": "ENE",
+      "inputs": [
+        {
+          "naam": "energy_kwh",
+          "eenheid": "kWh",
+          "omschrijving": "Energieverbruik"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-ENE-002",
+      "naam": "Energy Cost per Revenue",
+      "naam_nl": "Energiekosten per omzet",
+      "eenheid": "%",
+      "formule": "energy_costs / revenue * 100",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 0.2,
+      "waarsch": 0.3,
+      "krit": 0.5,
+      "doelstelling": "Toont het gewicht van energie in de omzet.",
+      "interpretatie": "Prijs en verbruik apart bekijken.",
+      "domein": "ENE",
+      "inputs": [
+        {
+          "naam": "energy_costs",
+          "eenheid": "EUR",
+          "omschrijving": "Energiekosten"
+        },
+        {
+          "naam": "revenue",
+          "eenheid": "EUR",
+          "omschrijving": "Omzet"
+        }
+      ]
+    },
+    {
+      "id": "KPI-ENE-003",
+      "naam": "Water Consumption per Unit",
+      "naam_nl": "Water per eenheid",
+      "eenheid": "l/unit",
+      "formule": "water_l / units_produced",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 5,
+      "waarsch": 5.5,
+      "krit": 6.5,
+      "doelstelling": "Bewaakt het waterverbruik per eenheid.",
+      "interpretatie": "Combineer met reinigingscycli.",
+      "domein": "ENE",
+      "inputs": [
+        {
+          "naam": "water_l",
+          "eenheid": "l",
+          "omschrijving": "Waterverbruik"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-ENE-004",
+      "naam": "Carbon Emissions per Unit",
+      "naam_nl": "CO2 per eenheid",
+      "eenheid": "kg/unit",
+      "formule": "co2_kg / units_produced",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 0.5,
+      "waarsch": 0.55,
+      "krit": 0.65,
+      "doelstelling": "Bewaakt de uitstoot per eenheid.",
+      "interpretatie": "De emissiefactor per energiedrager vastleggen.",
+      "domein": "ENE",
+      "inputs": [
+        {
+          "naam": "co2_kg",
+          "eenheid": "kg",
+          "omschrijving": "CO2-uitstoot"
+        },
+        {
+          "naam": "units_produced",
+          "eenheid": "unit",
+          "omschrijving": "Geproduceerde eenheden"
+        }
+      ]
+    },
+    {
+      "id": "KPI-ENE-005",
+      "naam": "Waste Percentage",
+      "naam_nl": "Afvalpercentage",
+      "eenheid": "%",
+      "formule": "waste_kg / raw_material_kg * 100",
+      "agg": "sum per periode",
+      "richting": "lager",
+      "doel": 5,
+      "waarsch": 6,
+      "krit": 8,
+      "doelstelling": "Bewaakt het afval als deel van de grondstof.",
+      "interpretatie": "Overlapt met afkeur, let op dubbeltelling.",
+      "domein": "ENE",
+      "inputs": [
+        {
+          "naam": "waste_kg",
+          "eenheid": "kg",
+          "omschrijving": "Afval"
+        },
+        {
+          "naam": "raw_material_kg",
+          "eenheid": "kg",
+          "omschrijving": "Grondstofinvoer"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-100",
+      "naam": "Heat Duty",
+      "naam_nl": "Warmtestroom",
+      "eenheid": "kW",
+      "formule": "product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in)",
+      "agg": "gemiddelde over stationaire vensters",
+      "richting": "hoger",
+      "doel": 600,
+      "waarsch": 550,
+      "krit": 450,
+      "doelstelling": "Toont de overgedragen warmte.",
+      "interpretatie": "Bron voor de warmteoverdrachtscoëfficiënt.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "product_flow_kg_s",
+          "eenheid": "kg/s",
+          "omschrijving": "Productdebiet"
+        },
+        {
+          "naam": "cp_kj_kg_k",
+          "eenheid": "kJ/kg/K",
+          "omschrijving": "Soortelijke warmte product"
+        },
+        {
+          "naam": "product_t_out",
+          "eenheid": "K",
+          "omschrijving": "Producttemperatuur uit"
+        },
+        {
+          "naam": "product_t_in",
+          "eenheid": "K",
+          "omschrijving": "Producttemperatuur in"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-101",
+      "naam": "Overall Heat Transfer Coefficient",
+      "naam_nl": "Warmteoverdrachtscoëfficiënt U",
+      "eenheid": "kW/m2/K",
+      "formule": "product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in) / (hx_area_m2 * lmtd(hot_t_in - product_t_out, hot_t_out - product_t_in))",
+      "agg": "gemiddelde over stationaire vensters",
+      "richting": "hoger",
+      "doel": 3.6,
+      "waarsch": 3.2,
+      "krit": 2.8,
+      "doelstelling": "Meet de werkelijke warmteoverdracht.",
+      "interpretatie": "Alleen geldig in stationaire vensters, buiten CIP en opstart.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "product_flow_kg_s",
+          "eenheid": "kg/s",
+          "omschrijving": "Productdebiet"
+        },
+        {
+          "naam": "cp_kj_kg_k",
+          "eenheid": "kJ/kg/K",
+          "omschrijving": "Soortelijke warmte product"
+        },
+        {
+          "naam": "product_t_out",
+          "eenheid": "K",
+          "omschrijving": "Producttemperatuur uit"
+        },
+        {
+          "naam": "product_t_in",
+          "eenheid": "K",
+          "omschrijving": "Producttemperatuur in"
+        },
+        {
+          "naam": "hx_area_m2",
+          "eenheid": "m2",
+          "omschrijving": "Warmtewisselend oppervlak"
+        },
+        {
+          "naam": "hot_t_in",
+          "eenheid": "K",
+          "omschrijving": "Temperatuur warme zijde in"
+        },
+        {
+          "naam": "hot_t_out",
+          "eenheid": "K",
+          "omschrijving": "Temperatuur warme zijde uit"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-102",
+      "naam": "Fouling Resistance",
+      "naam_nl": "Vervuilingsweerstand",
+      "eenheid": "m2*K/kW",
+      "formule": "1 / u_actual - 1 / u_clean_at_flow",
+      "agg": "gemiddelde over stationaire vensters",
+      "richting": "lager",
+      "doel": 0.03,
+      "waarsch": 0.06,
+      "krit": 0.1,
+      "doelstelling": "Maakt vervuiling los zichtbaar van het debiet.",
+      "interpretatie": "u_clean_at_flow volgt uit de schone referentie bij hetzelfde debiet.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "u_actual",
+          "eenheid": "kW/m2/K",
+          "omschrijving": "Werkelijke U uit KPI-PAC-101"
+        },
+        {
+          "naam": "u_clean_at_flow",
+          "eenheid": "kW/m2/K",
+          "omschrijving": "Schone U bij hetzelfde debiet"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-103",
+      "naam": "Normalized Pressure Drop",
+      "naam_nl": "Genormaliseerde drukval",
+      "eenheid": "bar",
+      "formule": "dp_bar * pow(ref_flow_kg_s / product_flow_kg_s, 2)",
+      "agg": "gemiddelde over stationaire vensters",
+      "richting": "lager",
+      "doel": 1.0,
+      "waarsch": 1.25,
+      "krit": 1.5,
+      "doelstelling": "Corrigeert drukval voor debiet, zodat vervuiling zichtbaar wordt.",
+      "interpretatie": "Macht 2 is een benadering bij turbulente stroming, kalibreer per wisselaar.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "dp_bar",
+          "eenheid": "bar",
+          "omschrijving": "Gemeten drukval"
+        },
+        {
+          "naam": "ref_flow_kg_s",
+          "eenheid": "kg/s",
+          "omschrijving": "Referentiedebiet"
+        },
+        {
+          "naam": "product_flow_kg_s",
+          "eenheid": "kg/s",
+          "omschrijving": "Productdebiet"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-104",
+      "naam": "Heat Recovery Ratio",
+      "naam_nl": "Warmteterugwinning",
+      "eenheid": "%",
+      "formule": "(regen_t_out - cold_t_in) / (hold_t - cold_t_in) * 100",
+      "agg": "gemiddelde over stationaire vensters",
+      "richting": "hoger",
+      "doel": 92,
+      "waarsch": 90,
+      "krit": 86,
+      "doelstelling": "Toont hoeveel warmte de regeneratiesectie terugwint.",
+      "interpretatie": "Daling betekent meer stoom bij gelijke uitlaattemperatuur.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "regen_t_out",
+          "eenheid": "K",
+          "omschrijving": "Temperatuur uit regeneratie"
+        },
+        {
+          "naam": "cold_t_in",
+          "eenheid": "K",
+          "omschrijving": "Temperatuur koud product in"
+        },
+        {
+          "naam": "hold_t",
+          "eenheid": "K",
+          "omschrijving": "Houdtemperatuur"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-105",
+      "naam": "Run Length Between Cleanings",
+      "naam_nl": "Looptijd tussen reinigingen",
+      "eenheid": "h",
+      "formule": "avg(run_hours_between_cip)",
+      "agg": "gemiddelde per wisselaar",
+      "richting": "hoger",
+      "doel": 12,
+      "waarsch": 10,
+      "krit": 8,
+      "doelstelling": "Toont hoe lang een wisselaar draait tussen twee reinigingen.",
+      "interpretatie": "De bovengrens komt uit HACCP en mag nooit door het model worden verlengd.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "run_hours_between_cip",
+          "eenheid": "h",
+          "omschrijving": "Draaiuren tussen reinigingen"
+        }
+      ]
+    },
+    {
+      "id": "KPI-PAC-106",
+      "naam": "Cleaning Cost per Cycle",
+      "naam_nl": "Reinigingskosten per cyclus",
+      "eenheid": "EUR",
+      "formule": "cip_chemicals_eur + cip_water_eur + cip_energy_eur + cip_labor_eur",
+      "agg": "per cyclus",
+      "richting": "lager",
+      "doel": 400,
+      "waarsch": 500,
+      "krit": 700,
+      "doelstelling": "Maakt een reiniging zichtbaar in geld.",
+      "interpretatie": "Stilstand alleen meetellen als de lijn capaciteit tekortkomt.",
+      "domein": "PAC",
+      "inputs": [
+        {
+          "naam": "cip_chemicals_eur",
+          "eenheid": "EUR",
+          "omschrijving": "Reinigingsmiddelen per cyclus"
+        },
+        {
+          "naam": "cip_water_eur",
+          "eenheid": "EUR",
+          "omschrijving": "Water per cyclus"
+        },
+        {
+          "naam": "cip_energy_eur",
+          "eenheid": "EUR",
+          "omschrijving": "Energie per cyclus"
+        },
+        {
+          "naam": "cip_labor_eur",
+          "eenheid": "EUR",
+          "omschrijving": "Arbeid per cyclus"
+        }
+      ]
+    }
+  ]
+}

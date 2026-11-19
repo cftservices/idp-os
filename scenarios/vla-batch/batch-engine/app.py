@@ -29,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vla import alarms as A, inventory, kpi as K, line as L, model as M
+from vla import alarms as A, bvip, bvip_map, inventory, kpi as K, kpi_history, line as L, \
+    model as M
 from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
@@ -339,6 +340,11 @@ def _startup() -> None:
             STATE["autopilot"] = pilots[M.DEFAULT_LINE]
         except ValueError as e:
             log.error("autopilot not started: %s", e)
+    # KPI history into TDengine (KPI_WRITER=1); never blocks the start, retries on its own.
+    try:
+        STATE["kpi_writer"] = kpi_history.start_if_enabled(db)
+    except Exception as e:  # noqa: BLE001
+        log.error("KPI-historie niet gestart: %s", e)
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
@@ -351,6 +357,8 @@ def _shutdown() -> None:
         pilot.stop()
     if STATE.get("autopilot") is not None:
         STATE["autopilot"].stop()
+    if STATE.get("kpi_writer") is not None:
+        STATE["kpi_writer"].stop_event.set()
     for b in (STATE.get("buses") or {}).values() or [STATE.get("bus")]:
         if b is not None:
             b.stop()
@@ -1043,6 +1051,35 @@ def get_kpi_summary(window: str = Query(default="week"),
         return JSONResponse(K.summary(db, window=window, compare=compare))
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.get(f"{API}/kpi/bvip")
+def get_kpi_bvip(line: str = Query(default="PLANT"), hours: float = Query(default=8.0)):
+    """De 29 industriële BVIP-KPI's over de laatste `hours`, plus de status van de
+    KPI-historie. Definities uit bvip_catalogue.json, bronnen uit bvip_map.py. Een KPI
+    zonder bron heeft status NIET_AANTOONBAAR en value null, nooit 0."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    if line not in ("L1", "L2", "PLANT"):
+        raise HTTPException(400, "line moet L1, L2 of PLANT zijn")
+    if not 0 < hours <= 24:
+        raise HTTPException(400, "hours moet tussen 0 en 24 liggen")
+    catalogue = bvip.load_catalogue()
+    snap = bvip.take_snapshot(db)
+    start, end = bvip.window(snap.now, hours)
+    vals = bvip.kpi_values(snap, line, start, end, bvip.config_from_env(), catalogue)
+    kpis = []
+    for k in catalogue:
+        spec = bvip_map.BVIP_MAP[k["id"]]
+        kpis.append({"kpi_id": k["id"], "naam": k["naam_nl"] or k["naam"], "domein": k["domein"],
+                     "eenheid": k["eenheid"], "formule": k["formule"], "richting": k["richting"],
+                     "doel": k["doel"], "waarsch": k["waarsch"], "krit": k["krit"],
+                     "drempels": spec.get("drempels"), "bron": spec.get("bron"),
+                     "let_op": spec.get("let_op"), "ontbreekt": spec.get("ontbreekt") or [],
+                     "fase": spec.get("fase"), **vals[k["id"]]})
+    return {"line": line, "from": start.isoformat(), "to": end.isoformat(), "hours": hours,
+            "writer": kpi_history.writer_status(), "kpis": kpis}
 
 
 @app.get(f"{API}/report/period")

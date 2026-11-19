@@ -197,6 +197,26 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
 
 ## Changelog
 
+### 2026-11-19: KPI-historie, 29 BVIP-KPI's in Grafana, stoomklep-scenario in een lus
+- **`vla-scenario`** (vps-shared, in `stack.sh` SERVICES): `scenario_steam_valve.py --loop`, afwisselend
+  L1/L2, 52 batches per cyclus (2 REJECTED), ~2 u. Stoppen wist de fout op beide lijnen (beproefd).
+  Antwoordsleutel `/root/vla-scenario-logs/steam-valve-loop.jsonl`; `vla-scenario-8d` is weg.
+- **KPI-historie** (`batch-engine/vla/kpi_history.py`, `bvip.py`, `bvip_map.py`, `KPI_WRITER=1`): elke
+  5 min de 29 industriële BVIP-KPI's naar `idp.kpi` (rollend 8 u) en `idp.kpi_input` (inputs per
+  5-min-blok op gebeurtenistijd). Definities uit `vla/bvip_catalogue.json`, gegenereerd met
+  `tools/sync-bvip-catalogue.py` uit de BVIP-repo. Zes dashboards `fabriek-kpi*`; validator
+  241 panelen ok, 87/87 KPI x lijn vers. `GET /api/v1/kpi/bvip?line=` toont waarden en schrijverstatus.
+- Stand fase 1: 8 KPI's volledig, 4 deels, 17 **niet aantoonbaar** (geen getal, wel de ontbrekende
+  input). Fase 2 (omsteltijd, herhaalde storing, onderhoudskosten) en fase 3 (energie, water, CIP,
+  pasteur in de simulatie) volgen; plan in `~/.claude/plans/c-tools-techflow-os-sub-os-project-os-pr-shimmering-ladybug.md`.
+- **Correctie MES:** packs van HOLD/REJECTED-batches telden als geleverd voor de order en bleven als
+  eindproductvoorraad staan. Nu `blocked_packs` apart en een `scrap`/`quarantine`-boeking. De
+  willekeurige storing "Stoomregelklep hangt" heet nu "Condenspot stoomtoevoer verstopt" (8D-zuiverheid).
+- **Valkuilen TDengine-plugin, nogmaals:** `partition\nby`, en een tabel met meer rijen wil een
+  timestamp als eerste kolom (`last(ts) as tot`). `sum(case … else 0 end)` geeft "Invalid parameter
+  data type"; het moet `else 0.0` zijn. MTBF staat rood (8–26 procesuren tegen doel 500): dat is de
+  frequentie van `DEMO_BREAKDOWNS`, geen fout.
+
 ### 2026-11-17: autopilot hersteld, spreiding, koppeling met aios CI
 - **Autopilot stond sinds 29-10 (L1) en 31-10 (L2) stil.** Oorzaak: een CBM-werkorder en een
   storingswerkorder deelden een nummer; de update op `wo_id` raakte steeds het CBM-document, de
@@ -210,7 +230,7 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
   op precies 260,0 cP en heeft SPC niets te tonen.
 - **`vla-ci-sync`** (`ci-sync/`): pusht batchhistorie en dagelijkse KPI-inputs naar de aios-workspace
   "DairyWorks (demo)" (Continuous Improvement). Token in `ci-sync/.env`, niet in git.
-- **Scenario** `scripts/scenario_steam_valve.py` (container `vla-scenario-8d`): vastlopende
+- **Scenario** `scripts/scenario_steam_valve.py` (eerst container `vla-scenario-8d`, sinds 19-11 `vla-scenario` in een lus): vastlopende
   stoomklep op L1 voor een 8D-demo; antwoordsleutel in `/root/vla-scenario-logs/`.
 
 ### 2026-10-23: grafana.* en tdengine.* werkend

@@ -2389,7 +2389,10 @@
     "value_per_pack": 0.62,
     "cost_per_kg_material": { "MILK": 0.48, "SUGAR": 0.85, "STARCH": 1.60, "COCOA": 4.20 },
     "cost_per_downtime_hour": 450.0,
-    "rework_cost_per_batch": 620.0
+    "rework_cost_per_batch": 620.0,
+    "labour_cost_per_hour": 75.0,
+    "parts_cost_per_breakdown": { "receiving": 180.0, "process": 250.0, "cook": 400.0, "cooler": 300.0, "filler": 220.0 },
+    "asset_replacement_value": { "receiving": 120000.0, "process": 180000.0, "cook": 350000.0, "cooler": 220000.0, "filler": 450000.0 }
   },
-  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld."
+  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld. Onderhoudskosten (labour_cost_per_hour, parts_cost_per_breakdown per machinerol, asset_replacement_value per machinerol) zijn per 2026-11-19 toegevoegd voor KPI-MNT-002/004, met dezelfde status: demo-aanname, geen meting."
 }

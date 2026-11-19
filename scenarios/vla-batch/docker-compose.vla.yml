@@ -219,6 +219,17 @@ services:
       # versnelde demo terug naar procestijd, want de norm (5200 packs/h per
       # lijn) is die van een echte lijn.
       KPI_TIME_SCALE: "15.0"
+      # KPI-historie (vla/kpi_history.py): elke 5 min de 29 industriële BVIP-KPI's
+      # naar idp.kpi en idp.kpi_input in TDengine, voor de fabriek-kpi-dashboards.
+      # Het ideale tempo is hetzelfde als SYNC_IDEAL_PACKS_PER_H van ci-sync.
+      KPI_WRITER: "1"
+      KPI_WRITER_INTERVAL_S: "300"
+      KPI_WRITER_BACKFILL_H: "24"
+      KPI_IDEAL_PACKS_PER_H: "L1:10042,L2:10080"
+      TD_URL: "http://vla-tdengine:6041"
+      TD_DB: ${TD_DB:-idp}
+      TD_USER: ${TD_USER:-root}
+      TD_PASS: ${TD_PASS:-taosdata}
       # Datalaag-lens: oorzaakuitleg via het lokale model, gesimuleerde
       # storingen voor de demo, en build-/resourcegegevens voor DataOps.
       OLLAMA_URL: "http://vla-ollama:11434"

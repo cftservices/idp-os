@@ -12,7 +12,11 @@ Wording rule: dashboards speak of "de datalaag", "topics" and "ISA-95-context".
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import kpi_boards  # noqa: E402  (KPI dashboards from the BVIP catalogue snapshot)
 
 OUT = Path(__file__).parent / "dashboards"
 TD = {"type": "tdengine-datasource", "uid": "vla-tdengine"}
@@ -598,9 +602,27 @@ def historian_dataops() -> Board:
 
 
 BOARDS = [fabriek_overzicht, lijn_live, voorbereiding, oee_verliezen, logistiek_trace, onderhoud_cbm,
-          historian_dataops]
+          historian_dataops] + kpi_boards.boards(Board, td, stat_opts)
+
+
+def render(board: Board) -> str:
+    return json.dumps(board.d, indent=2, ensure_ascii=False) + "\n"
+
 
 if __name__ == "__main__":
+    import sys
+    if "--check" in sys.argv:   # tools/check-generated.sh: the JSON must match this script
+        stale = []
+        for fn in BOARDS:
+            b = fn()
+            f = OUT / f"{b.d['uid']}.json"
+            if not f.is_file() or f.read_text(encoding="utf-8") != render(b):
+                stale.append(f.name)
+        if stale:
+            print("verouderd, draai grafana/build_dashboards.py: " + ", ".join(stale))
+            sys.exit(1)
+        print(f"{len(BOARDS)} dashboards actueel")
+        sys.exit(0)
     for fn in BOARDS:
         f = fn().write()
         print(f"{f.name}: {len(json.loads(f.read_text(encoding='utf-8'))['panels'])} panelen")

@@ -109,7 +109,7 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
 
 ### Fabrieksdashboards (Grafana)
 
-Zeven dashboards in de map *Vla Batch Demo*, op `https://milkdemo.<domain>/grafana/d/<uid>`
+Dertien dashboards in de map *Vla Batch Demo*, op `https://milkdemo.<domain>/grafana/d/<uid>`
 (basic auth plus Grafana-login); `https://grafana.<domain>/d/<uid>` verwijst daarheen door.
 De ruwe TDengine-data bekijk je in de explorer op `https://tdengine.<domain>` (zie *Ingress*).
 
@@ -122,8 +122,29 @@ De ruwe TDengine-data bekijk je in de explorer op `https://tdengine.<domain>` (z
 | `fabriek-logistiek` | magazijn, zendingen, per heftruck, per order (track & trace) | engine |
 | `fabriek-onderhoud` | onderhoudstoestand, draaiuren, vervuiling, werkorders | TDengine + engine |
 | `fabriek-historian` | TDengine zelf: rijen, instroom per gebied, versheid per topic, datakwaliteit | TDengine + engine |
+| `fabriek-kpi` | alle 29 industriële BVIP-KPI's, rollend 8 u met sparkline; lijn L1/L2/Fabriek | TDengine `idp.kpi` |
+| `fabriek-kpi-productie` … `-kwaliteit`, `-onderhoud`, `-energie`, `-proces` | per domein: verloop, exacte waarde over de gekozen periode, inputs | TDengine `idp.kpi`, `idp.kpi_input` |
 
 `vla-line` en `vla-mes` blijven staan, want `/analyse` embedt `vla-line`.
+
+**KPI-historie (sinds 2026-11-19).** De engine schrijft elke 5 minuten de 29 industriële KPI's uit
+de BVIP-catalogus naar TDengine ([`batch-engine/vla/kpi_history.py`](batch-engine/vla/kpi_history.py),
+`KPI_WRITER=1`): `idp.kpi` met de rollende waarde (8 u) en een status `OK`/`DEELS`/`UNSET`/
+`NIET_AANTOONBAAR`, en `idp.kpi_input` met de formule-inputs per blok van 5 minuten op
+gebeurtenistijd. De periodepanelen tellen die inputs op en passen dan de catalogusformule toe, in
+SQL; dat is exact over elke periode, ook als Mongo maar 24 u bewaart. Definities komen uit
+[`batch-engine/vla/bvip_catalogue.json`](batch-engine/vla/bvip_catalogue.json) (gegenereerd met
+`python tools/sync-bvip-catalogue.py` uit de BVIP-repo), bronnen en wat ontbreekt uit
+[`batch-engine/vla/bvip_map.py`](batch-engine/vla/bvip_map.py). Een KPI zonder bron krijgt een
+tekstpaneel "niet aantoonbaar" met de ontbrekende input, nooit een getal. Live controleren:
+`GET /api/v1/kpi/bvip?line=PLANT` (waarden plus status van de schrijver).
+
+**Stoomklep-scenario in een lus (sinds 2026-11-19).** Container `vla-scenario` (in
+`docker-compose.vps-shared.yml`, onderdeel van `stack.sh online`) draait
+[`scripts/scenario_steam_valve.py`](scripts/scenario_steam_valve.py) `--loop`: per cyclus
+52 batches (stabiel 25, drift 10, buiten specificatie 2 = REJECTED, gerepareerd 15), afwisselend
+L1 en L2, ~2 u per cyclus. Antwoordsleutel `/root/vla-scenario-logs/steam-valve-loop.jsonl`.
+`docker stop vla-scenario` wist de fout op beide lijnen (beproefd 19-11).
 
 **Workflow.** Wijzig nooit de JSON, maar [`grafana/build_dashboards.py`](grafana/build_dashboards.py):
 `python build_dashboards.py` → `scp grafana/dashboards/fabriek-*.json` naar de VPS → ~40 s wachten

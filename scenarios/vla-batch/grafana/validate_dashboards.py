@@ -11,10 +11,23 @@ import itertools, json, os, re, sys, urllib.parse, urllib.request as u
 
 GF = os.getenv("GF_URL", "http://grafana:3000/grafana")  # served from sub path
 API = os.getenv("API_URL", "http://localhost:8000/api/v1")
+KPI_BOARDS = ["fabriek-kpi", "fabriek-kpi-productie", "fabriek-kpi-kwaliteit", "fabriek-kpi-onderhoud",
+              "fabriek-kpi-energie", "fabriek-kpi-proces"]
 BOARDS = ["fabriek-overzicht", "fabriek-lijn", "fabriek-voorbereiding", "fabriek-oee",
-          "fabriek-logistiek", "fabriek-onderhoud", "fabriek-historian"]
+          "fabriek-logistiek", "fabriek-onderhoud", "fabriek-historian"] + KPI_BOARDS
 # state-dependent, may legitimately be empty
 MAY_BE_EMPTY = {"Open werkorders", "Afgekeurd", "Open alarmen", "Afwegen", "Premix", "Gereed", "Verbruikt"}  # noValue "0"
+# KPI panels share titles, so they are judged by the KPI in their query: a fully sourced KPI
+# ("ok") must have data, a partly sourced one may be empty in a quiet window.
+try:
+    from vla.bvip_map import BVIP_MAP   # runs inside the batch-engine container (cwd /app)
+except ImportError:
+    BVIP_MAP = {}
+
+
+def kpi_may_be_empty(t):
+    m = re.search(r"kpi_id='(KPI-[A-Z]+-\d+)'", t.get("sql") or "")
+    return bool(m) and BVIP_MAP.get(m.group(1), {}).get("status") != "ok"
 
 # basic auth is disabled on purpose (hardening), so log in for a session cookie
 _login = u.urlopen(u.Request(GF + "/login", data=json.dumps({"user": "admin", "password": os.environ["GF_PASS"]}).encode(),
@@ -135,8 +148,42 @@ for uid in BOARDS:
                 if err:
                     errs.append(f"{t['refId']}: {err}")
             empty = not any(o.split(":")[1] not in ("0", "None") for o in out)
-            bad = bool(errs) or (empty and p["title"] not in MAY_BE_EMPTY)
+            may = p["title"] in MAY_BE_EMPTY or all(kpi_may_be_empty(t) for t in p["targets"])
+            bad = bool(errs) or (empty and not may)
             fail += bad
             print(f"  {'FOUT' if bad else 'ok  '} {p['title']}: {' '.join(out)} {' | '.join(errs)}")
+
+
+def kpi_freshness():
+    """Every KPI x line written in the last 15 minutes, and fully sourced KPIs not UNSET."""
+    q = {"refId": "A", "datasource": {"type": "tdengine-datasource", "uid": "vla-tdengine"},
+         "queryType": "SQL", "formatType": "Table",
+         # first column a timestamp, or the plugin refuses a multi-row table
+         "sql": "select last(ts) as tot, kpi_id, `line`, last(`status`) as status, count(*) as n from idp.kpi "
+                "where ts > now-15m partition\nby kpi_id, `line`"}
+    r = gf("/api/ds/query", {"from": "now-30m", "to": "now", "queries": [q]})
+    if "_error" in r or r["results"]["A"].get("error"):
+        print(f"!! KPI-versheid: {r.get('_error') or r['results']['A']['error'][:250]}")
+        return 1
+    rows = []
+    for f in r["results"]["A"].get("frames", []):
+        names = [fl["name"] for fl in f["schema"]["fields"]]
+        vals = f["data"]["values"]
+        rows += [dict(zip(names, col)) for col in zip(*vals)] if vals else []
+    seen = {(x["kpi_id"], x["line"]) for x in rows}
+    want = {(k, ln) for k in BVIP_MAP for ln in ("L1", "L2", "PLANT")}
+    missing = sorted(want - seen)
+    unset = sorted((x["kpi_id"], x["line"]) for x in rows
+                   if x["status"] == "UNSET" and BVIP_MAP.get(x["kpi_id"], {}).get("status") == "ok")
+    print(f"\n== KPI-historie: {len(seen)}/{len(want)} KPI x lijn geschreven in de laatste 15 min")
+    if missing:
+        print(f"  FOUT ontbreekt: {missing[:10]}{' ...' if len(missing) > 10 else ''}")
+    if unset:  # e.g. MTBF without a failure in 8 h: a warning, not a failure
+        print(f"  let op, UNSET terwijl volledig gevoed: {unset}")
+    return 1 if missing else 0
+
+
+if BVIP_MAP:
+    fail += kpi_freshness()
 print(f"\n{fail} panelen met fout of leeg")
 sys.exit(1 if fail else 0)

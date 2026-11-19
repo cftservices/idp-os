@@ -1,0 +1,418 @@
+{
+  "uid": "fabriek-kpi-energie",
+  "title": "Fabriek — KPI energie",
+  "description": "KPI's energie uit de BVIP-catalogus: verloop (rollend 8 uur), de exacte waarde over de gekozen periode en de inputs.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "lijn",
+        "label": "Lijn",
+        "type": "custom",
+        "hide": 0,
+        "query": "Fabriek : PLANT,L1 : L1,L2 : L2",
+        "current": {
+          "text": "Fabriek",
+          "value": "PLANT"
+        },
+        "options": [
+          {
+            "text": "Fabriek",
+            "value": "PLANT",
+            "selected": true
+          },
+          {
+            "text": "L1",
+            "value": "L1",
+            "selected": false
+          },
+          {
+            "text": "L2",
+            "value": "L2",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Links het verloop van de rollende waarde (8 uur). Midden de waarde over de **gekozen periode**: de inputs opgeteld en dan de catalogusformule, dus exact, ook over een week. Rechts die inputs. Uren zijn procesuren."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Energie per eenheid (ENE-001)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Energie per eenheid** · `KPI-ENE-001`\n\n**Niet aantoonbaar** · ontbreekt: `energy_kwh`\n\nDe fabriek heeft nog geen energiemeters. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Energiekosten per omzet (ENE-002)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Energiekosten per omzet** · `KPI-ENE-002`\n\n**Niet aantoonbaar** · ontbreekt: `energy_costs`, `revenue`\n\nGeen energiemeters en geen verkoopprijs in het kostenmodel. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Water per eenheid (ENE-003)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Water per eenheid** · `KPI-ENE-003`\n\n**Niet aantoonbaar** · ontbreekt: `water_l`\n\nDe fabriek heeft nog geen watermeter. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "CO2 per eenheid (ENE-004)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 9,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**CO2 per eenheid** · `KPI-ENE-004`\n\n**Niet aantoonbaar** · ontbreekt: `co2_kg`\n\nGeen energiemeters, dus geen CO2. volgt in fase 3 (fabriekssimulatie)."
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Afvalpercentage (ENE-005)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-ENE-005' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 8
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-ENE-005 · Waste Percentage\nFormule (catalogus): waste_kg / raw_material_kg * 100\nBron in de demo: Afval = (afgekeurde pakken + pakken van HOLD/REJECTED-batches) x dichtheid; grondstof = gedoseerde kg.\nLet op: Spoel- en CIP-verliezen ontbreken; die komen met de CIP-simulatie.\nDoel 5, waarschuwing 6, kritiek 8 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='waste_kg' then `value` else 0.0 end) / sum(case when `input`='raw_material_kg' then `value` else 0.0 end) * 100 as v from idp.kpi_input where kpi_id='KPI-ENE-005' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 8
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-ENE-005 · Waste Percentage\nFormule (catalogus): waste_kg / raw_material_kg * 100\nBron in de demo: Afval = (afgekeurde pakken + pakken van HOLD/REJECTED-batches) x dichtheid; grondstof = gedoseerde kg.\nLet op: Spoel- en CIP-verliezen ontbreken; die komen met de CIP-simulatie.\nDoel 5, waarschuwing 6, kritiek 8 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 19,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-ENE-005' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    }
+  ]
+}
