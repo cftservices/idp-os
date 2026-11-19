@@ -117,9 +117,13 @@ def build_rows(snap: bvip.Snapshot, bucket_starts: list[datetime], rolling_at: l
             vals = bvip.inputs(snap, line, b0, b1, cfg)
             for k in additive:
                 missing = set(BVIP_MAP[k["id"]].get("ontbreekt") or [])
-                for i in k["inputs"]:
-                    if i["naam"] in missing:
-                        continue
+                names = [i for i in k["inputs"] if i["naam"] not in missing]
+                # A bucket where one input has no source (no meter reading yet, no ideal
+                # rate) writes nothing for this KPI: otherwise the other inputs (packs)
+                # are summed over time the first one never covered, and the ratio lies.
+                if any(vals.get(i["naam"]) is None for i in names):
+                    continue
+                for i in names:
                     rows.input(b0, k["id"], line, i["naam"], i.get("eenheid"), vals.get(i["naam"]))
     for t in rolling_at:
         start, end = bvip.window(t, window_h)

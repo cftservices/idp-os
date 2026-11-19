@@ -233,6 +233,33 @@ def test_energy_in_5_minute_buckets_adds_up_to_the_window():
     assert sum(parts) == pytest.approx(whole) and whole > 0
 
 
+def test_energy_per_pack_only_counts_packs_from_when_the_meters_ran():
+    """The meters started at 08:30; packs filled before then must not dilute kWh/pack,
+    neither in the rolling value nor in the per-bucket inputs Grafana sums."""
+    from vla import kpi_history
+    db = _db()
+    for i, m in enumerate((0, 10, 20, 35, 45)):
+        db.dw_batches.insert_one({"batch_id": f"B{i}", "line": "L1", "recipe_id": "chocolate-vla-1L",
+                                  "started_at": iso(T0 + timedelta(minutes=m)),
+                                  "completed_at": iso(T0 + timedelta(minutes=m + 5)),
+                                  "packs_total": 1000, "reject_count": 0, "verdict": M.APPROVED,
+                                  "state": M.COMPLETE})
+    for j, m in enumerate(range(30, 55, 5)):
+        db.dw_meter_readings.insert_one({"line": "L1", "ts": iso(T0 + timedelta(minutes=m)),
+                                         "heat_kwh_total": 100.0 * j, "electricity_kwh_total": 0.0,
+                                         "steam_kg_total": 0.0, "water_L_total": 0.0})
+    end = T0 + timedelta(minutes=55)
+    snap = bvip.take_snapshot(db, now=end)
+    k = bvip.kpi_values(snap, "L1", T0, end, CFG, CAT)
+    # 400 kWh metered after 08:30, and only the 2 batches completed after 08:30 count
+    assert k["KPI-ENE-001"]["value"] == pytest.approx(400 / 2000)
+    rows = kpi_history.build_rows(snap, [T0 + timedelta(minutes=m) for m in range(0, 55, 5)], [],
+                                  CFG, CAT, 300, 8, "idp")
+    ene_ts = sorted({p.split("VALUES (")[1].split(",")[0] for p in rows.parts if "_ene_001_" in p})
+    first_ms = int((T0 + timedelta(minutes=35)).timestamp() * 1000)   # first bucket with a step
+    assert ene_ts and min(int(t) for t in ene_ts) >= first_ms
+
+
 def test_no_meter_reading_is_no_measurement_not_zero():
     db = _db()
     snap = bvip.take_snapshot(db, now=T0 + timedelta(minutes=30))

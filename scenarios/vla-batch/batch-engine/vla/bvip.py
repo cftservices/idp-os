@@ -370,6 +370,16 @@ def inputs(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: Confi
     }
 
 
+METER_KPIS = {"KPI-ENE-001", "KPI-ENE-002", "KPI-ENE-003", "KPI-ENE-004"}
+
+
+def meter_cover_start(snap: Snapshot, line: str) -> Optional[datetime]:
+    """From when the meters of `line` (both lines for PLANT) were read; None = never."""
+    lines = LINES if line == PLANT else (line,)
+    firsts = [snap.readings[ln][0]["_t"] for ln in lines if snap.readings.get(ln)]
+    return max(firsts) if len(firsts) == len(lines) else None
+
+
 def counter_steps(readings: list[dict], start: datetime, end: datetime) -> dict:
     """Consumption per counter over [start, end): the sum of positive steps between
     consecutive readings, each step counted at the time of its later reading. A
@@ -498,11 +508,24 @@ def kpi_values(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: C
                catalogue: list[dict]) -> dict:
     """{kpi_id: {"value", "status", "inputs"}} for all 29 KPIs over [start, end)."""
     vals = inputs(snap, line, start, end, cfg)
+    # A meter KPI is a ratio of metered consumption to production. Production must cover
+    # the same time as the meters, or consumption is spread over packs nobody metered
+    # (the meters started on 2026-11-19 while the window reached 8 h back).
+    cover = meter_cover_start(snap, line)
+    vals_m = None if cover is None else (
+        vals if cover <= start else inputs(snap, line, max(start, cover), end, cfg))
     pac = None
     out = {}
     for k in catalogue:
         kid, spec = k["id"], BVIP_MAP[k["id"]]
         names = [i["naam"] for i in k["inputs"]]
+        if kid in METER_KPIS and spec["status"] != NA:
+            mv = vals_m or {}
+            value = evaluate(k["formule"], {n: mv.get(n) for n in names}) if vals_m else None
+            ok = STATUS_DEELS if spec["status"] == DEELS else STATUS_OK
+            out[kid] = {"value": value, "status": ok if value is not None else STATUS_UNSET,
+                        "inputs": {n: mv.get(n) for n in names}}
+            continue
         if spec["status"] == NA:
             out[kid] = {"value": None, "status": STATUS_NA, "inputs": {}}
             continue
