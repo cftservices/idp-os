@@ -206,9 +206,18 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
   5-min-blok op gebeurtenistijd). Definities uit `vla/bvip_catalogue.json`, gegenereerd met
   `tools/sync-bvip-catalogue.py` uit de BVIP-repo. Zes dashboards `fabriek-kpi*`; validator
   241 panelen ok, 87/87 KPI x lijn vers. `GET /api/v1/kpi/bvip?line=` toont waarden en schrijverstatus.
-- Stand fase 1: 8 KPI's volledig, 4 deels, 17 **niet aantoonbaar** (geen getal, wel de ontbrekende
-  input). Fase 2 (omsteltijd, herhaalde storing, onderhoudskosten) en fase 3 (energie, water, CIP,
-  pasteur in de simulatie) volgen; plan in `~/.claude/plans/c-tools-techflow-os-sub-os-project-os-pr-shimmering-ladybug.md`.
+- Stand na fase 3: 18 KPI's volledig, 7 deels, 4 **niet aantoonbaar** (herbewerking,
+  ingangskeuring, audits, correctieve acties: geen bron in de demo; wel de ontbrekende input).
+- **Fase 3, simulatie:** energie- en watermeters, CIP-station (`StartCip`, staat `CIP`, 60 procesmin)
+  en een intake-pasteur met regeneratie en vervuiling in `factory/physics.py`. Energie uit
+  m·cp·ΔT (klopt per batch ondanks 15x versnelling). Engine: `vla/meters.py` (`METERS=1`) bemonstert,
+  rekent U en Rf zelf uit de signalen; CIP bij Rf ≥ 0,06 (~12 batches), vangnet 16 batches.
+- **Les: een constante komt maar één keer langs.** De OPC-UA-koppeling publiceert alleen bij
+  verandering, dus `hold_t_C` (75 °C), de CIP-teller en de watermeter vóór de eerste CIP bereikten
+  een later gestarte engine nooit; de sampler schreef daardoor niets en meldde geen fout. Nu valt
+  hij terug op `last()` uit de historian. En `init-*-opcua.sh` stopten als het device al bestond:
+  een nieuwe tag kwam op een draaiende stack nooit binnen. Ze voegen nu ontbrekende adressen toe
+  (L1 kreeg er 25, waarvan 4 oude `dose_*_setpoint_kg` die er nooit waren).
 - **Correctie MES:** packs van HOLD/REJECTED-batches telden als geleverd voor de order en bleven als
   eindproductvoorraad staan. Nu `blocked_packs` apart en een `scrap`/`quarantine`-boeking. De
   willekeurige storing "Stoomregelklep hangt" heet nu "Condenspot stoomtoevoer verstopt" (8D-zuiverheid).

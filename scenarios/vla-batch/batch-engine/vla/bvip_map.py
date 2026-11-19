@@ -8,8 +8,7 @@ gets a number, and it never gets a substitute that looks like the real thing.
 status
   ok                every formula input comes from demo data
   deels             computed, but one input is missing or approximated (see `let_op`)
-  niet_aantoonbaar  an input does not exist in the demo yet; `fase` says when it is planned
-                    (3 = factory simulation), None = not in the demo at all
+  niet_aantoonbaar  an input does not exist in the demo; `fase` None = not in the demo at all
 drempels
   catalogus         colour by doel / waarsch / krit from the catalogue
   model:<key>       colour by kpi_targets[<key>] of the factory model (a real line norm)
@@ -96,43 +95,53 @@ BVIP_MAP: dict[str, dict] = {
                     "bron": "Kosten per storingswerkorder (zie MNT-002) / gevulde pakken.",
                     "let_op": "Demo-aannames uit cost_model; alleen storingswerkorders."},
     # ---------------------------------------------------------------- energie
-    "KPI-ENE-001": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": True,
-                    "ontbreekt": ["energy_kwh"], "bron": "De fabriek heeft nog geen energiemeters."},
-    "KPI-ENE-002": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": True,
-                    "ontbreekt": ["energy_costs", "revenue"],
-                    "bron": "Geen energiemeters en geen verkoopprijs in het kostenmodel."},
-    "KPI-ENE-003": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": True,
-                    "ontbreekt": ["water_l"], "bron": "De fabriek heeft nog geen watermeter."},
-    "KPI-ENE-004": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": True,
-                    "ontbreekt": ["co2_kg"], "bron": "Geen energiemeters, dus geen CO2."},
+    # Sinds fase 3 (2026-11-19) heeft de gesimuleerde fabriek energie- en watermeters.
+    # Verbruik = de som van de positieve stappen van de tellers in de periode.
+    "KPI-ENE-001": {"status": OK, "drempels": "catalogus", "additief": True,
+                    "bron": "Gas naar de ketel plus elektriciteit (tellers energy-meter) / "
+                            "gevulde pakken.",
+                    "let_op": "Gesimuleerde meters: warmte uit massa x cp x temperatuurstijging, "
+                              "motoren over procestijd (door de versnelling aan de lage kant)."},
+    "KPI-ENE-002": {"status": DEELS, "drempels": "catalogus", "additief": True,
+                    "bron": "Gas x gasprijs + elektriciteit x stroomprijs, gedeeld door goede pakken "
+                            "x verkoopprijs.",
+                    "let_op": "Prijzen en verkoopprijs zijn demo-aannames uit cost_model; omzet is "
+                              "goedgekeurde pakken x prijs, geen gefactureerde omzet."},
+    "KPI-ENE-003": {"status": OK, "drempels": "catalogus", "additief": True,
+                    "bron": "Water (teller water-meter, vooral CIP) / gevulde pakken."},
+    "KPI-ENE-004": {"status": DEELS, "drempels": "catalogus", "additief": True,
+                    "bron": "Gas x 0,202 + elektriciteit x 0,35 kg CO2 per kWh, gedeeld door gevulde "
+                            "pakken.",
+                    "let_op": "Emissiefactoren zijn demo-aannames uit cost_model."},
     "KPI-ENE-005": {"status": DEELS, "drempels": "catalogus", "additief": True,
                     "bron": "Afval = (afgekeurde pakken + pakken van HOLD/REJECTED-batches) x "
                             "dichtheid; grondstof = gedoseerde kg.",
-                    "let_op": "Spoel- en CIP-verliezen ontbreken; die komen met de CIP-simulatie."},
+                    "let_op": "Spoelverliezen van de CIP zijn niet als product meegeteld."},
     # ---------------------------------------------------------------- procesvoering
-    "KPI-PAC-100": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": False,
-                    "ontbreekt": ["product_flow_kg_s", "product_t_in", "product_t_out"],
-                    "bron": "Er is nog geen warmtewisselaar met debietmeting."},
-    "KPI-PAC-101": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": False,
-                    "ontbreekt": ["product_flow_kg_s", "hot_t_in", "hot_t_out", "hx_area_m2"],
-                    "bron": "Er is nog geen warmtewisselaar met debietmeting."},
-    "KPI-PAC-102": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": False,
-                    "ontbreekt": ["u_actual", "u_clean_at_flow"],
-                    "bron": "De opwarmtijd van de kookunit is een vervuilingssignaal, geen "
-                            "U-waarde; die komt met de pasteur."},
-    "KPI-PAC-103": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": False,
-                    "ontbreekt": ["dp_bar", "product_flow_kg_s"],
-                    "bron": "Er is nog geen drukverschilmeting."},
-    "KPI-PAC-104": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": False,
-                    "ontbreekt": ["regen_t_out", "cold_t_in", "hold_t"],
-                    "bron": "Er is nog geen regeneratiesectie."},
-    "KPI-PAC-105": {"status": DEELS, "drempels": "catalogus", "additief": False,
-                    "bron": "Productieve uren van de kookunit tussen twee CIP's "
-                            "(cip_performed), gemiddeld over de afgeronde cycli in de periode. "
-                            "Procesuren.",
-                    "let_op": "Kookunit in plaats van een warmtewisselaar; de pasteur volgt."},
-    "KPI-PAC-106": {"status": NA, "fase": 3, "drempels": "catalogus", "additief": False,
-                    "ontbreekt": ["cip_chemicals_eur", "cip_water_eur", "cip_energy_eur",
-                                  "cip_labor_eur"],
-                    "bron": "CIP heeft nog geen verbruik of duur."},
+    # Intake-pasteur met regeneratie (fase 3). Gemiddeld over de metingen terwijl er melk
+    # stroomt; U en Rf rekent de engine zelf uit temperaturen en debiet (vla/meters.py).
+    "KPI-PAC-100": {"status": OK, "drempels": "geen", "additief": False,
+                    "bron": "Debiet x cp x (houdtemperatuur - temperatuur na regeneratie): de "
+                            "warmte die de verwarmingssectie levert.",
+                    "let_op": "Hangt af van de grootte van de installatie; de catalogusnorm (600 kW) "
+                              "geldt voor een grotere pasteur, dus geen kleur."},
+    "KPI-PAC-101": {"status": OK, "drempels": "catalogus", "additief": False,
+                    "bron": "Warmtedoorgangscoefficient U = duty / (oppervlak x LMTD), uit de "
+                            "gemeten temperaturen aan beide zijden en het debiet."},
+    "KPI-PAC-102": {"status": OK, "drempels": "catalogus", "additief": False,
+                    "bron": "Rf = 1/U - 1/U_schoon, met U_schoon de U van de eerste metingen na "
+                            "de laatste CIP. Stuurt ook het reinigingsmoment (grens 0,06)."},
+    "KPI-PAC-103": {"status": OK, "drempels": "catalogus", "additief": False,
+                    "bron": "Drukval x (referentiedebiet / debiet)^2."},
+    "KPI-PAC-104": {"status": OK, "drempels": "catalogus", "additief": False,
+                    "bron": "(temperatuur na regeneratie - melk in) / (houdtemperatuur - melk in)."},
+    "KPI-PAC-105": {"status": OK, "drempels": "catalogus", "additief": False,
+                    "bron": "Draaiuren van de pasteur tussen twee reinigingen, uit de CIP-cycli die "
+                            "in de periode afliepen.",
+                    "let_op": "De demo reinigt na ~12 batches = ~1,5 procesuur pasteurtijd; een echte "
+                              "pasteur draait 8 tot 12 uur, dus deze KPI staat rood."},
+    "KPI-PAC-106": {"status": DEELS, "drempels": "catalogus", "additief": False,
+                    "bron": "Per CIP-cyclus: loog en zuur x kiloprijs + water x m3-prijs + gas en "
+                            "elektriciteit x prijs + 0,5 uur arbeid.",
+                    "let_op": "Prijzen zijn demo-aannames uit cost_model."},
 }

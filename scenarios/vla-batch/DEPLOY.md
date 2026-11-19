@@ -139,6 +139,22 @@ SQL; dat is exact over elke periode, ook als Mongo maar 24 u bewaart. Definities
 tekstpaneel "niet aantoonbaar" met de ontbrekende input, nooit een getal. Live controleren:
 `GET /api/v1/kpi/bvip?line=PLANT` (waarden plus status van de schrijver).
 
+**Fase 3: energie, water, CIP en pasteur in de simulatie (sinds 2026-11-19).** De fabriek
+(`factory/physics.py`) heeft nu energie- en watermeters (`Utilities/energy-meter-0N`,
+`water-meter-0N`), een CIP-station (`cip-station-0N`, methode `StartCip`, factorystaat `CIP`,
+vijf stappen, 60 procesminuten, 9 m³ water, 15 kg loog, 8 kg zuur) en een intake-pasteur
+(`Receiving/pasteurizer-0N`) met regeneratie en vervuiling. Alles synthetisch, gemarkeerd in
+`isa95-vla.json`. Energie volgt uit massa × cp × temperatuurstijging, niet uit vermogen × tijd,
+zodat hij per batch klopt ondanks de versnelling. De engine bemonstert dat in
+[`batch-engine/vla/meters.py`](batch-engine/vla/meters.py) (`METERS=1`) naar `dw_meter_readings`,
+`dw_pasteur_samples` en `dw_cip_cycles`, rekent U en Rf zelf uit temperaturen en debiet, en
+reinigt als Rf ≥ `CIP_RF_LIMIT` (0,06, ~12 batches); `CIP_AFTER_BATCHES=16` is het vangnet.
+De autopilot start dan `StartCip` in de fabriek en wacht (`wait_cip`).
+Uitrollen vraagt na een nieuwe tag ook de init-containers opnieuw:
+`… up --no-deps --force-recreate vla-opcua-init vla-l2-opcua-init`. Die voegen sinds 19-11
+alleen ontbrekende adressen toe; daarvóór stopten ze als het device al bestond, en kwam een
+nieuwe tag nooit binnen.
+
 **Stoomklep-scenario in een lus (sinds 2026-11-19).** Container `vla-scenario` (in
 `docker-compose.vps-shared.yml`, onderdeel van `stack.sh online`) draait
 [`scripts/scenario_steam_valve.py`](scripts/scenario_steam_valve.py) `--loop`: per cyclus

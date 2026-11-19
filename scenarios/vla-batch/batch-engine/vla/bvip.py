@@ -61,6 +61,18 @@ class Config:
     labour_cost_per_hour: Optional[float] = None
     parts_cost_per_breakdown: dict = field(default_factory=dict)   # machine role -> EUR
     asset_replacement_value: dict = field(default_factory=dict)    # machine role -> EUR
+    # fase 3: energy, water, CIP, pasteuriser (demo assumptions from the factory model)
+    gas_price_per_kwh: Optional[float] = None
+    electricity_price_per_kwh: Optional[float] = None
+    water_price_per_m3: Optional[float] = None
+    caustic_price_per_kg: Optional[float] = None
+    acid_price_per_kg: Optional[float] = None
+    cip_labour_hours: Optional[float] = None
+    sales_price_per_pack: Optional[float] = None
+    co2_kg_per_kwh: dict = field(default_factory=dict)    # gas / electricity
+    product_cp: float = 3.85
+    pasteuriser_ref_flow: float = 11.0
+    pasteuriser_area: float = 14.0
 
 
 def _parse_ideal(text: str) -> dict:
@@ -88,6 +100,20 @@ def config_from_env(model: Optional[dict] = None) -> Config:
         labour_cost_per_hour=cost.get("labour_cost_per_hour"),
         parts_cost_per_breakdown=cost.get("parts_cost_per_breakdown") or {},
         asset_replacement_value=cost.get("asset_replacement_value") or {},
+        gas_price_per_kwh=cost.get("gas_price_per_kwh"),
+        electricity_price_per_kwh=cost.get("electricity_price_per_kwh"),
+        water_price_per_m3=cost.get("water_price_per_m3"),
+        caustic_price_per_kg=cost.get("caustic_price_per_kg"),
+        acid_price_per_kg=cost.get("acid_price_per_kg"),
+        cip_labour_hours=cost.get("cip_labour_hours"),
+        sales_price_per_pack=cost.get("sales_price_per_pack"),
+        co2_kg_per_kwh=cost.get("co2_kg_per_kwh") or {},
+        product_cp=float(((model or {}).get("process_constants") or {}).get(
+            "product_cp_kj_kg_k", 3.85)),
+        pasteuriser_ref_flow=float(((model or {}).get("process_constants") or {}).get(
+            "pasteuriser_ref_flow_kg_s", 11.0)),
+        pasteuriser_area=float(((model or {}).get("process_constants") or {}).get(
+            "pasteuriser_area_m2", 14.0)),
     )
 
 
@@ -124,6 +150,9 @@ class Snapshot:
     orders: dict            # line -> list of (due, done_at or None, status)
     dosed_kg: dict          # batch_id -> kg actually dosed
     cips: dict              # equipment_id -> sorted list of CIP times
+    readings: dict = field(default_factory=dict)   # line -> meter readings (sorted)
+    pasteur: dict = field(default_factory=dict)    # line -> pasteuriser samples (sorted)
+    cip_cycles: dict = field(default_factory=dict)  # line -> finished CIP cycles
 
 
 def take_snapshot(db, now: Optional[datetime] = None) -> Snapshot:
@@ -179,7 +208,21 @@ def take_snapshot(db, now: Optional[datetime] = None) -> Snapshot:
             cips.setdefault(eq, []).append(t)
     for v in cips.values():
         v.sort()
-    return Snapshot(now, batches, start, intervals, breakdowns, orders, dosed, cips)
+
+    def by_line(coll: str, keep=lambda r: True) -> dict:
+        out: dict = {ln: [] for ln in LINES}
+        for r in db.collection(coll).find({}):
+            t = _ts(r.get("ts"))
+            if t is not None and r.get("line") in out and keep(r):
+                out[r["line"]].append({**r, "_t": t})
+        for v in out.values():
+            v.sort(key=lambda r: r["_t"])
+        return out
+
+    return Snapshot(now, batches, start, intervals, breakdowns, orders, dosed, cips,
+                    readings=by_line("dw_meter_readings"),
+                    pasteur=by_line("dw_pasteur_samples"),
+                    cip_cycles=by_line("dw_cip_cycles", lambda r: not r.get("baseline")))
 
 
 # ------------------------------------------------------------------ inputs
@@ -283,6 +326,14 @@ def inputs(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: Confi
     ideal = cfg.ideal_packs_per_h.get(line)
     dens = cfg.density_kg_L
     raw_kg = sum(snap.dosed_kg.get(b.get("batch_id"), 0.0) for b in done)
+    meter = counter_steps(snap.readings.get(line, []), start, end)
+    gas, elec = meter["heat_kwh_total"], meter["electricity_kwh_total"]
+
+    def priced(*pairs):
+        if any(price is None for _q, price in pairs) or meter["n"] == 0:
+            return None
+        return sum(q * price for q, price in pairs)
+    co2 = cfg.co2_kg_per_kwh
     return {
         "units_produced": filled,
         "units_good": approved,
@@ -307,24 +358,92 @@ def inputs(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: Confi
                         if cfg.rework_cost_per_batch is not None else None),
         "waste_kg": (rejects + blocked) * PACK_L * dens if dens else None,
         "raw_material_kg": raw_kg,
+        # fase 3: meters. Without any reading in the window there is no measurement
+        # (None), which is different from a measured zero consumption.
+        "energy_kwh": gas + elec if meter["n"] else None,
+        "water_l": meter["water_L_total"] if meter["n"] else None,
+        "energy_costs": priced((gas, cfg.gas_price_per_kwh),
+                               (elec, cfg.electricity_price_per_kwh)),
+        "co2_kg": priced((gas, co2.get("gas")), (elec, co2.get("electricity"))),
+        "revenue": (approved * cfg.sales_price_per_pack
+                    if cfg.sales_price_per_pack is not None else None),
     }
 
 
-def run_hours_between_cip(snap: Snapshot, line: str, start: datetime, end: datetime,
-                          cfg: Config) -> list[float]:
-    """KPI-PAC-105 inputs: productive process hours of the cook unit per finished CIP cycle
-    (from one CIP to the next) whose closing CIP falls in [start, end)."""
-    lines = LINES if line == PLANT else (line,)
-    out = []
-    for ln in lines:
-        eq = M.LINES[ln].eq("cook")
-        times = snap.cips.get(eq, [])
-        for a, z in zip(times, times[1:]):
-            if start <= z < end:
-                busy = sum(_overlap(t0, t1, a, z) for t0, t1, st in snap.intervals.get(eq, [])
-                           if st in M.PRODUCTIVE_STATES)
-                out.append(busy * cfg.time_scale / 3600.0)
+def counter_steps(readings: list[dict], start: datetime, end: datetime) -> dict:
+    """Consumption per counter over [start, end): the sum of positive steps between
+    consecutive readings, each step counted at the time of its later reading. A
+    counter that went down (factory restart) counts its new value from zero."""
+    out = {c: 0.0 for c in ("heat_kwh_total", "electricity_kwh_total", "steam_kg_total",
+                            "water_L_total")}
+    n = 0
+    for a, b in zip(readings, readings[1:]):
+        if not start <= b["_t"] < end:
+            continue
+        n += 1
+        for c in out:
+            if a.get(c) is None or b.get(c) is None:
+                continue   # a counter not yet known is no consumption
+            va, vb = _f(a.get(c)), _f(b.get(c))
+            out[c] += vb - va if vb >= va else vb
+    out["n"] = n
     return out
+
+
+def pac_values(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: Config) -> dict:
+    """KPI-PAC-100..106 over [start, end): means over the pasteuriser samples in the
+    window (all taken while milk flowed, so in steady operation) and over the CIP
+    cycles that finished in it. None when there is no sample or cycle."""
+    from .meters import U_CLEAN_RUN_H, u_value
+    lines = LINES if line == PLANT else (line,)
+    duty, us, rfs, dps, regen = [], [], [], [], []
+    for ln in lines:
+        rows = snap.pasteur.get(ln, [])
+        # U_clean per cleaning cycle: the first samples after run_h dropped back
+        cycle, clean = 0, {}
+        cycles = []
+        for i, r in enumerate(rows):
+            if i and r["run_h_since_cip"] < rows[i - 1]["run_h_since_cip"]:
+                cycle += 1
+            cycles.append(cycle)
+            if r["run_h_since_cip"] <= U_CLEAN_RUN_H and r.get("u"):
+                clean.setdefault(cycle, []).append(r["u"])
+        for r, cyc in zip(rows, cycles):
+            if not start <= r["_t"] < end or _f(r.get("product_flow_kg_s")) <= 1.0:
+                continue
+            flow = _f(r["product_flow_kg_s"])
+            duty.append(flow * cfg.product_cp * (_f(r["hold_t_C"]) - _f(r["regen_t_out_C"])))
+            u = r.get("u") or u_value(r, cfg.product_cp, cfg.pasteuriser_area)
+            if u:
+                us.append(u)
+                if clean.get(cyc):
+                    u_clean = sum(clean[cyc]) / len(clean[cyc])
+                    rfs.append(max(0.0, 1.0 / u - 1.0 / u_clean))
+            dps.append(_f(r["dp_bar"]) * (cfg.pasteuriser_ref_flow / flow) ** 2)
+            span = _f(r["hold_t_C"]) - _f(r["cold_t_in_C"])
+            if span > 0:
+                regen.append((_f(r["regen_t_out_C"]) - _f(r["cold_t_in_C"])) / span * 100.0)
+    cycles = [c for ln in lines for c in snap.cip_cycles.get(ln, []) if start <= c["_t"] < end]
+    run_h = [_f(c.get("past_run_h")) for c in cycles if c.get("past_run_h") is not None]
+    costs = []
+    prices = (cfg.caustic_price_per_kg, cfg.acid_price_per_kg, cfg.water_price_per_m3,
+              cfg.gas_price_per_kwh, cfg.electricity_price_per_kwh, cfg.cip_labour_hours,
+              cfg.labour_cost_per_hour)
+    if all(p is not None for p in prices):
+        for c in cycles:
+            costs.append(_f(c.get("caustic_kg")) * cfg.caustic_price_per_kg
+                         + _f(c.get("acid_kg")) * cfg.acid_price_per_kg
+                         + _f(c.get("water_L")) / 1000.0 * cfg.water_price_per_m3
+                         + _f(c.get("heat_kwh")) * cfg.gas_price_per_kwh
+                         + _f(c.get("electricity_kwh")) * cfg.electricity_price_per_kwh
+                         + cfg.cip_labour_hours * cfg.labour_cost_per_hour)
+
+    def mean(xs):
+        return sum(xs) / len(xs) if xs else None
+    return {"KPI-PAC-100": (mean(duty), len(duty)), "KPI-PAC-101": (mean(us), len(us)),
+            "KPI-PAC-102": (mean(rfs), len(rfs)), "KPI-PAC-103": (mean(dps), len(dps)),
+            "KPI-PAC-104": (mean(regen), len(regen)),
+            "KPI-PAC-105": (mean(run_h), len(run_h)), "KPI-PAC-106": (mean(costs), len(costs))}
 
 
 # ------------------------------------------------------------------ formula
@@ -379,6 +498,7 @@ def kpi_values(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: C
                catalogue: list[dict]) -> dict:
     """{kpi_id: {"value", "status", "inputs"}} for all 29 KPIs over [start, end)."""
     vals = inputs(snap, line, start, end, cfg)
+    pac = None
     out = {}
     for k in catalogue:
         kid, spec = k["id"], BVIP_MAP[k["id"]]
@@ -386,11 +506,13 @@ def kpi_values(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: C
         if spec["status"] == NA:
             out[kid] = {"value": None, "status": STATUS_NA, "inputs": {}}
             continue
-        if kid == "KPI-PAC-105":
-            cycles = run_hours_between_cip(snap, line, start, end, cfg)
-            value = sum(cycles) / len(cycles) if cycles else None
-            out[kid] = {"value": value, "status": STATUS_DEELS if value is not None else STATUS_UNSET,
-                        "inputs": {"cycles": float(len(cycles))}}
+        if kid.startswith("KPI-PAC-"):
+            if pac is None:
+                pac = pac_values(snap, line, start, end, cfg)
+            value, n = pac[kid]
+            ok = STATUS_DEELS if spec["status"] == DEELS else STATUS_OK
+            out[kid] = {"value": value, "status": ok if value is not None else STATUS_UNSET,
+                        "inputs": {"n": float(n)}}
             continue
         missing = set(spec.get("ontbreekt") or [])
         used = {n: (0.0 if n in missing else vals.get(n)) for n in names}

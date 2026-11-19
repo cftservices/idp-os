@@ -52,6 +52,7 @@ log = logging.getLogger("vla.autopilot")
 
 OPERATOR = "autopilot"
 RUNNING = (M.DOSING, M.COOKING, M.COOLING, M.FILLING)
+FACTORY_CIP = "CIP"   # factory batch state while it cleans in place (fase 3)
 # Customer orders: size in batches (cycled) and delivery deadline. At ~2 min
 # a batch an order of 12 takes ~25 min, well inside the lead time.
 ORDER_BATCHES = (6, 8, 10, 12)
@@ -160,6 +161,20 @@ class Autopilot:
         self.status["last_action_at"] = _now().isoformat()
         return action
 
+    def _start_factory_cip(self) -> None:
+        """Run the clean in the factory too (fase 3): the MES record above is the
+        administration, this is the 60 process minutes of water, caustic, acid and
+        heat. A factory without StartCip (older image) or offline is not an error:
+        the CIP is then only booked, as before."""
+        control = getattr(self.runner, "control", None)
+        if control is None or not hasattr(control, "start_cip"):
+            return
+        res = control.start_cip() or {}
+        if res.get("rc") not in (0, None):
+            self.status["last_error"] = f"StartCip rc={res.get('rc')}"
+        elif res.get("error"):
+            self.status["last_error"] = f"StartCip: {res['error']}"
+
     def _factory_state(self) -> Optional[str]:
         if self.bus is None:
             return None
@@ -223,6 +238,10 @@ class Autopilot:
             # factory runs its own self-chained batch; wait for COMPLETE
             self._idle_since = None
             return self._record("wait_factory")
+        if live and self._factory_state() == FACTORY_CIP:
+            # the line is being cleaned in place (~60 process minutes)
+            self._idle_since = None
+            return self._record("wait_cip")
 
         if self._idle_since is None:
             self._idle_since = now
@@ -248,12 +267,15 @@ class Autopilot:
                 self._idle_since = None
                 return self._record(f"wait_repair {','.join(down)}")
         if self.equipment is not None and self.equipment.is_dirty(cook):
+            reason = self.equipment.cip_status(cook).get("reason") or "vervuiling"
             try:
-                self.equipment.perform_cip(cook, operator_id=OPERATOR)
+                self.equipment.perform_cip(cook, operator_id=OPERATOR, reason=reason)
             except ValueError as e:
                 self.status["last_error"] = str(e)
                 return self._record("cip_refused")
             self.status["cip_runs"] += 1
+            self.status["last_cip_reason"] = reason
+            self._start_factory_cip()
             return self._record("cip")
 
         if self.equipment is not None and \
@@ -266,6 +288,7 @@ class Autopilot:
                 return self._record("cip_refused")
             self.status["cip_runs"] += 1
             self.status["changeover_cips"] += 1
+            self._start_factory_cip()
             return self._record(f"cip productwissel -> {recipe_id}")
 
         try:

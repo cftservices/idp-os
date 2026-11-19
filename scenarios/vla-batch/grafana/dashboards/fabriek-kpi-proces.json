@@ -100,61 +100,128 @@
     },
     {
       "id": 3,
-      "type": "text",
-      "title": "",
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
       "gridPos": {
         "x": 0,
         "y": 3,
-        "w": 24,
-        "h": 3
+        "w": 12,
+        "h": 7
       },
-      "targets": [],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-100' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "kwatt",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
         "overrides": []
       },
       "options": {
-        "mode": "markdown",
-        "content": "**Warmtestroom** · `KPI-PAC-100`\n\n**Niet aantoonbaar** · ontbreekt: `product_flow_kg_s`, `product_t_in`, `product_t_out`\n\nEr is nog geen warmtewisselaar met debietmeting. volgt in fase 3 (fabriekssimulatie)."
-      }
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-100 · Heat Duty\nFormule (catalogus): product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in)\nBron in de demo: Debiet x cp x (houdtemperatuur - temperatuur na regeneratie): de warmte die de verwarmingssectie levert.\nLet op: Hangt af van de grootte van de installatie; de catalogusnorm (600 kW) geldt voor een grotere pasteur, dus geen kleur.\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
     },
     {
       "id": 4,
-      "type": "row",
-      "title": "Warmteoverdrachtscoëfficiënt U (PAC-101)",
-      "collapsed": false,
-      "panels": [],
+      "type": "stat",
+      "title": "Laatste waarde",
       "gridPos": {
-        "x": 0,
-        "y": 6,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "id": 5,
-      "type": "text",
-      "title": "",
-      "gridPos": {
-        "x": 0,
-        "y": 7,
-        "w": 24,
-        "h": 3
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 7
       },
-      "targets": [],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-100' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "kwatt",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
         "overrides": []
       },
       "options": {
-        "mode": "markdown",
-        "content": "**Warmteoverdrachtscoëfficiënt U** · `KPI-PAC-101`\n\n**Niet aantoonbaar** · ontbreekt: `product_flow_kg_s`, `hot_t_in`, `hot_t_out`, `hx_area_m2`\n\nEr is nog geen warmtewisselaar met debietmeting. volgt in fase 3 (fabriekssimulatie)."
-      }
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-100 · Heat Duty\nFormule (catalogus): product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in)\nBron in de demo: Debiet x cp x (houdtemperatuur - temperatuur na regeneratie): de warmte die de verwarmingssectie levert.\nLet op: Hangt af van de grootte van de installatie; de catalogusnorm (600 kW) geldt voor een grotere pasteur, dus geen kleur.\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
     },
     {
-      "id": 6,
+      "id": 5,
       "type": "row",
-      "title": "Vervuilingsweerstand (PAC-102)",
+      "title": "Warmteoverdrachtscoëfficiënt U (PAC-101)",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -165,62 +232,153 @@
       }
     },
     {
-      "id": 7,
-      "type": "text",
-      "title": "",
+      "id": 6,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
       "gridPos": {
         "x": 0,
         "y": 11,
-        "w": 24,
-        "h": 3
+        "w": 12,
+        "h": 7
       },
-      "targets": [],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-101' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2.8
+              },
+              {
+                "color": "yellow",
+                "value": 3.2
+              },
+              {
+                "color": "green",
+                "value": 3.6
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
         "overrides": []
       },
       "options": {
-        "mode": "markdown",
-        "content": "**Vervuilingsweerstand** · `KPI-PAC-102`\n\n**Niet aantoonbaar** · ontbreekt: `u_actual`, `u_clean_at_flow`\n\nDe opwarmtijd van de kookunit is een vervuilingssignaal, geen U-waarde; die komt met de pasteur. volgt in fase 3 (fabriekssimulatie)."
-      }
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-101 · Overall Heat Transfer Coefficient\nFormule (catalogus): product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in) / (hx_area_m2 * lmtd(hot_t_in - product_t_out, hot_t_out - product_t_in))\nBron in de demo: Warmtedoorgangscoefficient U = duty / (oppervlak x LMTD), uit de gemeten temperaturen aan beide zijden en het debiet.\nDoel 3.6, waarschuwing 3.2, kritiek 2.8 kW/m2/K (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-101' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2.8
+              },
+              {
+                "color": "yellow",
+                "value": 3.2
+              },
+              {
+                "color": "green",
+                "value": 3.6
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-101 · Overall Heat Transfer Coefficient\nFormule (catalogus): product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in) / (hx_area_m2 * lmtd(hot_t_in - product_t_out, hot_t_out - product_t_in))\nBron in de demo: Warmtedoorgangscoefficient U = duty / (oppervlak x LMTD), uit de gemeten temperaturen aan beide zijden en het debiet.\nDoel 3.6, waarschuwing 3.2, kritiek 2.8 kW/m2/K (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
     },
     {
       "id": 8,
       "type": "row",
-      "title": "Genormaliseerde drukval (PAC-103)",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "x": 0,
-        "y": 14,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "id": 9,
-      "type": "text",
-      "title": "",
-      "gridPos": {
-        "x": 0,
-        "y": 15,
-        "w": 24,
-        "h": 3
-      },
-      "targets": [],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "mode": "markdown",
-        "content": "**Genormaliseerde drukval** · `KPI-PAC-103`\n\n**Niet aantoonbaar** · ontbreekt: `dp_bar`, `product_flow_kg_s`\n\nEr is nog geen drukverschilmeting. volgt in fase 3 (fabriekssimulatie)."
-      }
-    },
-    {
-      "id": 10,
-      "type": "row",
-      "title": "Warmteterugwinning (PAC-104)",
+      "title": "Vervuilingsweerstand (PAC-102)",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -231,45 +389,483 @@
       }
     },
     {
-      "id": 11,
-      "type": "text",
-      "title": "",
+      "id": 9,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
       "gridPos": {
         "x": 0,
         "y": 19,
-        "w": 24,
-        "h": 3
+        "w": 12,
+        "h": 7
       },
-      "targets": [],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-102' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.03
+              },
+              {
+                "color": "orange",
+                "value": 0.06
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
         "overrides": []
       },
       "options": {
-        "mode": "markdown",
-        "content": "**Warmteterugwinning** · `KPI-PAC-104`\n\n**Niet aantoonbaar** · ontbreekt: `regen_t_out`, `cold_t_in`, `hold_t`\n\nEr is nog geen regeneratiesectie. volgt in fase 3 (fabriekssimulatie)."
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-102 · Fouling Resistance\nFormule (catalogus): 1 / u_actual - 1 / u_clean_at_flow\nBron in de demo: Rf = 1/U - 1/U_schoon, met U_schoon de U van de eerste metingen na de laatste CIP. Stuurt ook het reinigingsmoment (grens 0,06).\nDoel 0.03, waarschuwing 0.06, kritiek 0.1 m2*K/kW (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-102' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.03
+              },
+              {
+                "color": "orange",
+                "value": 0.06
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-102 · Fouling Resistance\nFormule (catalogus): 1 / u_actual - 1 / u_clean_at_flow\nBron in de demo: Rf = 1/U - 1/U_schoon, met U_schoon de U van de eerste metingen na de laatste CIP. Stuurt ook het reinigingsmoment (grens 0,06).\nDoel 0.03, waarschuwing 0.06, kritiek 0.1 m2*K/kW (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Genormaliseerde drukval (PAC-103)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 1
       }
     },
     {
       "id": 12,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-103' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurebar",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1.0
+              },
+              {
+                "color": "orange",
+                "value": 1.25
+              },
+              {
+                "color": "red",
+                "value": 1.5
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-103 · Normalized Pressure Drop\nFormule (catalogus): dp_bar * pow(ref_flow_kg_s / product_flow_kg_s, 2)\nBron in de demo: Drukval x (referentiedebiet / debiet)^2.\nDoel 1.0, waarschuwing 1.25, kritiek 1.5 bar (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-103' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurebar",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1.0
+              },
+              {
+                "color": "orange",
+                "value": 1.25
+              },
+              {
+                "color": "red",
+                "value": 1.5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-103 · Normalized Pressure Drop\nFormule (catalogus): dp_bar * pow(ref_flow_kg_s / product_flow_kg_s, 2)\nBron in de demo: Drukval x (referentiedebiet / debiet)^2.\nDoel 1.0, waarschuwing 1.25, kritiek 1.5 bar (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Warmteterugwinning (PAC-104)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-104' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 86
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 92
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-104 · Heat Recovery Ratio\nFormule (catalogus): (regen_t_out - cold_t_in) / (hold_t - cold_t_in) * 100\nBron in de demo: (temperatuur na regeneratie - melk in) / (houdtemperatuur - melk in).\nDoel 92, waarschuwing 90, kritiek 86 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-104' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 86
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 92
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-104 · Heat Recovery Ratio\nFormule (catalogus): (regen_t_out - cold_t_in) / (hold_t - cold_t_in) * 100\nBron in de demo: (temperatuur na regeneratie - melk in) / (houdtemperatuur - melk in).\nDoel 92, waarschuwing 90, kritiek 86 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 17,
       "type": "row",
       "title": "Looptijd tussen reinigingen (PAC-105)",
       "collapsed": false,
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 42,
         "w": 24,
         "h": 1
       }
     },
     {
-      "id": 13,
+      "id": 18,
       "type": "timeseries",
       "title": "Verloop (rollend 8 uur)",
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 43,
         "w": 12,
         "h": 7
       },
@@ -334,15 +930,15 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Productieve uren van de kookunit tussen twee CIP's (cip_performed), gemiddeld over de afgeronde cycli in de periode. Procesuren.\nLet op: Kookunit in plaats van een warmtewisselaar; de pasteur volgt.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Draaiuren van de pasteur tussen twee reinigingen, uit de CIP-cycli die in de periode afliepen.\nLet op: De demo reinigt na ~12 batches = ~1,5 procesuur pasteurtijd; een echte pasteur draait 8 tot 12 uur, dus deze KPI staat rood.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
     },
     {
-      "id": 14,
+      "id": 19,
       "type": "stat",
       "title": "Laatste waarde",
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 43,
         "w": 12,
         "h": 7
       },
@@ -405,40 +1001,164 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Productieve uren van de kookunit tussen twee CIP's (cip_performed), gemiddeld over de afgeronde cycli in de periode. Procesuren.\nLet op: Kookunit in plaats van een warmtewisselaar; de pasteur volgt.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Draaiuren van de pasteur tussen twee reinigingen, uit de CIP-cycli die in de periode afliepen.\nLet op: De demo reinigt na ~12 batches = ~1,5 procesuur pasteurtijd; een echte pasteur draait 8 tot 12 uur, dus deze KPI staat rood.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
     },
     {
-      "id": 15,
+      "id": 20,
       "type": "row",
       "title": "Reinigingskosten per cyclus (PAC-106)",
       "collapsed": false,
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 50,
         "w": 24,
         "h": 1
       }
     },
     {
-      "id": 16,
-      "type": "text",
-      "title": "",
+      "id": 21,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
       "gridPos": {
         "x": 0,
-        "y": 31,
-        "w": 24,
-        "h": 3
+        "y": 51,
+        "w": 12,
+        "h": 7
       },
-      "targets": [],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-106' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 400
+              },
+              {
+                "color": "orange",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 700
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
         "overrides": []
       },
       "options": {
-        "mode": "markdown",
-        "content": "**Reinigingskosten per cyclus** · `KPI-PAC-106`\n\n**Niet aantoonbaar** · ontbreekt: `cip_chemicals_eur`, `cip_water_eur`, `cip_energy_eur`, `cip_labor_eur`\n\nCIP heeft nog geen verbruik of duur. volgt in fase 3 (fabriekssimulatie)."
-      }
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-106 · Cleaning Cost per Cycle\nFormule (catalogus): cip_chemicals_eur + cip_water_eur + cip_energy_eur + cip_labor_eur\nBron in de demo: Per CIP-cyclus: loog en zuur x kiloprijs + water x m3-prijs + gas en elektriciteit x prijs + 0,5 uur arbeid.\nLet op: Prijzen zijn demo-aannames uit cost_model.\nDoel 400, waarschuwing 500, kritiek 700 EUR (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Laatste waarde",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-106' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 400
+              },
+              {
+                "color": "orange",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 700
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-106 · Cleaning Cost per Cycle\nFormule (catalogus): cip_chemicals_eur + cip_water_eur + cip_energy_eur + cip_labor_eur\nBron in de demo: Per CIP-cyclus: loog en zuur x kiloprijs + water x m3-prijs + gas en elektriciteit x prijs + 0,5 uur arbeid.\nLet op: Prijzen zijn demo-aannames uit cost_model.\nDoel 400, waarschuwing 500, kritiek 700 EUR (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
     }
   ]
 }

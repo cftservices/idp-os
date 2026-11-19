@@ -90,6 +90,26 @@ AREA_TAGS: dict[tuple[str, str], list[tuple[str, ua.VariantType, bool]]] = {
         ("reject_count", ua.VariantType.Int64, False),
         ("pack_size_L", ua.VariantType.Double, False),
     ],
+    # fase 3 (2026-11-19): intake-pasteur, meters en CIP-station
+    ("Receiving", "pasteurizer-01"): [
+        (t, ua.VariantType.Double, False) for t in (
+            "product_flow_kg_s", "cold_t_in_C", "regen_t_out_C", "hold_t_C",
+            "hot_t_in_C", "hot_t_out_C", "dp_bar", "run_h_since_cip")
+    ],
+    ("Utilities", "energy-meter-01"): [
+        (t, ua.VariantType.Double, False) for t in (
+            "heat_kwh_total", "electricity_kwh_total", "steam_kg_total")
+    ],
+    ("Utilities", "water-meter-01"): [
+        ("water_L_total", ua.VariantType.Double, False),
+    ],
+    ("Utilities", "cip-station-01"): [
+        ("step", ua.VariantType.String, False),
+        ("cip_count", ua.VariantType.Int64, False),
+        *[(f"last_{t}", ua.VariantType.Double, False) for t in (
+            "water_L", "caustic_kg", "acid_kg", "heat_kwh", "electricity_kwh",
+            "duration_s", "past_run_h")],
+    ],
 }
 
 # how a writable status/setpoint node maps to a SetSetpoint target string
@@ -245,6 +265,13 @@ class VlaServer:
                                    ua.QualifiedName("InjectFault", idx), inject_fault, [S, D], [I])
         await batch_obj.add_method(ua.NodeId(base + ".ClearFault", idx, ua.NodeIdType.String),
                                    ua.QualifiedName("ClearFault", idx), clear_fault, [], [I])
+
+        @uamethod
+        def start_cip(parent) -> ua.Int32:
+            return ua.Int32(p.start_cip())
+
+        await batch_obj.add_method(ua.NodeId(base + ".StartCip", idx, ua.NodeIdType.String),
+                                   ua.QualifiedName("StartCip", idx), start_cip, [], [I])
 
     # ------------------------------------------------------------------ loops
     async def _apply_writable_setpoints(self) -> None:

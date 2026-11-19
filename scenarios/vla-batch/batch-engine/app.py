@@ -30,7 +30,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from vla import alarms as A, bvip, bvip_map, inventory, kpi as K, kpi_history, line as L, \
-    model as M
+    meters, model as M
 from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
@@ -340,6 +340,11 @@ def _startup() -> None:
             STATE["autopilot"] = pilots[M.DEFAULT_LINE]
         except ValueError as e:
             log.error("autopilot not started: %s", e)
+    # Meters, pasteuriser and CIP cycles from the bus into Mongo (METERS=1, fase 3).
+    try:
+        STATE["meters"] = meters.start_if_enabled(db, buses, equipment, K.load_factory_model())
+    except Exception as e:  # noqa: BLE001
+        log.error("meters niet gestart: %s", e)
     # KPI history into TDengine (KPI_WRITER=1); never blocks the start, retries on its own.
     try:
         STATE["kpi_writer"] = kpi_history.start_if_enabled(db)
@@ -359,6 +364,8 @@ def _shutdown() -> None:
         STATE["autopilot"].stop()
     if STATE.get("kpi_writer") is not None:
         STATE["kpi_writer"].stop_event.set()
+    if STATE.get("meters") is not None:
+        STATE["meters"].stop_event.set()
     for b in (STATE.get("buses") or {}).values() or [STATE.get("bus")]:
         if b is not None:
             b.stop()
@@ -1079,7 +1086,8 @@ def get_kpi_bvip(line: str = Query(default="PLANT"), hours: float = Query(defaul
                      "let_op": spec.get("let_op"), "ontbreekt": spec.get("ontbreekt") or [],
                      "fase": spec.get("fase"), **vals[k["id"]]})
     return {"line": line, "from": start.isoformat(), "to": end.isoformat(), "hours": hours,
-            "writer": kpi_history.writer_status(), "kpis": kpis}
+            "writer": kpi_history.writer_status(), "meters": meters.sampler_status(),
+            "kpis": kpis}
 
 
 @app.get(f"{API}/report/period")

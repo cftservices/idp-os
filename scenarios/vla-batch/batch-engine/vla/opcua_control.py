@@ -146,3 +146,7 @@ class OpcuaControl:
 
     def clear_fault(self) -> dict:
         return self._call("ClearFault")
+
+    def start_cip(self) -> dict:
+        """Clean the line in the factory (~60 process minutes, factory state CIP)."""
+        return self._call("StartCip")

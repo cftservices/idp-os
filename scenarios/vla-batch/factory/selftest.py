@@ -206,6 +206,78 @@ def main() -> int:
     all_ok &= check("fault still out of spec with variation on", pf.viscosity_cP < SPEC_MIN,
                     f"{pf.viscosity_cP:.1f} cP")
 
+    # ---- utilities, intake pasteuriser, CIP (fase 3) ------------------------
+    print("\n-- utilities, pasteur en CIP --")
+    import physics as P
+    pu = VlaProcess(variation=False)
+    readings, firsts, cooking_gas = [], [], None
+    for i in range(12):
+        pu.start_batch(RECIPE, batch_id=f"SELFTEST-U-{i}")
+        hot_first = None
+        t = 0
+        while pu.state != COMPLETE and t < MAX_TICKS:
+            st, gas0, peak0 = pu.state, pu.heat_kwh_total, pu.cook_temp_C
+            pu.tick(DT)
+            t += 1
+            if i == 0 and st == COOKING:
+                cooking_gas = (cooking_gas or 0.0) + (pu.heat_kwh_total - gas0)
+            if i == 0 and st == DOSING and pu.state == COOKING:
+                cook_start_C = pu.cook_temp_C
+            if pu.past_flow_kg_s > 0 and hot_first is None:
+                hot_first = (pu.past_hot_in_C, pu.past_cold_in_C, pu.past_regen_out_C,
+                             pu.past_hold_C)
+            readings.append((pu.heat_kwh_total, pu.electricity_kwh_total, pu.water_L_total))
+        firsts.append(hot_first)
+        if i == 0:
+            mass = sum(pu.dose_actual_kg.values())
+            expect = (mass * P.CP_PRODUCT_KJ_KG_K * (pu.peak_cook_temp_C - cook_start_C)
+                      + P.COOK_HOLD_LOSS_KW * pu.hold_elapsed_sec) / 3600.0 / P.BOILER_EFF
+    all_ok &= check("cook energy = m x cp x dT (+ hold loss) / boiler eff, within 5%",
+                    abs(cooking_gas - expect) <= 0.05 * expect,
+                    f"{cooking_gas:.1f} vs {expect:.1f} kWh")
+    hot_in, cold, regen, hold = firsts[0]
+    eff = (regen - cold) / (hold - cold)
+    all_ok &= check("heat recovery between 80 and 95 %", 0.80 <= eff <= 0.95, f"{eff * 100:.1f} %")
+    all_ok &= check("fouling: hot water runs hotter after 12 batches",
+                    firsts[-1][0] > firsts[0][0] + 1.0,
+                    f"{firsts[0][0]:.1f} -> {firsts[-1][0]:.1f} C")
+    rf12 = pu._past_rf()
+    all_ok &= check("fouling reaches the CIP limit around 12 batches", 0.05 <= rf12 <= 0.07,
+                    f"Rf {rf12:.4f} m2K/kW")
+    all_ok &= check("pasteuriser has no flow outside dosing", pu.past_flow_kg_s == 0.0, "")
+
+    pu.start_batch(RECIPE, batch_id="SELFTEST-U-BUSY")
+    all_ok &= check("CIP refused while a batch runs", pu.start_cip() == 1, "")
+    while pu.state != COMPLETE:
+        pu.tick(DT)
+    water0 = pu.water_L_total
+    all_ok &= check("CIP starts from COMPLETE", pu.start_cip() == 0, pu.state)
+    t = 0
+    while pu.state == P.CIP and t < MAX_TICKS:
+        pu.tick(DT)
+        t += 1
+        readings.append((pu.heat_kwh_total, pu.electricity_kwh_total, pu.water_L_total))
+    last = pu.cip_last
+    all_ok &= check("CIP takes 60 process minutes and returns to IDLE",
+                    abs(last["duration_s"] - 3600.0) < 1.0 and pu.state == IDLE,
+                    f"{last['duration_s']:.0f} s, {pu.state}")
+    all_ok &= check("CIP uses 9 m3 water, 15 kg caustic, 8 kg acid",
+                    abs(pu.water_L_total - water0 - 9000) < 1 and last["caustic_kg"] == 15.0
+                    and last["acid_kg"] == 8.0, f"{last}")
+    all_ok &= check("CIP removes the fouling", pu._past_rf() == 0.0 and pu.cip_count == 1, "")
+    mono = all(b[j] >= a[j] for a, b in zip(readings, readings[1:]) for j in range(3))
+    all_ok &= check("meter totals never go down", mono, f"{len(readings)} readings")
+    pu.start_batch(RECIPE, batch_id="SELFTEST-U-CLEAN")
+    while pu.past_flow_kg_s == 0.0:
+        pu.tick(DT)
+    # U from the PUBLISHED signals, the way the engine computes it (KPI-PAC-101)
+    duty = pu.past_flow_kg_s * P.CP_PRODUCT_KJ_KG_K * (pu.past_hold_C - pu.past_regen_out_C)
+    u = duty / (P.PAST_AREA_M2 * P.lmtd(pu.past_hot_in_C - pu.past_hold_C,
+                                        pu.past_hot_out_C - pu.past_regen_out_C))
+    all_ok &= check("after CIP the U computed from the signals is back at clean",
+                    abs(u - P.PAST_U_CLEAN) / P.PAST_U_CLEAN < 0.02,
+                    f"U {u:.2f} vs clean {P.PAST_U_CLEAN} kW/m2/K")
+
     # ---- verdict ------------------------------------------------------------
     print()
     if all_ok:

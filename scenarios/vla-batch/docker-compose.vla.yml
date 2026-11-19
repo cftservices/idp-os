@@ -222,6 +222,12 @@ services:
       # KPI-historie (vla/kpi_history.py): elke 5 min de 29 industriële BVIP-KPI's
       # naar idp.kpi en idp.kpi_input in TDengine, voor de fabriek-kpi-dashboards.
       # Het ideale tempo is hetzelfde als SYNC_IDEAL_PACKS_PER_H van ci-sync.
+      # Fase 3: meters, pasteur en CIP-cycli bemonsteren (vla/meters.py). De reiniging
+      # volgt de gemeten vervuiling van de pasteur (Rf >= CIP_RF_LIMIT, ~12 batches);
+      # CIP_AFTER_BATCHES is alleen het vangnet.
+      METERS: "1"
+      CIP_RF_LIMIT: "0.06"
+      CIP_AFTER_BATCHES: "16"
       KPI_WRITER: "1"
       KPI_WRITER_INTERVAL_S: "300"
       KPI_WRITER_BACKFILL_H: "24"

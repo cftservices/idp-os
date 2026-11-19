@@ -6,6 +6,7 @@ measured (live) or fabricated (instant) and trended here."""
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -18,7 +19,12 @@ log = logging.getLogger("vla.equipment")
 BASE_HEATUP_SEC = 120.0
 HEATUP_INCREASE_PER_BATCH = 0.15
 CBM_ALERT_FACTOR = 1.35
-DIRTY_AFTER_BATCHES = 4
+# Upper bound of batches between two CIPs. Since fase 3 (2026-11-19) the measured
+# fouling of the intake pasteuriser (CIP_RF_LIMIT, set by vla/meters.py) usually
+# triggers the CIP first, around 12 batches; the count is the safety net. The VPS
+# sets CIP_AFTER_BATCHES=16; the default stays 4 for local runs and the tests.
+DIRTY_AFTER_BATCHES = int(os.environ.get("CIP_AFTER_BATCHES", "4") or 4)
+CIP_RF_LIMIT = float(os.environ.get("CIP_RF_LIMIT", "0.06") or 0.06)   # m2K/kW
 
 EQUIPMENT_IDS = list(M.ALL_EQUIPMENT_IDS)
 COOK_UNITS = {ln.eq("cook") for ln in M.LINES.values()}
@@ -308,14 +314,27 @@ class EquipmentMonitor:
         """Cleaning state of one equipment: dirty flag, the fouling counter and
         the limit it is measured against (what an operator needs to read)."""
         meta = self.ensure_meta(equipment_id)
+        rf = meta.get("fouling_rf")
+        fouled = rf is not None and float(rf) >= CIP_RF_LIMIT
         return {
             "equipment_id": equipment_id,
-            "dirty": bool(meta.get("dirty")),
+            "dirty": bool(meta.get("dirty")) or fouled,
             "batches_since_cip": meta.get("batches_since_cip", 0),
             "limit": DIRTY_AFTER_BATCHES,
+            "fouling_rf": rf,
+            "fouling_rf_limit": CIP_RF_LIMIT,
+            "reason": "vervuiling" if fouled else ("batches" if meta.get("dirty") else None),
             "last_cip_at": meta.get("last_cip_at"),
             "last_recipe": meta.get("last_recipe"),
         }
+
+    def set_fouling(self, equipment_id: str, rf: Optional[float]) -> None:
+        """Measured fouling resistance of the line's heat exchanger (m2K/kW), written by
+        vla/meters.py. At CIP_RF_LIMIT the line counts as dirty (cip_status)."""
+        self.ensure_meta(equipment_id)
+        self.db.dw_equipment_meta.update_one(
+            {"equipment_id": equipment_id},
+            {"$set": {"fouling_rf": None if rf is None else round(float(rf), 5)}})
 
     def is_dirty(self, equipment_id: str) -> bool:
         return self.cip_status(equipment_id)["dirty"]
@@ -357,7 +376,7 @@ class EquipmentMonitor:
             {"equipment_id": equipment_id},
             {"$set": {"batches_since_cip": 0, "dirty": False,
                       "last_cip_at": now, "heatup_history": [],
-                      "last_recipe": None}},
+                      "last_recipe": None, "fouling_rf": None}},
         )
         for alert in self.open_alerts(equipment_id):
             self.db.dw_cbm_alerts.update_one(

@@ -112,7 +112,8 @@ def test_inputs_and_kpis_over_a_window_match_hand_computation():
     assert k["KPI-MNT-001"]["value"] == pytest.approx(13.5)
     assert k["KPI-QUA-002"]["status"] == "DEELS"
     assert k["KPI-QUA-002"]["value"] == pytest.approx(175 + 600)
-    assert k["KPI-ENE-001"] == {"value": None, "status": "NIET_AANTOONBAAR", "inputs": {}}
+    assert k["KPI-QUA-003"] == {"value": None, "status": "NIET_AANTOONBAAR", "inputs": {}}
+    assert k["KPI-ENE-001"]["status"] == "UNSET"      # no meter reading: no measurement
 
 
 def test_no_failure_gives_no_mtbf_and_no_ideal_rate_gives_no_oee():
@@ -142,6 +143,9 @@ def test_bucket_inputs_add_up_to_the_window():
     parts = [bvip.inputs(snap, bvip.PLANT, T0 + timedelta(minutes=m),
                          T0 + timedelta(minutes=m + 5), CFG) for m in range(0, 45, 5)]
     for name, total in whole.items():
+        if total is None:              # no source in this test (meters, prices): stays None
+            assert all(p[name] is None for p in parts), name
+            continue
         assert sum(p[name] for p in parts) == pytest.approx(total), name
 
 
@@ -225,21 +229,6 @@ def test_orders_on_time_only_counts_orders_whose_due_date_passed():
     snap = bvip.take_snapshot(db, now=T0 + timedelta(minutes=60))
     v = bvip.inputs(snap, "L1", T0, T0 + timedelta(hours=2), CFG)
     assert (v["orders_on_time"], v["orders_planned"]) == (1.0, 2.0)
-
-
-def test_run_length_between_cip_uses_productive_time_of_the_cook_unit():
-    db = _db()
-    _batch(db, "B1", "L1", 0, 10, 900, 100, M.APPROVED)
-    cook = M.LINES["L1"].eq("cook")
-    _state(db, cook, 0, "Running")
-    _state(db, cook, 40, "Idle")
-    for m in (0, 40, 60):
-        db.dw_batch_events.insert_one({"batch_id": None, "event_type": "cip_performed",
-                                       "payload": {"equipment_id": cook},
-                                       "ts": iso(T0 + timedelta(minutes=m))})
-    snap = bvip.take_snapshot(db, now=T0 + timedelta(minutes=70))
-    cycles = bvip.run_hours_between_cip(snap, "L1", T0, T0 + timedelta(minutes=70), CFG)
-    assert cycles == pytest.approx([40 / 60 * 15, 0.0])
 
 
 def test_evaluator_rejects_function_calls_and_handles_zero_division():

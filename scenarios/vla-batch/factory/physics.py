@@ -197,6 +197,58 @@ MILK_DENSITY_KG_L = _envf("MILK_DENSITY_KG_L", 1.03)
 MILK_DELIVERY_C = _envf("MILK_DELIVERY_C", 5.0)
 RECEIVING_WARM_RATE_PER_S = _envf("RECEIVING_WARM_RATE_PER_S", 0.0008)
 
+# --- utilities, CIP and intake pasteuriser (fase 3, 2026-11-19) ---------------
+# SYNTHETISCH, gekozen om plausibel te zijn, nooit afgeleid van een echte fabriek.
+# Energie wordt uit massa x warmtecapaciteit x temperatuurverschil berekend, niet
+# uit vermogen x tijd: de demo draait 15x versneld, en een kookunit die 5,85 t in
+# twee minuten opwarmt zou anders 10 MW trekken. Per batch klopt de energie dus,
+# per seconde niet. Motoren gaan wel over procestijd en zijn daardoor klein.
+CP_PRODUCT_KJ_KG_K = _envf("CP_PRODUCT_KJ_KG_K", 3.85)   # melk/vla-mengsel
+CP_WATER_KJ_KG_K = 4.18
+BOILER_EFF = _envf("BOILER_EFF", 0.90)                    # gas -> stoom
+STEAM_LATENT_KJ_KG = 2100.0                               # condensatiewarmte, ~3 bar
+CHILLER_COP = _envf("CHILLER_COP", 3.0)
+COOK_HOLD_LOSS_KW = 25.0      # warmteverlies van de kookunit tijdens het houden
+AGITATOR_KW = 7.5             # bij 60 rpm; schaalt met (rpm/60)^3
+TRANSFER_PUMP_KW = 4.0        # tijdens doseren en koelen
+FILLER_KW = 11.0
+PAST_PUMP_KW = 5.5
+CIP_PUMP_KW = 7.5
+# Intake-pasteur op de melk uit de silo, met regeneratie (warmteterugwinning).
+PAST_HOLD_C = _envf("PAST_HOLD_C", 75.0)
+PAST_REGEN_EFF_CLEAN = _envf("PAST_REGEN_EFF_CLEAN", 0.92)
+PAST_AREA_M2 = _envf("PAST_AREA_M2", 14.0)                # verwarmingssectie
+PAST_U_CLEAN = _envf("PAST_U_CLEAN", 3.8)                 # kW/m2/K
+PAST_HW_FLOW_KG_S = _envf("PAST_HW_FLOW_KG_S", 10.0)      # heet water, vaste flow
+PAST_REF_FLOW_KG_S = _envf("PAST_REF_FLOW_KG_S", 11.0)
+PAST_DP_CLEAN_BAR = _envf("PAST_DP_CLEAN_BAR", 0.9)       # bij referentieflow
+PAST_DP_RF_GAIN = 6.0         # relatieve drukvalstijging per m2K/kW vervuiling
+PAST_REGEN_RF_LOSS = 0.4      # verlies regeneratierendement per m2K/kW
+# Vervuiling groeit asymptotisch met draaiuren: Rf = RF_MAX (1 - exp(-t/tau)). Met
+# ~0,126 procesuur pasteurtijd per batch haalt Rf de grens 0,06 rond 12 batches.
+PAST_RF_MAX = _envf("PAST_RF_MAX", 0.12)                  # m2K/kW
+PAST_RF_TAU_H = _envf("PAST_RF_TAU_H", 2.2)
+CIP_RINSE_IN_C = 15.0
+# (stap, procesduur s, water L, loog kg, zuur kg, temperatuur C of None)
+CIP_STEPS = [
+    ("voorspoelen", 300.0, 2000.0, 0.0, 0.0, None),
+    ("loog", 1200.0, 1500.0, 15.0, 0.0, 75.0),
+    ("spoelen", 600.0, 2000.0, 0.0, 0.0, None),
+    ("zuur", 900.0, 1500.0, 0.0, 8.0, 65.0),
+    ("naspoelen", 600.0, 2000.0, 0.0, 0.0, None),
+]
+CIP = "CIP"
+
+
+def lmtd(dt1: float, dt2: float) -> float:
+    """Logarithmic mean temperature difference; equal ends give the plain value."""
+    import math
+    if dt1 <= 0 or dt2 <= 0:
+        return 0.0
+    if abs(dt1 - dt2) < 1e-6:
+        return dt1
+    return (dt1 - dt2) / math.log(dt1 / dt2)
+
 
 class VlaProcess:
     """One production line running one batch at a time through the 6-state lifecycle."""
@@ -263,6 +315,32 @@ class VlaProcess:
         self.events: list[dict] = []
 
         self._batch_seq = 0
+
+        # --- utilities (tellers, alleen oplopend) ---
+        self.heat_kwh_total: float = 0.0          # gas naar de ketel
+        self.electricity_kwh_total: float = 0.0
+        self.steam_kg_total: float = 0.0
+        self.water_L_total: float = 0.0
+
+        # --- intake-pasteur ---
+        self.past_flow_kg_s: float = 0.0
+        self.past_run_h: float = 0.0              # procesuren sinds de laatste CIP
+        self.past_cold_in_C: float = MILK_DELIVERY_C
+        self.past_regen_out_C: float = MILK_DELIVERY_C
+        self.past_hold_C: float = PAST_HOLD_C
+        self.past_hot_in_C: float = PAST_HOLD_C
+        self.past_hot_out_C: float = PAST_HOLD_C
+        self.past_dp_bar: float = 0.0
+
+        # --- CIP-station ---
+        self.cip_step: str = "gereed"
+        self._cip_i: int = 0
+        self._cip_elapsed_s: float = 0.0
+        self.cip_count: int = 0
+        self._cip_acc: dict = {}
+        self.cip_last: dict = {"water_L": 0.0, "caustic_kg": 0.0, "acid_kg": 0.0,
+                               "heat_kwh": 0.0, "electricity_kwh": 0.0, "duration_s": 0.0,
+                               "past_run_h": 0.0}
 
     # ------------------------------------------------------------------ control
     def start_batch(self, recipe_id: str, batch_id: str | None = None) -> int:
@@ -396,6 +474,115 @@ class VlaProcess:
         self._cook_temp_cap_C = None
         return 0
 
+    def start_cip(self) -> int:
+        """Clean the line in place: five steps, ~60 process minutes. 0 = started,
+        1 = refused (a batch is running or CIP already runs)."""
+        if self.state not in (IDLE, COMPLETE):
+            self._log_event("cip_refused", {"state": self.state})
+            return 1
+        self.state = CIP
+        self.phase = "cip"
+        self._cip_i, self._cip_elapsed_s = 0, 0.0
+        self.cip_step = CIP_STEPS[0][0]
+        self._cip_acc = {"water_L": 0.0, "caustic_kg": 0.0, "acid_kg": 0.0, "heat_kwh": 0.0,
+                         "electricity_kwh": 0.0, "duration_s": 0.0,
+                         "past_run_h": self.past_run_h}
+        self._log_event("cip_started", {"past_run_h": round(self.past_run_h, 3)})
+        return 0
+
+    # ------------------------------------------------------------------ utilities
+    def _gas(self, useful_kj: float) -> None:
+        """Useful heat delivered as steam: meter the gas and the steam it took."""
+        if useful_kj <= 0:
+            return
+        kwh = useful_kj / 3600.0 / BOILER_EFF
+        self.heat_kwh_total += kwh
+        self.steam_kg_total += useful_kj / STEAM_LATENT_KJ_KG
+        if self.state == CIP:
+            self._cip_acc["heat_kwh"] += kwh
+
+    def _power(self, kw: float, pdt: float) -> None:
+        kwh = max(0.0, kw) * pdt / 3600.0
+        self.electricity_kwh_total += kwh
+        if self.state == CIP:
+            self._cip_acc["electricity_kwh"] += kwh
+
+    def _batch_mass_kg(self) -> float:
+        return sum(self.dose_actual_kg.values())
+
+    def _past_rf(self) -> float:
+        import math
+        return PAST_RF_MAX * (1.0 - math.exp(-self.past_run_h / PAST_RF_TAU_H))
+
+    def _tick_pasteuriser(self, pdt: float, milk_kg: float) -> None:
+        """Milk from the silo through the intake pasteuriser while it is dosed.
+
+        Regeneration heats cold milk with hot pasteurised milk; the heating section
+        brings it to the holding temperature with hot water. Fouling (Rf) lowers U,
+        so the hot water must run hotter for the same duty; it also costs some
+        regeneration and raises the pressure drop. Only a CIP removes it.
+
+        The pasteuriser runs at its nominal flow, and its run hours, heat and pump
+        energy follow from the milk that passed, not from the (compressed) clock:
+        like the cook energy, that keeps it right at any TIME_SCALE or dose rate."""
+        flow_kg_s = PAST_REF_FLOW_KG_S if milk_kg > 0 else 0.0
+        self.past_flow_kg_s = flow_kg_s
+        if flow_kg_s <= 0:
+            return
+        run_s = milk_kg / flow_kg_s
+        self.past_run_h += run_s / 3600.0
+        rf = self._past_rf()
+        cold = self.receiving_temp_C
+        hold = PAST_HOLD_C
+        eff = PAST_REGEN_EFF_CLEAN - PAST_REGEN_RF_LOSS * rf
+        regen_out = cold + eff * (hold - cold)
+        duty_kw = flow_kg_s * CP_PRODUCT_KJ_KG_K * (hold - regen_out)
+        u = 1.0 / (1.0 / PAST_U_CLEAN + rf)
+        need = duty_kw / (u * PAST_AREA_M2)
+        dtw = duty_kw / (PAST_HW_FLOW_KG_S * CP_WATER_KJ_KG_K)
+        lo, hi = max(hold, regen_out + dtw) + 1e-3, 160.0
+        for _ in range(60):  # bisection on the hot-water inlet temperature
+            mid = (lo + hi) / 2.0
+            if lmtd(mid - hold, mid - dtw - regen_out) < need:
+                lo = mid
+            else:
+                hi = mid
+        self.past_cold_in_C, self.past_regen_out_C, self.past_hold_C = cold, regen_out, hold
+        self.past_hot_in_C, self.past_hot_out_C = hi, hi - dtw
+        self.past_dp_bar = PAST_DP_CLEAN_BAR * (flow_kg_s / PAST_REF_FLOW_KG_S) ** 2 \
+            * (1.0 + PAST_DP_RF_GAIN * rf)
+        self._gas(duty_kw * run_s)
+        self._power(PAST_PUMP_KW, run_s)
+
+    def _tick_cip(self, pdt: float) -> None:
+        name, dur, water, caustic, acid, temp = CIP_STEPS[self._cip_i]
+        step_dt = min(pdt, dur - self._cip_elapsed_s)
+        frac = step_dt / dur
+        self.water_L_total += water * frac
+        self._cip_acc["water_L"] += water * frac
+        self._cip_acc["caustic_kg"] += caustic * frac
+        self._cip_acc["acid_kg"] += acid * frac
+        self._cip_acc["duration_s"] += step_dt
+        if temp is not None:
+            self._gas(water * frac * CP_WATER_KJ_KG_K * (temp - CIP_RINSE_IN_C))
+        self._power(CIP_PUMP_KW, step_dt)
+        self._cip_elapsed_s += step_dt
+        if self._cip_elapsed_s >= dur - 1e-9:
+            self._cip_i += 1
+            self._cip_elapsed_s = 0.0
+            if self._cip_i >= len(CIP_STEPS):
+                self.cip_count += 1
+                self.cip_last = {k: round(v, 3) for k, v in self._cip_acc.items()}
+                self.past_run_h = 0.0          # clean: fouling gone
+                self.cip_step = "gereed"
+                self.state, self.phase = IDLE, "idle"
+                self._log_event("cip_complete", dict(self.cip_last))
+                return
+            self.cip_step = CIP_STEPS[self._cip_i][0]
+        rest = pdt - step_dt
+        if rest > 1e-9:
+            self._tick_cip(rest)
+
     # ------------------------------------------------------------------ tick
     def tick(self, dt: float) -> None:
         """Advance the process by dt real seconds (scaled to TIME_SCALE process-seconds)."""
@@ -416,6 +603,8 @@ class VlaProcess:
         # het is ook wat een niveaumeting tot een meting maakt in plaats van een
         # constante die nooit gepubliceerd wordt.
         self._tick_receiving(pdt)
+        if self.state in (DOSING, COOKING, COOLING, FILLING):
+            self._power(AGITATOR_KW * (self.agitator_rpm / 60.0) ** 3, pdt)
 
         if self.state == DOSING:
             self._tick_dosing(pdt)
@@ -425,6 +614,10 @@ class VlaProcess:
             self._tick_cooling(pdt)
         elif self.state == FILLING:
             self._tick_filling(pdt)
+        elif self.state == CIP:
+            self._tick_cip(pdt)
+        if self.state != DOSING:
+            self.past_flow_kg_s = 0.0
         # IDLE / COMPLETE: nothing to advance
 
     def _tick_receiving(self, pdt: float) -> None:
@@ -511,6 +704,9 @@ class VlaProcess:
         self.receiving_level_L = max(
             0.0, self.receiving_level_L - milk_drawn_kg / MILK_DENSITY_KG_L
         )
+        # De melk loopt via de intake-pasteur naar de procestank.
+        self._tick_pasteuriser(pdt, milk_drawn_kg)
+        self._power(TRANSFER_PUMP_KW, pdt)
 
         # gentle pre-warm during dosing
         self.mix_temp_C += (self.receiving_temp_C + 10.0 - self.mix_temp_C) * clamp(pdt * 0.1, 0, 1)
@@ -528,12 +724,12 @@ class VlaProcess:
         if self._cook_temp_cap_C is not None:
             target = min(target, self._cook_temp_cap_C)
 
-        # ramp cook temperature toward target
-        if self.cook_temp_C < target:
-            self.cook_temp_C = min(target, self.cook_temp_C + HEAT_RATE_C_S * pdt)
-        else:
-            # settle at target
-            self.cook_temp_C += (target - self.cook_temp_C) * clamp(pdt * 0.5, 0, 1)
+        before = self.cook_temp_C
+        self._tick_cook_temp(target, pdt)
+        rise = self.cook_temp_C - before
+        self._gas(self._batch_mass_kg() * CP_PRODUCT_KJ_KG_K * max(0.0, rise))
+        if self.hold_elapsed_sec > 0:
+            self._gas(COOK_HOLD_LOSS_KW * pdt)   # holding against the losses
         self.mix_temp_C = self.cook_temp_C
         self.peak_cook_temp_C = max(self.peak_cook_temp_C, self.cook_temp_C)
 
@@ -551,18 +747,32 @@ class VlaProcess:
                                              "peak_cook_temp_C": round(self.peak_cook_temp_C, 2),
                                              "viscosity_cP": round(self.viscosity_cP, 1)})
 
+    def _tick_cook_temp(self, target: float, pdt: float) -> None:
+        # ramp cook temperature toward target
+        if self.cook_temp_C < target:
+            self.cook_temp_C = min(target, self.cook_temp_C + HEAT_RATE_C_S * pdt)
+        else:
+            # settle at target
+            self.cook_temp_C += (target - self.cook_temp_C) * clamp(pdt * 0.5, 0, 1)
+
     def _tick_cooling(self, pdt: float) -> None:
         self.phase = "cooling"
         # cook viscosity is now locked in; just cool the mass toward the cooler target
         if self.cool_temp_C == AMBIENT_C and self.cook_temp_C > self.cool_target_C:
             # first cooling entry: start from the cook temperature
             self.cool_temp_C = self.cook_temp_C
+        before = self.cool_temp_C
+        self._power(TRANSFER_PUMP_KW, pdt)
         if self.cool_temp_C > self.cool_target_C:
             self.cool_temp_C = max(self.cool_target_C, self.cool_temp_C - COOL_RATE_C_S * pdt)
         else:
             self.cool_temp_C += (self.cool_target_C - self.cool_temp_C) * clamp(pdt * 0.5, 0, 1)
         self.mix_temp_C = self.cool_temp_C
         self.cook_temp_C += (self.cool_temp_C - self.cook_temp_C) * clamp(pdt * 0.3, 0, 1)
+        drop = before - self.cool_temp_C
+        if drop > 0:   # heat removed by the chiller, paid for in electricity
+            self._power(self._batch_mass_kg() * CP_PRODUCT_KJ_KG_K * drop / CHILLER_COP / pdt
+                        if pdt > 0 else 0.0, pdt)
 
         if abs(self.cool_temp_C - self.cool_target_C) < 0.5:
             self.state = FILLING
@@ -584,6 +794,7 @@ class VlaProcess:
         # Every pack the volume yields gets filled; part of them is rejected.
         # packs_total counts GOOD packs only, so good + rejects == filled and the
         # mass balance stays honest for the yield KPI.
+        self._power(FILLER_KW, pdt)
         packs_to_fill = int(self.mix_level_L / self.pack_size_L)
         if self._packs_f < packs_to_fill:
             # accumulate fractionally so the rate holds exactly at any TICK_INTERVAL
@@ -649,6 +860,31 @@ class VlaProcess:
                 "packs_total": int(self.packs_total),
                 "reject_count": int(self.reject_count),
                 "pack_size_L": round(self.pack_size_L, 2),
+            },
+            # Rounded so the change-based OPC-UA link publishes a counter step, not
+            # every float wiggle.
+            ("Receiving", "pasteurizer-01"): {
+                "product_flow_kg_s": round(self.past_flow_kg_s, 2),
+                "cold_t_in_C": round(self.past_cold_in_C, 2),
+                "regen_t_out_C": round(self.past_regen_out_C, 2),
+                "hold_t_C": round(self.past_hold_C, 2),
+                "hot_t_in_C": round(self.past_hot_in_C, 2),
+                "hot_t_out_C": round(self.past_hot_out_C, 2),
+                "dp_bar": round(self.past_dp_bar, 3),
+                "run_h_since_cip": round(self.past_run_h, 3),
+            },
+            ("Utilities", "energy-meter-01"): {
+                "heat_kwh_total": round(self.heat_kwh_total, 1),
+                "electricity_kwh_total": round(self.electricity_kwh_total, 2),
+                "steam_kg_total": round(self.steam_kg_total, 1),
+            },
+            ("Utilities", "water-meter-01"): {
+                "water_L_total": round(self.water_L_total, 0),
+            },
+            ("Utilities", "cip-station-01"): {
+                "step": self.cip_step,
+                "cip_count": int(self.cip_count),
+                **{f"last_{k}": v for k, v in self.cip_last.items()},
             },
         }
 

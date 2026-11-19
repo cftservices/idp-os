@@ -36,6 +36,8 @@ COLLECTIONS = [
     "dw_autopilot",
     "dw_shipments", "dw_prep_orders",
     "dw_work_orders",
+    # fase 3 (vla/meters.py): meterstanden, pasteurmetingen en CIP-cycli
+    "dw_meter_readings", "dw_pasteur_samples", "dw_cip_cycles",
 ]
 
 
