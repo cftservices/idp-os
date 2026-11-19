@@ -60,21 +60,32 @@ class OrderManager:
         NOTE `batched_L` is the sum of the batches' *planned* litres, not output.
         `produced_L` (packs x pack_size_L) is the actual yield — show both, they
         differ as soon as a batch under-fills.
+
+        Packs of a HOLD or REJECTED batch do not count towards the order: such a
+        batch is never palletised or shipped, so counting it closed orders "in
+        full" with product the customer never got. They are reported apart as
+        `blocked_packs`. A batch without a verdict yet (still filling) counts, so
+        progress stays live.
         """
         order = self.get_order(order_id) or {}
-        batches = self.db.dw_batches.find({"order_id": order_id})
+        batches = list(self.db.dw_batches.find({"order_id": order_id}))
         batch_ids = [b["batch_id"] for b in batches]
+        blocked_ids = {b["batch_id"] for b in batches
+                       if b.get("verdict") in (M.HOLD, M.REJECTED)}
         bookings = [p for p in self.db.dw_production.find({})
                     if p["batch_id"] in batch_ids]
-        produced = sum(p.get("packs") or 0 for p in bookings)
+        good = [p for p in bookings if p["batch_id"] not in blocked_ids]
+        produced = sum(p.get("packs") or 0 for p in good)
         produced_L = sum((p.get("packs") or 0) * float(p.get("pack_size_L") or 1)
-                         for p in bookings)
+                         for p in good)
+        blocked = sum(p.get("packs") or 0 for p in bookings if p["batch_id"] in blocked_ids)
         rejects = sum(p.get("reject_count") or 0 for p in bookings)
         target = float(order.get("target_qty_L") or 0)
         return {
             "batched_L": sum(float(b.get("planned_L") or 0) for b in batches),
             "produced_packs": produced,
             "produced_L": produced_L,
+            "blocked_packs": blocked,
             "reject_total": rejects,
             "remaining_L": max(0.0, target - produced_L) if target else 0.0,
             "progress_pct": round(100.0 * produced_L / target, 1) if target else 0.0,

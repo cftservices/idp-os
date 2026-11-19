@@ -47,7 +47,9 @@ FAILURE_MODES = {
                   ("Toevoerklep sluit niet", "mechanisch", (180, 360))],
     "process": [("Roerwerkmotor thermisch beveiligd", "elektrisch", (180, 420)),
                 ("Doseerklep lekt", "mechanisch", (150, 300))],
-    "cook": [("Stoomregelklep hangt", "mechanisch", (240, 480)),
+    # Niet "Stoomregelklep hangt": dat is de oorzaak die scripts/scenario_steam_valve.py
+    # naspeelt als kwaliteitsprobleem. Dezelfde tekst als storing vertroebelt de 8D.
+    "cook": [("Condenspot stoomtoevoer verstopt", "mechanisch", (240, 480)),
              ("Temperatuurvoeler defect", "elektrisch", (150, 300))],
     "cooler": [("Koelwaterpomp uitgevallen", "mechanisch", (210, 420)),
                ("Flowmeter koelwater wijkt af", "proces", (150, 270))],

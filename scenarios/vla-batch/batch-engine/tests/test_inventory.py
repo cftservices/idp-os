@@ -23,6 +23,22 @@ def test_stock_mutates_on_consumption_and_production():
     assert fg["stock_qty"] == 4980
 
 
+def test_rejected_batch_is_taken_out_of_finished_goods_as_scrap():
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    runner = BatchRunner(db, bus=None, rng=random.Random(8))
+    ok = runner.create_batch("chocolate-vla-1L", planned_L=5000)
+    runner.start_batch(ok["batch_id"], telemetry=TELEM_OK)
+    bad = runner.create_batch("chocolate-vla-1L", planned_L=5000)
+    res = runner.start_batch(bad["batch_id"], telemetry={**TELEM_OK, "peak_cook_temp_C": 72.0})
+    assert res["verdict"] in (M.REJECTED, M.HOLD)
+    fg = db.dw_materials.find_one({"material_id": M.FINISHED_GOOD_ID})
+    assert fg["stock_qty"] == 4980  # only the approved batch stays in stock
+    kinds = [e["payload"]["kind"] for e in db.dw_batch_events.find({"event_type": "stock_mutation"})
+             if e["batch_id"] == bad["batch_id"] and e["payload"]["material_id"] == M.FINISHED_GOOD_ID]
+    assert kinds == ["production", "scrap" if res["verdict"] == M.REJECTED else "quarantine"]
+
+
 def test_below_threshold_event_fires_once_per_crossing():
     db = get_db(mongo_url=None)
     seed_recipes(db)

@@ -540,6 +540,14 @@ class BatchRunner:
             "critical_alarm_during_batch": crit,
         })
         self._event(batch_id, "verdict_set", {"verdict": verdict})
+        if verdict in (M.HOLD, M.REJECTED):
+            # Booked as finished goods at fill time; a blocked batch never ships.
+            raw = self._raw_batch(batch_id) or {}
+            packs = int(raw.get("packs_total") or 0)
+            if packs > 0:
+                inventory.block(self.db, self._event, M.fg_of_recipe(raw.get("recipe_id")),
+                                packs, batch_id,
+                                "scrap" if verdict == M.REJECTED else "quarantine")
 
     # ------------------------------------------------------------------- doses
 
