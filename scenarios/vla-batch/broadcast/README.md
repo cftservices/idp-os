@@ -256,11 +256,9 @@ Pi, met de twin in de carrousel.
 
 ## Streamen vanaf de Pi 5
 
-`/broadcast?twin=1` zet de twin (90 s) vooraan in de carrousel; `/broadcast` zonder parameter blijft
-2D voor de VPS. [`pi5/stream.sh`](pi5/stream.sh) draait de pijplijn als systemd-user-unit
-`vla-stream`: tunnel, kiosk-Chromium en ffmpeg naar YouTube, met dezelfde encoder als de
-bankproef. Valt één van de drie om, dan herstart systemd het geheel na 15 s. Het overleeft een
-verbroken ssh-verbinding.
+[`pi5/stream.sh`](pi5/stream.sh) draait de pijplijn als systemd-user-unit `vla-stream`: tunnel,
+kiosk-Chromium en ffmpeg naar YouTube. Valt één van de drie om, dan herstart systemd het geheel na
+15 s. Het overleeft een verbroken ssh-verbinding.
 
 ```bash
 ./stream.sh start 60     # uurproef: stopt na 60 minuten vanzelf
@@ -270,12 +268,71 @@ verbroken ssh-verbinding.
 ./stream.sh stop
 ```
 
-De stream key staat in `~/.broadcast.env` op de Pi (chmod 600, `YOUTUBE_STREAM_KEY=...`). ffmpeg
-noemt bij een fout de volledige uitvoer-URL; het script haalt de sleutel daaruit voordat het in
-het journal komt.
+**Wat er in beeld komt.** De Pi opent `/broadcast?twin=1&fps=30&gf=…`. Daarin staan alleen
+Engelstalige schermen, samen ongeveer 7 minuten per ronde:
+
+1. **De rondleiding** (`/site?broadcast=1&story=1`, [`ui/lib/twin/story.ts`](../ui/lib/twin/story.ts)),
+   ongeveer 6 minuten. De camera volgt het product langs 14 stops: grondstoffen, afwegen en premix,
+   de vijf processtappen, "follow the batch" (de machine waar de batch van lijn 1 nu zit),
+   palletiser, koelcel, docks en lijn 2 (ook daar de machine van de lopende batch). Per stop een
+   Engels bijschrift voor engineers met live waarden; vaste tekst komt uit `PROCESS.md`, getallen
+   altijd live. In story-modus zijn de Nederlandse balken van de twin (zoekbalk, KPI-kaarten,
+   batchbalk) verborgen.
+2. **Grafana `stream-factory`** ([`grafana/stream_board.py`](../grafana/stream_board.py)):
+   kooktemperatuur, viscositeit, OEE per lijn en pakken per batch.
+3. **Grafana `pi5-health`**: de Pi die de stream maakt.
+
+De vier 2D-schermen van vla-ui zijn Nederlands en staan alleen in de 2D-variant (`/broadcast`, de
+renderer op de VPS).
+
+**Beeld:** 1280x720, 30 fps. De twin krijgt via `?fps=` dezelfde framecap (10 t/m 30; zonder
+parameter 20). libx264 ultrafast met **constante bitrate** 2500k (`-minrate` plus
+`nal-hrd=cbr`): een rustig beeld gebruikte anders maar 0,7 à 1,3 Mbit/s, en daar waarschuwde
+YouTube voor. Gemeten: 30 fps, 1,01x, YouTube "Excellent", twin 25,6 echte fps tijdens een
+camerabeweging, Pi rond 70 °C zonder throttling.
+
+**Grafana in de stream.** Anonymous blijft uit. Twee dashboards zijn **publiek gedeeld** (Grafana
+"shared dashboards", alleen-lezen, alleen dat ene dashboard): `stream-factory` en `pi5-health`. Een
+publiek dashboard heeft twee grenzen, beide gemeten op 20-11-2026:
+
+- de JSON-datasource van de batch-engine draait in de browser en geeft daar "Plugin unavailable";
+- template-variabelen worden niet ingevuld, dus `fabriek-kpi` bleef helemaal leeg.
+
+Daarom draait `stream-factory` alleen op TDengine en heeft het geen variabelen. De gedeelde
+`fabriek-overzicht` en `fabriek-kpi` zijn weer ingetrokken. De tokens staan op de VPS in
+`/root/.gf-public-<uid>` en op de Pi in `~/.broadcast.env` (`GRAFANA_PUBLIC=uid:token,…`), niet in
+git. vla-ui neemt alleen bekende uids en tokens van 32 hex-tekens over. De Pi bereikt Grafana via
+dezelfde tunnel op `localhost:3001`.
+
+**Muziek.** Alle mp3's in `~/music` op de Pi gaan zacht onder het beeld (`MUZIEK_VOLUME`, standaard
+0,35); zonder mp3's een stil spoor. Alleen mp3: de concat-demuxer breekt bij gemengde codecs. Geen
+`-stream_loop` maar de lijst 200 keer achter elkaar, want `-stream_loop` met concat was op de Pi
+niet betrouwbaar. Gebruik alleen muziek uit de YouTube Audio Library. Nieuwe muziek geldt na
+`stop` en `start`.
+
+**Sleutels op de VPS** (`/root/.ssh/authorized_keys`, elke wijziging met een `.bak-*` ernaast):
+
+| Sleutel op de Pi | Mag alleen |
+|---|---|
+| `~/.ssh/pi-bankproef` | doorsturen naar `127.0.0.1:8091` (vla-ui) en `127.0.0.1:3001` (Grafana); `command="/bin/false"` |
+| `~/.ssh/pi-health` | `scripts/pi_ingest.py pi5` voeden (forced command): één JSON-regel per minuut |
+
+De stream key staat in `~/.broadcast.env` op de Pi (chmod 600). ffmpeg noemt bij een fout de
+volledige uitvoer-URL; het script haalt de sleutel daaruit via een sed-script in een bestand van
+600, zodat hij ook niet in `ps` staat.
+
+**Gezondheid van de Pi.** [`pi5/pi-health.sh`](pi5/pi-health.sh) draait elke minuut via cron en
+meet temperatuur, throttling en onderspanning (nu en sinds de boot), ventilator, CPU-klok, CPU,
+geheugen, schijf en de stream. [`scripts/pi_ingest.py`](../scripts/pi_ingest.py) op de VPS neemt
+alleen bekende velden met getallen aan, met de tijd van de VPS, en schrijft naar `idp.pi_host`.
+Dashboard: Grafana "Pi 5 — gezondheid" ([`grafana/pi_board.py`](../grafana/pi_board.py)).
 
 **Eerste uitzending, 20-11-2026 17:29:** live op YouTube (unlisted), 1,02x, 15 fps, 2,6 Mbit/s,
-twin 14,6 echte fps, Pi 63 °C zonder throttling. De uitkomst van het hele uur volgt hieronder.
+twin 14,6 echte fps, Pi 63 °C zonder throttling. Sinds 18:00 met rondleiding, Grafana en 30 fps.
+
+**Terugkijken.** YouTube bewaart een livestream als video zolang hij niet langer is dan 12 uur, met
+dezelfde zichtbaarheid (unlisted). Stop een lange stream daarom liever elke paar uur en start een
+nieuwe.
 
 ## Meetproef 1, 20-11-2026: no-go voor de 3D-twin op deze VPS
 
@@ -333,20 +390,11 @@ Uit de eerste proef kwamen ook drie fouten in de container. Alle drie zijn gerep
 - ffmpeg gaf een stroom `non monotonically increasing dts`-waarschuwingen, opgelost met
   `-fps_mode cfr`.
 
-## Stap 2: Grafana in de carrousel (nog niet gebouwd)
+## Stap 2: Grafana in de carrousel (gebouwd, 20-11-2026)
 
-Grafana heeft anonymous bewust uit, omdat anders de hele historian opvraagbaar is. Die regel blijft
-staan. De route:
-
-1. Maak in Grafana een eigen gebruiker `broadcast` met de rol **Viewer**, beperkt tot één map met
-   alleen de stream-dashboards.
-2. Vervang in de renderer de kale Chromium door Playwright met een persistent profiel. Die logt één
-   keer in via `https://milkdemo.techflow24.com/grafana/login`, met `httpCredentials` voor de basic
-   auth. Daarna opent hij `https://milkdemo.techflow24.com/broadcast`. Via de publieke origin werkt
-   het `Secure`/`SameSite=strict`-cookie van Grafana wél in het same-origin-iframe.
-3. Zet de wachtwoorden in `.broadcast.env` (chmod 600), net als de stream key.
-4. Voeg aan `screens.ts` dashboards toe als `/grafana/d/<uid>?kiosk&refresh=30s`. Kies
-   dashboards met een refresh van 30 s of langer: elke refresh kost de renderer CPU.
+Gebouwd via publiek gedeelde dashboards in plaats van een ingelogde Viewer; zie
+[Streamen vanaf de Pi 5](#streamen-vanaf-de-pi-5). De renderer op de VPS toont nog geen
+Grafana: hij heeft geen tunnel naar `localhost:3001`, en de 2D-variant is daar niet op ingericht.
 
 ## Stap 3: bedieningsscherm (later)
 

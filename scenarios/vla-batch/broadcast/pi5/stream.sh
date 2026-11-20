@@ -14,8 +14,8 @@
 #   install -m 600 /dev/null ~/.broadcast.env && nano ~/.broadcast.env
 #   inhoud: YOUTUBE_STREAM_KEY=<sleutel uit YouTube Studio>
 #
-# Zelfde beeld en encoder als de bankproef (pi5/bankproef.sh): 1280x720, 15 fps, libx264
-# ultrafast 2500k. De demo komt via een tunnel met de sleutel ~/.ssh/pi-bankproef, die op de
+# Beeld: 1280x720, 30 fps (de twin krijgt via ?fps= dezelfde framecap), libx264 ultrafast met
+# constante bitrate 2500k (CBR): YouTube wil een stabiele stroom, ook bij een rustig beeld. De demo komt via een tunnel met de sleutel ~/.ssh/pi-bankproef, die op de
 # VPS alleen poort 8091 mag doorsturen (zie README, Bankproef Raspberry Pi 5).
 set -euo pipefail
 
@@ -24,8 +24,8 @@ UNIT=vla-stream
 SLEUTELBESTAND="$HOME/.broadcast.env"
 TUNNEL_SLEUTEL="$HOME/.ssh/pi-bankproef"
 VPS=root@147.93.56.23
-URL="${URL:-http://localhost:8091/broadcast?twin=1}"
-FPS="${FPS:-15}"
+FPS="${FPS:-30}"
+URL="${URL:-http://localhost:8091/broadcast?twin=1&fps=${FPS}}"
 BITRATE="${BITRATE:-2500k}"
 BREEDTE=1280
 HOOGTE=720
@@ -61,6 +61,9 @@ run() {
   [ -n "${YOUTUBE_STREAM_KEY:-}" ] || { log "YOUTUBE_STREAM_KEY ontbreekt in ${SLEUTELBESTAND}"; exit 2; }
   local sleutel="$YOUTUBE_STREAM_KEY"
   unset YOUTUBE_STREAM_KEY
+  # Publiek gedeelde Grafana-dashboards (uid:token,...), via de tunnel op localhost:3001.
+  # Een publieke link heeft geen login nodig; de tokens staan alleen hier, niet in git.
+  [ -n "${GRAFANA_PUBLIC:-}" ] && URL="${URL}&gf=${GRAFANA_PUBLIC}"
 
   # Een losse tunnel van de bankproef houdt poort 8091 bezet; die gaat eerst weg.
   [ -f "$HOME/.bankproef-tunnel.pid" ] && kill "$(cat "$HOME/.bankproef-tunnel.pid")" 2>/dev/null || true
@@ -68,7 +71,7 @@ run() {
 
   log "tunnel naar vla-ui"
   ssh -i "$TUNNEL_SLEUTEL" -o IdentitiesOnly=yes -o BatchMode=yes -o ExitOnForwardFailure=yes \
-    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -N -L 8091:127.0.0.1:8091 "$VPS" &
+    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -N -L 8091:127.0.0.1:8091 -L 3001:127.0.0.1:3001 "$VPS" &
   local tunnel=$!
   for _ in $(seq 1 30); do curl -fsS -o /dev/null --max-time 5 "$URL" && break; sleep 2; done
   curl -fsS -o /dev/null --max-time 5 "$URL" || { log "${URL} niet bereikbaar"; exit 1; }
@@ -88,25 +91,51 @@ run() {
   sleep "${WARMUP:-20}"
 
   log "ffmpeg -> YouTube ${BREEDTE}x${HOOGTE}@${FPS} ${BITRATE}"
+  # Het sed-script met de sleutel staat in een bestand (600), niet in de argumenten: die ziet
+  # iedereen op de Pi in `ps`.
+  local masker; masker=$(mktemp); chmod 600 "$masker"
+  printf 's|%s|***|g\n' "$sleutel" > "$masker"
+
+  # Muziek: alle mp3's uit ~/music, zacht onder het beeld. Zonder bestanden een stil spoor. Alleen
+  # muziek die je op YouTube mag gebruiken (YouTube Audio Library); andere muziek geeft een
+  # Content ID-claim of een afgebroken stream.
+  # Alleen mp3: de concat-demuxer wil één codec (mp3 en ogg door elkaar breekt). De lijst staat er
+  # 200 keer in in plaats van -stream_loop, want dat is met concat niet betrouwbaar (gemeten op de
+  # Pi, 20-11-2026); 200 rondes is ruim meer dan de 12 uur tot de geplande herstart.
+  local audio=(-f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100") afilter=()
+  local lijst ronde; lijst=$(mktemp); ronde=$(mktemp)
+  local f
+  while IFS= read -r f; do
+    printf "file '%s'\n" "${f//\'/\'\\\'\'}" >> "$ronde"
+  done < <(find "$HOME/music" -maxdepth 1 -type f -iname '*.mp3' 2>/dev/null | sort)
+  if [ -s "$ronde" ]; then
+    for _ in $(seq 1 200); do cat "$ronde"; done > "$lijst"
+    audio=(-f concat -safe 0 -i "$lijst")
+    afilter=(-af "volume=${MUZIEK_VOLUME:-0.35}")
+    log "muziek: $(wc -l < "$ronde") nummer(s) uit ~/music"
+  fi
+  rm -f "$ronde"
+
   # ffmpeg noemt bij een fout de volledige uitvoer-URL, met de sleutel erin: die gaat eruit.
   ffmpeg -hide_banner -loglevel warning -nostats \
     -progress "$VOORTGANG" -stats_period 30 \
     -thread_queue_size 64 -f x11grab -draw_mouse 0 -framerate "$FPS" -video_size "${BREEDTE}x${HOOGTE}" -i "${DISPLAY}+0,0" \
-    -thread_queue_size 64 -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+    -thread_queue_size 64 "${audio[@]}" \
     -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
     -fps_mode cfr -r "$FPS" \
-    -b:v "$BITRATE" -maxrate "$BITRATE" -bufsize "$(( ${BITRATE%k} * 2 ))k" \
+    -b:v "$BITRATE" -minrate "$BITRATE" -maxrate "$BITRATE" -bufsize "$(( ${BITRATE%k} * 2 ))k" \
+    -x264-params nal-hrd=cbr \
     -g "$(( FPS * 2 ))" -keyint_min "$(( FPS * 2 ))" -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 44100 \
+    -map 0:v -map 1:a "${afilter[@]}" -c:a aac -b:a 128k -ar 44100 -ac 2 \
     -f flv "${RTMPS_URL}/${sleutel}" \
-    2> >(sed -u "s|${sleutel}|***|g" >&2) < /dev/null &
+    2> >(sed -u -f "$masker" >&2) < /dev/null &
   local ff=$!
 
   local looptijd="$MAX_RUNTIME"
   [ -n "${STOP_NA_MIN:-}" ] && looptijd=$(( STOP_NA_MIN * 60 ))
   ( sleep "$looptijd"; touch "$GEPLAND"; kill "$ff" 2>/dev/null || true ) &
   local timer=$!
-  trap 'kill "$ff" "$chrome" "$tunnel" "$timer" 2>/dev/null || true' EXIT TERM INT
+  trap 'kill "$ff" "$chrome" "$tunnel" "$timer" 2>/dev/null || true; rm -f "$masker" "$lijst"' EXIT TERM INT
 
   set +e
   wait -n "$tunnel" "$chrome" "$ff"

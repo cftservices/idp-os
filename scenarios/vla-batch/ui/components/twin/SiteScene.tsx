@@ -35,6 +35,10 @@ import { positionOf } from "./selection";
 
 const ACTIVE_STATES = new Set(["DOSING", "COOKING", "COOLING", "FILLING"]);
 
+/** A camera stop in story mode. */
+export type StoryShot = { target: Vec3; distance: number; n: number };
+const STORY_ELEVATION = (35 * Math.PI) / 180;
+
 /*
  * Premixleidingen: een verzamelleiding boven de twee premixtanks in de
  * voorbereiding (west van de hallen), met een aftakking door de westwand naar
@@ -83,11 +87,14 @@ function CameraRig({
   follow,
   resetSignal,
   zoom,
+  shot = null,
 }: {
   focus: Vec3 | null;
   follow: string | null;
   resetSignal: number;
   zoom: { n: number; dir: 1 | -1 };
+  /** Story mode: fly to a point at a fixed distance and a fixed elevation; `n` changes per stop. */
+  shot?: StoryShot | null;
 }) {
   const controls = useThree((s) => s.controls) as unknown as { target: Vector3; update: () => void } | null;
   const camera = useThree((s) => s.camera);
@@ -124,6 +131,20 @@ function CameraRig({
     goal.current = { target: t, pos: t.clone().add(off.setLength(len)), until: performance.now() + 700 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom.n]);
+
+  useEffect(() => {
+    if (!shot) return;
+    const target = new Vector3(...shot.target);
+    // Keep the current compass direction, set the elevation to ~35°: a stop always looks down
+    // on the machine at the same angle, wherever the auto-rotate happened to be.
+    const flat = camera.position.clone().sub(target);
+    flat.y = 0;
+    if (flat.lengthSq() < 1e-6) flat.set(1, 0, 1);
+    flat.normalize().multiplyScalar(Math.cos(STORY_ELEVATION));
+    const dir = flat.add(new Vector3(0, Math.sin(STORY_ELEVATION), 0)).normalize();
+    goal.current = { target, pos: target.clone().add(dir.multiplyScalar(shot.distance)), until: performance.now() + 2600 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shot?.n]);
 
   const box = useRef(new Box3());
   const centre = useRef(new Vector3());
@@ -183,7 +204,9 @@ export default function SiteScene({
   order = null,
   showPath = false,
   lens = null,
+  shot = null,
   broadcast = false,
+  broadcastFps = BROADCAST_FPS,
 }: {
   model: TwinModel;
   ctx: TwinCtx;
@@ -194,8 +217,12 @@ export default function SiteScene({
   order?: ActiveOrder | null;
   showPath?: boolean;
   lens?: LensMarker[] | null;
+  /** Story mode (?story=1): the camera stop of the current story step. */
+  shot?: StoryShot | null;
   /** Licht profiel voor de livestream: geen schaduwen, geen reflecties, vaste fps. */
   broadcast?: boolean;
+  /** Framecap in de uitzending; ?fps= in de URL, 10 t/m 30. De VPS houdt 20, een Pi 5 haalt 30. */
+  broadcastFps?: number;
 }) {
   const { palette, reducedMotion } = ctx;
   const flowing = model.batch ? ACTIVE_STATES.has(model.batch.state) : false;
@@ -245,7 +272,7 @@ export default function SiteScene({
         )}
         {/* Zonder Environment mist RVS zijn reflectie; wat extra omgevingslicht houdt het leesbaar. */}
         {broadcast && <ambientLight intensity={0.35} />}
-        {broadcast && <FrameCap fps={BROADCAST_FPS} />}
+        {broadcast && <FrameCap fps={broadcastFps} />}
         <directionalLight
           position={[-22, 42, 28]}
           intensity={2.4}
@@ -330,11 +357,11 @@ export default function SiteScene({
           autoRotate={presenting && !reducedMotion}
           // OrbitControls draait per getekend frame; bij 20 in plaats van 60 fps
           // compenseert de snelheid, zodat de rondgang even lang duurt.
-          autoRotateSpeed={broadcast ? 0.6 * (60 / BROADCAST_FPS) : 0.6}
+          autoRotateSpeed={broadcast ? 0.6 * (60 / broadcastFps) : 0.6}
         />
         {showPath && order && <OrderPath order={order} model={model} />}
         {lens && <LensMarkers markers={lens} onSelect={ctx.select} />}
-        <CameraRig focus={focus} follow={follow} resetSignal={resetSignal} zoom={zoom} />
+        <CameraRig focus={focus} follow={follow} resetSignal={resetSignal} zoom={zoom} shot={shot} />
       </FlavourContext.Provider>
       </TwinContext.Provider>
     </Canvas>
