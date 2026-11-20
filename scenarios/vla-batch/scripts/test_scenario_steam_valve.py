@@ -192,3 +192,25 @@ def test_only_autopilot_batches_count(sv, monkeypatch):
     monkeypatch.setattr(sv.urllib.request, "urlopen", lambda *a, **k: Resp())
     got = [b["batch_id"] for b in sv.completed_since("L1", "2026-11-20T00:00")]
     assert got == ["a", "d"]
+
+
+def test_clear_all_reaches_every_line_when_one_stays_down(sv, monkeypatch):
+    """A factory that stays down must not use up the whole cleanup deadline: the other line
+    still gets its fault cleared. Each line's failure is logged once, not every 2 s."""
+    calls = []
+
+    def fake_call(url, action, **ctx):
+        calls.append(ctx["line"])
+        if ctx["line"] == "L1":
+            raise OSError("connection refused")
+        return 1
+
+    monkeypatch.setattr(sv, "factory_call", fake_call)
+    monkeypatch.setattr(sv.time, "sleep", lambda s: None)
+    sv.clear_all({"L1": "opc.tcp://l1", "L2": "opc.tcp://l2"}, deadline_s=0.05)
+    assert "L2" in calls
+    log = [json.loads(r) for r in open(sv._log_path, encoding="utf-8")]
+    failed = [r for r in log if r["event"] == "cleanup_failed"]
+    assert [r["line"] for r in failed] == ["L1"]
+    gave_up = [r for r in log if r["event"] == "cleanup_gave_up"]
+    assert [r["line"] for r in gave_up] == ["L1"]

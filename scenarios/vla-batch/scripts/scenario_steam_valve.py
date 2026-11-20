@@ -167,16 +167,29 @@ def with_retry(fn, what: str, on_recover=None, **ctx):
 
 
 def clear_all(lines_urls: dict[str, str], deadline_s: float = 20.0) -> None:
-    """Best effort: clear the fault on every line, ignoring stop, within a deadline."""
+    """Best effort: clear the fault on every line, ignoring stop, within a deadline.
+
+    The lines are tried in turn, not one after the other: a factory that stays down must not
+    use up the whole deadline while the other line still has its fault active. A failure is
+    logged once per line; a line still not reached at the deadline gets `cleanup_gave_up`.
+    """
     end = time.monotonic() + deadline_s
-    for line, url in lines_urls.items():
-        while time.monotonic() < end:
+    left = dict(lines_urls)
+    failed: set[str] = set()
+    while left:
+        for line, url in list(left.items()):
             try:
                 factory_call(url, "clear", line=line, reason="cleanup")
-                break
+                del left[line]
             except Exception as e:  # noqa: BLE001
-                log("cleanup_failed", line=line, error=str(e)[:200])
-                time.sleep(2)
+                if line not in failed:
+                    failed.add(line)
+                    log("cleanup_failed", line=line, error=str(e)[:200])
+        if not left or time.monotonic() >= end:
+            break
+        time.sleep(2)
+    for line in left:
+        log("cleanup_gave_up", line=line, deadline_s=deadline_s)
 
 
 def run_cycle(line: str, url: str, start: str, cycle: int | None = None) -> int:
@@ -273,6 +286,7 @@ def main_loop() -> None:
     _log_path = LOOP_LOG
     urls = {ln: OPCUA_BY_LINE[ln] for ln in LINES}
     cycle = last_cycle(LOOP_LOG)
+    line = None
     log("loop_start", lines=LINES, resume_after_cycle=cycle)
     try:
         clear_all(urls)
@@ -281,7 +295,7 @@ def main_loop() -> None:
             line = LINES[(cycle - 1) % len(LINES)]
             run_cycle(line, urls[line], now(), cycle)
     except Stopped:
-        log("loop_stopped", cycle=cycle)
+        log("loop_stopped", cycle=cycle, line=line)
     finally:
         clear_all(urls)
 
