@@ -15,6 +15,8 @@ from . import inventory, model as M
 
 log = logging.getLogger("vla.scan")
 
+RUNNING = (M.DOSING, M.COOKING, M.COOLING, M.FILLING)
+
 
 def _iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -34,8 +36,7 @@ class ScanFlow:
 
     # ------------------------------------------------------------ step 0: gate
 
-    def scan_order(self, code: str, operator_id: Optional[str] = None,
-                   for_start: bool = False) -> dict:
+    def scan_order(self, code: str, operator_id: Optional[str] = None) -> dict:
         """The gate. Answers with the batch to work on and the phase it is in:
 
         dosing     the batch is still bookable: weigh, sample, book production
@@ -47,6 +48,10 @@ class ScanFlow:
         A scanned ORDER code picks its open batch first, then its latest
         finished one. A closed order is refused; a finished batch scanned by
         its own code is not, because logistics happens after the order closes.
+
+        line_busy  a batch that is not running yet, while another batch runs on
+                   the same line (PR-34 step 0). Logistics and the running batch
+                   itself always open; the other line never blocks.
         """
         order = self.orders.get_order(code) if self.orders else None
         batch = None
@@ -60,12 +65,12 @@ class ScanFlow:
             if order["status"] == M.ORDER_DONE:
                 self._reject(None, code, "not_active", operator_id)
             batch = self._batch_of_order(order["order_id"])
-        if for_start:
-            active = next((b for b in self.db.dw_batches.find({})
-                           if b["state"] in (M.DOSING, M.COOKING, M.COOLING,
-                                             M.FILLING)), None)
+        if batch is not None and batch["state"] not in RUNNING + (M.COMPLETE,):
+            active = self._running_on_line(M.line_of_doc(batch), batch["batch_id"])
             if active is not None:
-                self._reject(active["batch_id"], code, "line_busy", operator_id)
+                self._reject(active["batch_id"],
+                             f"{code} (line {M.line_of_doc(batch)} runs {active['batch_id']})",
+                             "line_busy", operator_id)
         batch_id = batch and batch.get("batch_id")
         order_id = (order and order.get("order_id")) or (batch and batch.get("order_id"))
         self._event(batch_id, "order_scanned",
@@ -77,6 +82,11 @@ class ScanFlow:
                 # flat fields for the shop-floor screen
                 "order_id": order_id, "batch_id": batch_id, "phase": phase,
                 "materials": self._materials(batch_id) if phase == "dosing" else []}
+
+    def _running_on_line(self, line: str, other_than: str) -> Optional[dict]:
+        return next((b for b in self.db.dw_batches.find({})
+                     if b["state"] in RUNNING and b["batch_id"] != other_than
+                     and M.line_of_doc(b) == line), None)
 
     def _batch_of_order(self, order_id: str) -> Optional[dict]:
         rows = sorted(self.db.dw_batches.find({"order_id": order_id}),
@@ -174,6 +184,19 @@ class ScanFlow:
                        and r.get("qty_actual") is None]
         if not staged_rows:
             self._reject(batch_id, batch_id, "nothing_staged", operator_id)
+        # All or nothing: check every staged material before booking any of them,
+        # so a shortage never leaves a half-committed batch behind.
+        short = []
+        for r in staged_rows:
+            mat = self.db.dw_materials.find_one({"material_id": r["material_id"]})
+            if mat is None or mat.get("stock_qty") is None:
+                continue
+            need = round(float(r["qty_prepared"]), 4)
+            have = float(mat["stock_qty"])
+            if need > have:
+                short.append(f"{r['material_id']} {need:g} kg, stock {have:g} kg")
+        if short:
+            self._reject(batch_id, "; ".join(short), "insufficient_stock", operator_id)
         booked = []
         for r in staged_rows:
             actual = round(float(r["qty_prepared"]), 4)

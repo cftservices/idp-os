@@ -146,3 +146,76 @@ def test_closed_order_is_refused_but_its_batch_still_scans():
         flow.scan_order(o["order_id"], operator_id="OP-7")
     assert ei.value.reason == "not_active"
     assert flow.scan_order(b["batch_id"], operator_id="OP-7")["phase"] == "logistics"
+
+
+# --- PR-34 (0): the gate refuses a batch that cannot run while the line is busy ---
+
+def _second_batch(runner, orders):
+    o2 = orders.create_order("chocolate-vla-1L", target_qty_L=5000)
+    b2 = runner.create_batch("chocolate-vla-1L", planned_L=5000, order_id=o2["order_id"])
+    return o2, b2
+
+
+def test_gate_refuses_a_waiting_batch_while_another_runs_on_its_line():
+    db, runner, flow, o, b = setup()
+    db.dw_batches.update_one({"batch_id": b["batch_id"]}, {"$set": {"state": "COOKING"}})
+    o2, b2 = _second_batch(runner, flow.orders)
+    with pytest.raises(ScanRejected) as ei:
+        flow.scan_order(o2["order_id"], operator_id="OP-7")
+    assert ei.value.reason == "line_busy"
+    assert b["batch_id"] in str(ei.value)          # the operator sees which batch runs
+    with pytest.raises(ScanRejected):
+        flow.scan_order(b2["batch_id"], operator_id="OP-7")
+
+
+def test_gate_opens_the_running_batch_itself():
+    db, runner, flow, o, b = setup()
+    db.dw_batches.update_one({"batch_id": b["batch_id"]}, {"$set": {"state": "DOSING"}})
+    r = flow.scan_order(o["order_id"], operator_id="OP-7")
+    assert r["batch_id"] == b["batch_id"] and r["phase"] == "dosing"
+
+
+def test_a_running_batch_on_the_other_line_does_not_block():
+    db, runner, flow, o, b = setup()
+    db.dw_batches.insert_one({"batch_id": "B-L2-RUNNING", "line": "L2",
+                              "recipe_id": "vanilla-vla-1L", "state": "COOKING",
+                              "created_at": "2026-11-20T10:00:00+00:00"})
+    assert flow.scan_order(o["order_id"], operator_id="OP-7")["phase"] == "dosing"
+
+
+def test_a_finished_batch_still_opens_logistics_while_the_line_runs():
+    db, runner, flow, o, b = setup()
+    _finish(runner, b["batch_id"])
+    o2, b2 = _second_batch(runner, flow.orders)
+    db.dw_batches.update_one({"batch_id": b2["batch_id"]}, {"$set": {"state": "FILLING"}})
+    assert flow.scan_order(b["batch_id"], operator_id="OP-7")["phase"] == "logistics"
+
+
+# --- the commit refuses when stock cannot cover it, and then books nothing ---
+
+def test_commit_refuses_a_stock_shortage_and_books_nothing():
+    db, runner, flow, o, b = setup()
+    db.dw_materials.update_one({"material_id": "cocoa"}, {"$set": {"stock_qty": 40.0}})
+    flow.weigh(b["batch_id"], "sugar", qty_kg=500.0, lot_no="L-S", operator_id="OP-7")
+    flow.weigh(b["batch_id"], "cocoa", qty_kg=100.0, lot_no="L-C", operator_id="OP-7")
+    sugar_before = db.dw_materials.find_one({"material_id": "sugar"})["stock_qty"]
+    with pytest.raises(ScanRejected) as ei:
+        flow.scan_report(b["batch_id"], operator_id="OP-7")
+    assert ei.value.reason == "insufficient_stock"
+    assert "cocoa" in str(ei.value) and "40" in str(ei.value)
+    # all or nothing: sugar had enough stock but is not booked either
+    for m in ("sugar", "cocoa"):
+        assert db.dw_doses.find_one({"batch_id": b["batch_id"], "material_id": m})["qty_actual"] is None
+    assert db.dw_materials.find_one({"material_id": "sugar"})["stock_qty"] == sugar_before
+    assert db.dw_materials.find_one({"material_id": "cocoa"})["stock_qty"] == 40.0
+
+
+def test_commit_goes_through_once_stock_is_received():
+    db, runner, flow, o, b = setup()
+    db.dw_materials.update_one({"material_id": "cocoa"}, {"$set": {"stock_qty": 40.0}})
+    flow.weigh(b["batch_id"], "cocoa", qty_kg=100.0, lot_no="L-C", operator_id="OP-7")
+    with pytest.raises(ScanRejected):
+        flow.scan_report(b["batch_id"], operator_id="OP-7")
+    db.dw_materials.update_one({"material_id": "cocoa"}, {"$set": {"stock_qty": 400.0}})
+    assert flow.scan_report(b["batch_id"], operator_id="OP-7")["booked_materials"] == ["cocoa"]
+    assert db.dw_materials.find_one({"material_id": "cocoa"})["stock_qty"] == 300.0

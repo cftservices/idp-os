@@ -505,11 +505,14 @@ class BatchRunner:
         self._take_sample(batch_id, "viscosity", M.COOLING,
                           value=end_visc, unit="cP",
                           spec_min=recipe.spec_min_cP, spec_max=recipe.spec_max_cP)
-        if end_visc < recipe.spec_min_cP:
-            # SOLVE trigger: out-of-spec viscosity -> CRITICAL (hold/rework)
+        too_thin = end_visc < recipe.spec_min_cP
+        too_thick = end_visc > recipe.spec_max_cP
+        if too_thin or too_thick:
+            # SOLVE trigger: viscosity outside the spec band -> CRITICAL -> REJECTED
+            limit = (f"below spec_min {recipe.spec_min_cP}" if too_thin
+                     else f"above spec_max {recipe.spec_max_cP}")
             self._alarm(batch_id, self.line.eq("cook"), "viscosity_out_of_spec", M.CRITICAL,
-                        f"End viscosity {end_visc} cP below spec_min "
-                        f"{recipe.spec_min_cP} cP — SOLVE: hold + rework",
+                        f"End viscosity {end_visc} cP {limit} cP — batch rejected",
                         impact=True, resolved=False)
             self._event(batch_id, "solve_viscosity", {"end_viscosity_cP": end_visc})
 
@@ -752,7 +755,7 @@ class BatchRunner:
 
     def _verdict(self, batch_id: str) -> tuple[str, bool]:
         """§verdict-regel:
-          end_viscosity < spec_min OR unresolved CRITICAL -> REJECTED/HOLD
+          end_viscosity outside [spec_min, spec_max] OR unresolved CRITICAL -> REJECTED
           afwijking (warning/out-of-tol/failed sample) -> HOLD
           alles OK -> APPROVED
           anders (pending sample) -> PENDING
@@ -764,13 +767,14 @@ class BatchRunner:
 
         end_visc = batch.get("end_viscosity_cP")
         spec_min = batch.get("spec_min_cP", M.SPEC_MIN_CP)
+        spec_max = batch.get("spec_max_cP", M.SPEC_MAX_CP)
 
         unresolved_critical = any(
             a.get("severity") == M.CRITICAL and not a.get("resolved", False)
             for a in alarms
         )
         crit_during_batch = any(a.get("severity") == M.CRITICAL for a in alarms)
-        out_of_spec_visc = end_visc is not None and end_visc < spec_min
+        out_of_spec_visc = end_visc is not None and not (spec_min <= end_visc <= spec_max)
 
         has_warning = any(
             a.get("severity") in (M.HIGH, M.MEDIUM) and not a.get("resolved", False)
