@@ -1,13 +1,15 @@
 # Vla Batch v2 — VPS deploy-checklist
 
-> Doel: de vla-batch demo live op één beveiligde URL, op een goedkope Ubuntu VPS (~2 GB).
-> Stack = slim-base (`docker-compose.slim.yml`) + overlay (`scenarios/vla-batch/docker-compose.vla.yml`).
-> Helper-script: [`deploy.sh`](deploy.sh) (`up` / `verify` / `smoke` / `fallback` / `logs` / `down`).
-> Architectuur: fabriek-als-OPC-UA → **MonsterMQ native OPC-UA-client** (ingest) → UNS → MongoDB + TDengine → Grafana/BIRT/dashboard. Zie [`README.md`](README.md).
+> Doel: de vla-batch demo live op één beveiligde URL. Op de gedeelde VPS (8 GB, samen met
+> aios, emcp en bvip) beheert [`deploy/stack.sh`](deploy/stack.sh) hem; zie het blok hieronder.
+> Stack = slim-base (`docker-compose.slim.yml`) + overlay (`docker-compose.vla.yml`) + VPS-overlay
+> (`docker-compose.vps-shared.yml`). Het oude helper-script [`deploy.sh`](deploy.sh) geldt voor een
+> losse installatie met Traefik (secties 0 t/m 6).
+> Architectuur: fabriek-als-OPC-UA → **MonsterMQ native OPC-UA-client** (ingest) → UNS → MongoDB + TDengine → Grafana, EBR-pdf (reportlab) en de Next.js-UI. Zie [`README.md`](README.md).
 
 ---
 
-## ★ Zo draait het nu op `techflow-vps` (stand 2026-10-22)
+## ★ Zo draait het nu op `techflow-vps` (stand 2026-11-20)
 
 **Ja, het is één compose-stack:** project `idp-os`, opgebouwd uit drie bestanden in
 `/root/idp-os`. Eén script beheert hem: [`deploy/stack.sh`](deploy/stack.sh).
@@ -23,7 +25,7 @@ $S restore <map>          # back-up terugzetten, daarna vanzelf online
 $S remove                 # containers + netwerk weg, volumes blijven
 ```
 
-**Diensten (13, in startvolgorde)**
+**Diensten (15, in startvolgorde; 13 blijven draaien, de twee inits stoppen met exit 0)**
 
 | Dienst | Rol | Poort op de host | Volume |
 |---|---|---|---|
@@ -32,15 +34,18 @@ $S remove                 # containers + netwerk weg, volumes blijven
 | `vla-tdengine` | historian | 127.0.0.1:6060 | `idp-os_vla-tdengine-data` (~3 GB) |
 | `vla-factory`, `vla-factory-l2` | gesimuleerde lijnen L1/L2 (OPC-UA) | geen | — |
 | `vla-opcua-init`, `vla-l2-opcua-init` | eenmalig: koppelt de lijnen aan de datalaag (exit 0 is goed) | — | — |
-| `vla-batch-engine` | MES, autopilot, datalaag-API, oorzaakanalyse | geen | — |
+| `vla-batch-engine` | MES, autopilot, CMMS-werkorders, KPI-schrijver, datalaag-API, oorzaakanalyse | geen | — |
+| `vla-ci-sync` | batchhistorie en KPI-inputs naar aios (Continuous Improvement) | geen | — |
 | `vla-tdengine-bridge` | schrijft topics naar de historian | geen | — |
+| `vla-scenario` | terugkerend stoomklepprobleem, afwisselend L1/L2 | geen | logs in `/root/vla-scenario-logs` |
 | `vla-ollama` | lokaal taalmodel `qwen2.5:1.5b`, `mem_limit 2g` | geen | `idp-os_vla-ollama-data` (model, wordt bij `online` opnieuw gehaald als hij ontbreekt) |
-| `vla-ai` | AI-dienst op poort 8080 | 127.0.0.1:8095 | — |
+| `vla-ai` | vraag naar SQL op de historian (NL→SQL), niet publiek | 127.0.0.1:8095 | — |
 | `grafana` | dashboards op `/grafana` | 127.0.0.1:3001 | `idp-os_grafana-data` |
 | `vla-ui` | Next.js: site, `/site`-twin, analyse | 127.0.0.1:8091 | — |
 
 Bewust **niet** gestart (staan wel in de compose-bestanden): `fastapi`, `vla-dashboard`,
-`vla-tdgpt` (1,5 GB, past niet). Daarom start `stack.sh` een vaste lijst met `--no-deps`;
+`traefik`, `vla-tdgpt` (1,5 GB, past niet) en het machinepark (`docker-compose.park.yml`,
+profiel `park`). Daarom start `stack.sh` een vaste lijst met `--no-deps`;
 een kale `docker compose up -d` start ze mee.
 
 **Ingress.** 80/443 zijn van de container `aios-caddy` (een andere stack). Ons blok in diens
@@ -123,7 +128,8 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
 
 ### Fabrieksdashboards (Grafana)
 
-Dertien dashboards in de map *Vla Batch Demo*, op `https://milkdemo.<domain>/grafana/d/<uid>`
+Zestien dashboards in de map *Vla Batch Demo* (dertien `fabriek-*` plus `vla-line`, `vla-mes`
+en `vps-health`), op `https://milkdemo.<domain>/grafana/d/<uid>`
 (basic auth plus Grafana-login); `https://grafana.<domain>/d/<uid>` verwijst daarheen door.
 De ruwe TDengine-data bekijk je in de explorer op `https://tdengine.<domain>` (zie *Ingress*).
 
@@ -139,7 +145,10 @@ De ruwe TDengine-data bekijk je in de explorer op `https://tdengine.<domain>` (z
 | `fabriek-kpi` | alle 29 industriële BVIP-KPI's, rollend 8 u met sparkline; lijn L1/L2/Fabriek | TDengine `idp.kpi` |
 | `fabriek-kpi-productie` … `-kwaliteit`, `-onderhoud`, `-energie`, `-proces` | per domein: verloop, exacte waarde over de gekozen periode, inputs | TDengine `idp.kpi`, `idp.kpi_input` |
 
-`vla-line` en `vla-mes` blijven staan, want `/analyse` embedt `vla-line`.
+| `vps-health` | de machine zelf: CPU, steal, load, geheugen, swap, disk, containers, OOM-kills, back-up, certificaten | TDengine `idp.vps_host`, `vps_container`, `vps_cert` (host-meting) |
+
+`vla-line` en `vla-mes` blijven staan, want `/analyse` embedt `vla-line`. `vps-health` is met
+de hand gemaakt en wordt niet door `build_dashboards.py` gegenereerd.
 
 **KPI-historie (sinds 2026-11-19).** De engine schrijft elke 5 minuten de 29 industriële KPI's uit
 de BVIP-catalogus naar TDengine ([`batch-engine/vla/kpi_history.py`](batch-engine/vla/kpi_history.py),
@@ -204,6 +213,12 @@ begint op die datum. Gemeten daarna: 347 topics, `vla-tdengine` 289 van 640 MB.
 `scp`/tar erheen, daarna `$S online --build` (of gericht:
 `docker compose -p idp-os -f … up -d --no-deps --build vla-ui vla-batch-engine`). Zet bij
 de engine `GIT_SHA=<sha>` ervoor, anders toont de UI "onbekend".
+- **Alleen je eigen bestanden, en met md5 gecontroleerd.** Er werken soms twee sessies
+  tegelijk aan deze stack, en een tar van alles uit `HEAD` zet dan oudere bestanden over
+  nieuwere heen. Vergelijk eerst de md5 op de VPS met git, stuur alleen wat jij wijzigde, en
+  controleer de md5 na het uitpakken én na de build. Noteer de stand in `/root/idp-os/.deployed-sha`.
+- `techflow/vla-factory:latest` is één image voor `vla-factory`, `vla-factory-l2` en
+  `vla-scenario`: na een rebuild alle drie opnieuw aanmaken.
 
 > De secties hieronder beschrijven de oorspronkelijke installatie (Traefik, later host-nginx).
 > Ze zijn historisch; voor de VPS geldt bovenstaand blok.
@@ -249,7 +264,7 @@ de engine `GIT_SHA=<sha>` ervoor, anders toont de UI "onbekend".
       chmod +x scenarios/vla-batch/deploy.sh
       ./scenarios/vla-batch/deploy.sh up
       ```
-      Dit doet: `docker compose -f docker-compose.slim.yml -f scenarios/vla-batch/docker-compose.vla.yml up -d --build`, wacht op MonsterMQ, en de one-shot **`vla-opcua-init`** registreert het OPC-UA-device (`addOpcUaDevice`, 24 tags → UNS). Daarna draait automatisch `verify`.
+      Dit doet: `docker compose -f docker-compose.slim.yml -f scenarios/vla-batch/docker-compose.vla.yml up -d --build`, wacht op MonsterMQ, en de one-shot **`vla-opcua-init`** registreert het OPC-UA-device (GraphQL `opcUaDevice.add`, daarna `addAddress` per tag → UNS). Daarna draait automatisch `verify`.
 - [ ] Eerste start duurt langer (images pullen/bouwen: asyncua, TDengine, reportlab). Let's Encrypt-cert kan 1-2 min duren.
 
 ## 3. Verifiëren
@@ -266,7 +281,7 @@ de engine `GIT_SHA=<sha>` ervoor, anders toont de UI "onbekend".
       ```
       Verwacht: state loopt `DOSING→COOKING→COOLING→FILLING→COMPLETE`, viscositeit ~260 cP, verdict `APPROVED`.
 - [ ] **Browser**: `https://milkdemo.<domain>` (basic-auth) → live batch, viscositeit-gauge, SCADA-knoppen. `https://grafana.<domain>` → TDengine-trends.
-- [ ] **Solve demonstreren**: in het SCADA/admin-paneel `InjectFault cook_undertemp` (magnitude ~0.6) → viscositeit zakt < 150 cP → gauge wordt rood → verdict `HOLD/REJECTED`. `ClearFault` herstelt.
+- [ ] **Solve demonstreren**: in het SCADA/admin-paneel `InjectFault cook_undertemp` (magnitude ~0.6) → viscositeit zakt < 150 cP → gauge wordt rood → verdict `REJECTED` (geen herkoken). `ClearFault` herstelt.
 
 ## 4. ⚠ Bekende valkuil — OPC-UA ns-index
 
@@ -312,9 +327,10 @@ bezet (legacy mosquitto), gebruik dan de extra overlay
 
 Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
 
-- `vla-batch-engine`: `DEMO_AUTOPILOT=1` start om de ~2 min een MES-batch
-  (`chocolate-vla-1L`, 10 s pauze na COMPLETE). Een CIP volgt vanzelf als de
-  kookunit vuil is. Batches komen op opeenvolgende klantorders (6, 8, 10 of 12
+- `vla-batch-engine`: `DEMO_AUTOPILOT=1` start per lijn om de ~2 min een MES-batch
+  (L1 chocolade, L2 een wiel van vanille, banaan, karamel en aardbei; 10 s pauze na
+  COMPLETE). Een CIP volgt vanzelf als de lijn vuil is (Rf of het vangnet van 16
+  batches), en bij een productwissel naar een lichtere smaak. Batches komen op opeenvolgende klantorders (6, 8, 10 of 12
   batches, leverdatum 2 uur na aanmaak, één van de vijf klanten); een order
   sluit zodra hij volledig is geproduceerd en de volgende klant begint.
   Autopilot-batches ouder dan 24 uur, of meer dan een uur vastgelopen in een
@@ -339,14 +355,16 @@ Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
 - **Magazijnstroom** (`vla/warehouse.py`, `DEMO_AUTOPILOT_WAREHOUSE`, standaard
   `1`): elke COMPLETE en APPROVED autopilot-batch van de laatste 15 min wordt
   gepalletiseerd in pallets van 480 packs (de laatste is kleiner), en elke ~9 s
-  gaat er één pallet naar een willekeurig vrij vak (96 vakken; het `slot` staat
-  op de HU). Na 12 min laadt er één truck tegelijk, één pallet per 6 s. Bij
-  minder dan 12 vrije vakken laadt hij eerder, en een volle stelling houdt
-  pallets bij de palletiser. Geshipte autopilot-HU's verdwijnen na 30 min.
-  Steady state is ~65 van de 96 vakken. Na een uitrol vult de stelling zich
+  gaat er één pallet naar een vrij vak in de zone van zijn lijn (192 vakken: L1
+  0–95, L2 96–191; het `slot` staat op de HU). Na 12 min wordt er geladen, één
+  pallet per 6 s. Bij minder dan 12 vrije vakken laadt hij eerder, en een volle
+  zone houdt pallets bij de palletiser (hoogstens 4 per lijn). Geshipte
+  autopilot-HU's verdwijnen na 2 uur. Na een uitrol vult de stelling zich
   geleidelijk; de eerste truck vertrekt na ~12 min. De twin (`/site`) speelt
-  elke putaway en laadactie na met twee heftrucks. `RACK_SLOTS` staat in
-  `warehouse.py` én in `ui/lib/twin/layout.ts` en moet gelijk blijven.
+  elke putaway en laadactie na met vier heftrucks (HT-01 en HT-03 slaan in voor
+  L1 en L2, HT-02 en HT-04 laden). `RACK_SLOTS` en `ZONE_SLOTS` in
+  `warehouse.py` moeten gelijk blijven aan `RACK_SLOTS` en `RACK_ZONE_SLOTS` in
+  `ui/lib/twin/layout.ts`.
   Status: `warehouse_last` in `GET /api/v1/autopilot`.
 - **Logistiek-simulatie** (`vla/logistics_sim.py`, `DEMO_AUTOPILOT_LOGISTICS`,
   standaard `1`): voegt aan elke zending een fictieve klant, bestemming en ETA
@@ -400,6 +418,9 @@ Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
 ---
 
 ## Cutover naar de Next.js-UI (`vla-ui`)
+
+> **Afgerond.** `vla-ui` is de site; `vla-dashboard` en Traefik draaien niet meer, en de
+> ingress is `aios-caddy` (zie het blok bovenaan). Deze sectie is historisch.
 
 De nieuwe UI draait bewust **naast** de oude SPA, zodat de demo blijft werken.
 Drie gescheiden stappen, elk apart verifieerbaar.

@@ -6,8 +6,10 @@
 
 > **Rol binnen TechFlow-OS:** IDP-OS = de **referentie-implementatie** van de missing data layer. Wat hier draait is het bewijs achter alle posts, video's en het **Build Your AI Data Layer** programma. De 7-stappen build (Connect → Condition → Model → Store → Orchestrate → Visualize → Distribute) is op deze stack gebaseerd; elke stap heeft een module in het programma.
 
-**Live op:** techflow24.com  
-**Stack:** Traefik + MonsterMQ + MongoDB + Next.js webapp + OPC-UA Simulator + Portainer
+**Live op:** `milkdemo.techflow24.com` (scenario vla-batch, basic auth). De generieke v2-stack
+hieronder (OPC-UA-simulator, Next.js-webapp, FastAPI, Traefik) draait **niet** meer op de VPS;
+alleen Portainer staat er nog. techflow24.com zelf is de website op Vercel (website-os).  
+**Stack (live):** MonsterMQ + MongoDB + TDengine + Grafana + batch-engine (FastAPI) + Next.js `vla-ui`, achter `aios-caddy`
 
 ---
 
@@ -74,17 +76,20 @@
 
 ## Services
 
+Wat er nu op de VPS draait (stand 2026-11-20; volledige lijst in `scenarios/vla-batch/DEPLOY.md`):
+
 | Service | URL | Functie |
 |---------|-----|---------|
-| Traefik | techflow24.com | Reverse proxy + SSL (Let's Encrypt) |
-| Next.js webapp | techflow24.com | Live PLC data dashboard |
-| MonsterMQ | mqtt.techflow24.com | MQTT broker + OPC-UA client + web UI |
-| FastAPI | api.techflow24.com | REST API voor process data (Grafana datasource) |
-| Grafana | milkdemo.techflow24.com/grafana | Time-series dashboards + ad-hoc queries (`grafana.techflow24.com` verwijst hierheen) |
+| `vla-ui` | milkdemo.techflow24.com | Next.js: alle schermen + 3D-twin `/site` (basic auth) |
+| Grafana | milkdemo.techflow24.com/grafana | Zestien dashboards (`grafana.techflow24.com` verwijst hierheen) |
 | TDengine explorer | tdengine.techflow24.com | Ruwe historian-data; basic auth + TDengine-login (zie `scenarios/vla-batch/DEPLOY.md`) |
-| Portainer | portainer.techflow24.com | Container management UI |
-| OPC-UA sim | intern (port 4840) | 3 gesimuleerde PLCs (asyncua) |
-| MongoDB | intern | Process data store |
+| MonsterMQ | intern | Datalaag/UNS: MQTT + native OPC-UA-client + archief naar Mongo |
+| batch-engine, fabrieken L1/L2, TDengine, MongoDB, lokaal model | intern | MES-laag, simulatie, historian, store, oorzaaksamenvatting |
+| Portainer | portainer.enterprise-ai.techflow24.com | Container management UI (route in de aios-Caddyfile, basic auth) |
+
+Niet meer actief (staan nog in de compose-bestanden): Traefik, de Next.js-`webapp`, FastAPI
+(`api.`), de OPC-UA-simulator met drie PLC's, `vla-dashboard`. Ingress op 80/443 is
+`aios-caddy` van een andere stack.
 
 ---
 
@@ -158,7 +163,8 @@ Deze stack is de technische basis voor het online programma **Build Your AI Data
 
 ## Tool regels
 
-- NOOIT Node-RED of Grafana — MonsterMQ heeft eigen dashboard + flow engine
+- NOOIT Node-RED. Grafana **wel**: dat is de visualisatielaag van de milkdemo (stap 6)
+- Werkorders in de milkdemo maakt de batch-engine (`vla/cmms.py`), niet N8N
 - NOOIT cloud historian — MongoDB lokaal/VPS
 - Open source first: MonsterMQ, MongoDB, asyncua, Next.js, Traefik
 
@@ -178,24 +184,47 @@ palletiser-robot, heftrucks en docks, en een WareTrack-achtige glasoverlay. Deta
   (`warehouse.py` ↔ `ui/lib/twin/layout.ts`) en de rijtijden van de leveranciers
   (`logistics_sim.py` ↔ `tankerPose` in `ui/lib/twin/flow.ts`).
 - **Kleuren alleen uit palette-tokens** (`npm run lint:tokens`), geen hex in TSX.
-- **Uitrol:** gewijzigde bestanden als tar naar `/root/idp-os`, dan
+- **Uitrol:** alleen je eigen gewijzigde bestanden als tar naar `/root/idp-os`, md5 vooraf en
+  achteraf vergelijken (er werken soms twee sessies tegelijk), dan
   `docker compose -p idp-os -f docker-compose.slim.yml -f scenarios/vla-batch/docker-compose.vla.yml -f scenarios/vla-batch/docker-compose.vps-shared.yml up -d --no-deps --build vla-ui vla-batch-engine`.
-  Altijd `-p idp-os` en `--no-deps`; een ongefilterde `down` legt de demo plat.
+  Altijd `-p idp-os` en `--no-deps`; een ongefilterde `down` legt de demo plat. Stand noteren in
+  `/root/idp-os/.deployed-sha`.
 - **Beheer = één script:** `scenarios/vla-batch/deploy/stack.sh`
   (`status`, `offline`, `online [--build]`, `backup [--met-historian]`, `restore <map>`, `remove`).
-  Eén compose-project `idp-os`, 13 diensten. Runbook en "offline en weer terug": `DEPLOY.md`,
-  bovenste sectie. Er draait géén automatische back-up van deze stack.
+  Eén compose-project `idp-os`, 15 diensten (13 doorlopend, 2 eenmalige OPC-UA-inits). Runbook en
+  "offline en weer terug": `DEPLOY.md`, bovenste sectie. Nachtelijke back-up om 02:00 UTC
+  (`stack.sh backup --nachtelijk`, laatste drie in `/root/backups/idp-os/nacht/`), op dezelfde VPS.
+- **Demomodus:** een presentator neemt een lijn via `/scada` → *Demomodus*; autopilot, scenario,
+  storingen en de zelfstart van de fabriek laten die lijn dan met rust (`vla/demo_pause.py`).
 - **Ingress:** `aios-caddy` (andere stack) bezit 80/443; ons blok komt uitsluitend uit
   `deploy/attach-ingress-caddy.sh`. `/grafana*` zit achter dezelfde basic auth plus de
   Grafana-login, met de `Authorization`-header gestript. Nooit de Caddyfile met de hand bewerken.
 - **Lokale AI:** `vla-ollama` met `qwen2.5:1.5b` (`mem_limit 2g`, 2 CPU's ≈ 4 tok/s). De
   oorzaaksamenvatting draait daarom op de achtergrond (`rca.py`, cache per feitenset).
-- **Tests:** `pytest tests/test_logistics_sim.py tests/test_warehouse.py` (de API-tests hangen zonder
-  Mongo), `npx tsc --noEmit`, `npx playwright test e2e/twin-flow.spec.ts e2e/twin-derive.spec.ts`.
+- **Tests:** de hele engine-suite lokaal (in `batch-engine/`, ~9 min, 254 tests), met adressen
+  die meteen weigeren, anders hangt elke batchtest op OPC-UA-DNS-retries:
+  `OPCUA_URL=opc.tcp://127.0.0.1:9/x OPCUA_URL_L2=opc.tcp://127.0.0.1:9/x MQTT_HOST=127.0.0.1 python -m pytest -q`.
+  Verder `python -m pytest` in `scripts/` en `factory/`, `npx tsc --noEmit`, en
+  `npx playwright test e2e/twin-flow.spec.ts e2e/twin-derive.spec.ts`.
 
 ---
 
 ## Changelog
+
+### 2026-11-20: demomodus, werkvloer en SCADA via de MES, archief, docs gelijkgetrokken
+- **Demomodus per lijn** op `/scada` (`vla/demo_pause.py`, OPC-UA-methode `SetAutostart` in de
+  fabriek). Live beproefd: eigen batch op L1 goedgekeurd, daarna 4 min geen enkele start.
+- **SCADA Start** maakt nu een echte MES-batch en weigert als de lijn bezig is (eerder startte
+  hij de fabriek rechtstreeks, buiten de MES om). **Werkvloer:** de orderscan geeft een fase
+  (`dosing`/`logistics`), een lotnummer is verplicht, en een afgeronde batch opent alleen het
+  logistieke deel.
+- **Lijn 2 in het Mongo-archief**, bewaartermijn van het archief 30 dagen plus `compact`
+  (1,54 → 0,44 GB). TDengine naar 768m, knop *Alles bevestigen* bij de alarmen, dashboard
+  `vps-health`.
+- Het stoomklepscenario telt alleen autopilotbatches; de batchlijst geeft `created_by` mee.
+- README, DEPLOY.md en dit bestand volgen de code: 15 diensten, 16 dashboards, 192 vakken en vier
+  heftrucks, CIP op vervuiling (~12 batches, vangnet 16), werkorders uit de engine, `vla-ui`
+  achter `aios-caddy`, nachtelijke back-up, ontbrekende API-routes.
 
 ### 2026-11-19: KPI-historie, 29 BVIP-KPI's in Grafana, stoomklep-scenario in een lus
 - **`vla-scenario`** (vps-shared, in `stack.sh` SERVICES): `scenario_steam_valve.py --loop`, afwisselend
