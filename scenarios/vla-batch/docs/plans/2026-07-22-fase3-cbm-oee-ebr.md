@@ -1,5 +1,7 @@
 # Vla Batch Demo — Fase 3 (CBM / OEE / management-rapporten / EBR) Implementation Plan
 
+> **Status (bijgewerkt 2026-11-20): uitgevoerd op 2026-07-22.** De vinkjes hieronder zijn tijdens de bouw niet bijgehouden; ze zeggen niets over wat er af is. Sindsdien gewijzigd: Dirty volgt uit de gemeten vervuiling van de intake-pasteur (Rf ≥ 0,06, rond 12 batches), `CIP_AFTER_BATCHES` is het vangnet (16 op de VPS), en de CIP draait in de fabriek (`StartCip`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the maintenance/KPI cluster: PR-17 (running_hours + status on UNS), PR-18 (CBM cook-unit fouling — the second Solve story: predictive alert before batches fail), PR-29 (Dirty/Allocated + CIP-gating), PR-19-part (acknowledge-flow, needed by PR-30), PR-21 (OEE view), PR-32 (equipment-health view), PR-30 (EBR), PR-22 (period management report), PR-33 (maintenance report per equipment).

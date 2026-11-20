@@ -1,5 +1,7 @@
 # Vla Batch Demo — Fase 2 (PR-35 verpakking & expeditie) Implementation Plan
 
+> **Status (bijgewerkt 2026-11-20): uitgevoerd op 2026-07-22.** De vinkjes hieronder zijn tijdens de bouw niet bijgehouden; ze zeggen niets over wat er af is. Sindsdien uitgebreid: palletiser per lijn, koelcel met 192 vakken, vier heftrucks en een autopilot die palletiseert en verscheept (`../../DEPLOY.md`, *Magazijnstroom*).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement PR-35 — light packaging & expedition: filled packs → tray/pallet → wrap → HU label + scan → cold-store putaway → shipping scan, with the APPROVED-gate and full traceability (delivery → HU → batch → report).

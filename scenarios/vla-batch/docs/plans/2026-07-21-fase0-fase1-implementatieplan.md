@@ -1,5 +1,7 @@
 # Vla Batch Demo — Fase 0 (drift-fix) + Fase 1 (orders & scan-flow) Implementation Plan
 
+> **Status (bijgewerkt 2026-11-20): uitgevoerd op 2026-07-22.** De vinkjes hieronder zijn tijdens de bouw niet bijgehouden; ze zeggen niets over wat er af is. Wat er gebouwd is staat in de bouwstatustabel van de PRD (datalayer `01-PRD`, §6b) en in `../../README.md`. Sindsdien gewijzigd: de orderscan geeft een fase (dosering of logistiek) en een lotnummer is verplicht.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring the existing vla-batch build (`sub-os/idp-os/scenarios/vla-batch/`) exactly in line with the approved v0.4 specs (datalayer repo: PRD PR-01..35, FDS, 05-Backend, 06-Model), then add the first missing MES layer: production orders + the scan-driven shop-floor flow.
