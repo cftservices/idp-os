@@ -30,13 +30,32 @@ type Machine = {
   transport: "opcua" | "mqtt";
   faults: string[];
   active_faults: Record<string, number>;
+  /** true = data binnen 30 s, false = er komt niets binnen, null = onbekend. */
+  online?: boolean | null;
+  last_seen_s?: number | null;
 };
 
 type Catalogue = {
   machines: Machine[];
   total_faults: number;
   load_error: string | null;
+  park_live?: boolean | null;
 };
+
+// De engine zet de reden van een weigering in `detail` (FastAPI), de BFF bij
+// onbereikbaarheid in `message`. Lees beide, anders zie je alleen "geweigerd".
+function reasonOf(b: unknown): string | undefined {
+  const o = (b ?? {}) as Record<string, unknown>;
+  const d = (o.detail ?? {}) as Record<string, unknown>;
+  const pick = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  return pick(o.message) ?? pick(d.message) ?? pick(o.error) ?? pick(d.error);
+}
+
+function dataLabel(m: Machine): string {
+  if (m.online === true) return `live (${Math.round(m.last_seen_s ?? 0)} s)`;
+  if (m.online === false) return "geen data";
+  return "onbekend";
+}
 
 // Wat elke storingscode betekent. Bewust hier en niet in de payload: dit is
 // presentatie, en de fysica hoort geen UI-teksten te dragen.
@@ -60,7 +79,7 @@ export function FaultPanel() {
       const r = await fetch("/api/ui/faults", { cache: "no-store" });
       const b = await r.json();
       if (!r.ok) {
-        setError(b?.message ?? "onbekende fout");
+        setError(reasonOf(b) ?? "onbekende fout");
         setCat(null);
         return;
       }
@@ -88,7 +107,7 @@ export function FaultPanel() {
       });
       const b = await r.json();
       if (!r.ok || b?.ok === false) {
-        setNote(b?.message ?? b?.error ?? b?.detail?.message ?? "geweigerd");
+        setNote(reasonOf(b) ?? "geweigerd");
       } else if (b?.transport === "mqtt") {
         // Eerlijk zijn: MQTT is fire-and-forget. "Verstuurd" is niet hetzelfde
         // als "verwerkt", en dat verschil verzwijgen kost je een demo waarin
@@ -132,6 +151,15 @@ export function FaultPanel() {
           : "Niets actief."}
       </p>
 
+      {cat.load_error && <p role="alert">Storingscatalogus niet geladen: {cat.load_error}</p>}
+      {cat.park_live === false && (
+        <p role="alert">
+          Het park levert geen data: de machines van lijn Vla-B draaien niet. Een storing
+          inschieten wordt geweigerd tot het park draait (<code>--profile park-slim</code> of{" "}
+          <code>--profile park</code>).
+        </p>
+      )}
+
       <div>
         <label htmlFor="magnitude">
           Ernst: {magnitude.toFixed(2)}
@@ -166,6 +194,7 @@ export function FaultPanel() {
             <th scope="col">Area</th>
             <th scope="col">Leverancier</th>
             <th scope="col">Transport</th>
+            <th scope="col">Data</th>
             <th scope="col">Storingen</th>
           </tr>
         </thead>
@@ -180,6 +209,7 @@ export function FaultPanel() {
                   ? "OPC UA (werkt zonder broker)"
                   : "MQTT (fire-and-forget)"}
               </td>
+              <td>{dataLabel(m)}</td>
               <td>
                 {m.faults.map((f) => {
                   const active = m.active_faults?.[f];
@@ -189,7 +219,8 @@ export function FaultPanel() {
                       <button
                         type="button"
                         aria-pressed={active !== undefined}
-                        disabled={busy !== null}
+                        // Wissen mag altijd; inschieten niet op een machine zonder data.
+                        disabled={busy !== null || (active === undefined && m.online === false)}
                         onClick={() =>
                           void send(
                             active !== undefined

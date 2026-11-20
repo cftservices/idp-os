@@ -18,8 +18,10 @@ export const metadata = {
 export default async function BroadcastPage({
   searchParams,
 }: {
-  searchParams: Promise<{ twin?: string }>;
+  searchParams: Promise<{ twin?: string; fps?: string; gf?: string }>;
 }) {
-  const { twin } = await searchParams;
-  return <ScreenCarousel screens={broadcastScreens({ twin: twin === "1" })} />;
+  const { twin, fps, gf } = await searchParams;
+  const n = Number(fps);
+  const cap = Number.isInteger(n) && n >= 10 && n <= 30 ? n : undefined;
+  return <ScreenCarousel screens={broadcastScreens({ twin: twin === "1", fps: cap, gf })} />;
 }

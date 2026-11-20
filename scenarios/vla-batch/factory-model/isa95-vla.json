@@ -658,6 +658,22 @@
                   "args": [],
                   "returns": "Int32",
                   "mqtt_command_topic": "DairyWorks/Vla/Batch/Command/ClearFault"
+                },
+                {
+                  "name": "StartCip",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [],
+                  "returns": "Int32",
+                  "note": "Reinigen: vijf stappen, 60 procesminuten; de batchstate van de fabriek is dan CIP. 0=OK, >0=geweigerd (bv. een batch loopt)."
+                },
+                {
+                  "name": "SetAutostart",
+                  "opcua_node": "ns=2;s=DairyWorks.Vla.Batch",
+                  "args": [
+                    {"name": "enabled", "datatype": "Boolean"}
+                  ],
+                  "returns": "Int32",
+                  "note": "Zelfstart van de fabriek na COMPLETE aan of uit. De engine zet hem uit in demomodus en zet hem elke minuut opnieuw, want een herstart van de fabriek zet hem weer aan."
                 }
               ]
             }
@@ -2557,21 +2573,21 @@
       "spec": { "min": 150, "max": 300 }
     }
   ],
-  "equipment_states": ["Running", "Idle", "Dosing", "Cooking", "Cooling", "Filling", "Down", "Error"],
+  "equipment_states": ["Running", "Idle", "Dosing", "Cooking", "Cooling", "Filling", "Down", "Error", "Dirty", "Allocated"],
   "batch_states": ["IDLE", "DOSING", "COOKING", "COOLING", "FILLING", "COMPLETE"],
   "verdict_rule": {
     "spec_min_cP": 150,
     "spec_max_cP": 300,
-    "logic": "end_viscosity_cP < spec_min OR unresolved CRITICAL -> REJECTED/HOLD; afwijking -> HOLD; alles OK -> APPROVED; anders -> PENDING"
+    "logic": "end_viscosity_cP < spec_min OF > spec_max, of een onopgelost CRITICAL-alarm -> REJECTED (pakken scrap); onopgelost HIGH/MEDIUM-alarm, dosering buiten tolerantie of afgekeurd monster -> HOLD (pakken quarantine); monster open -> PENDING; anders -> APPROVED. Zo staat het in batch-engine/vla/batches.py (_verdict)."
   },
   "solve_event": {
     "id": "SOLVE-VISCOSITY",
-    "name": "Onder-gekookte vla -> viscositeit onder spec -> HOLD/REJECT + Solve-actie",
-    "trigger": "cook-unit-01/Status/viscosity_cP < 150 (te lage peak-temp x hold; fault cook_undertemp)",
-    "auto_action": "batch verdict HOLD/REJECTED + critical batch alarm + audit entry",
-    "outcome": "Raw data (peak-temp x hold) leidt tot een echte beslissing: vasthouden/herkoken i.p.v. blind afvullen"
+    "name": "Onder-gekookte vla -> viscositeit buiten spec -> REJECTED",
+    "trigger": "cook-unit-01/Status/viscosity_cP buiten 150-300 (te lage peak-temp x hold; fault cook_undertemp)",
+    "auto_action": "critical batch alarm tijdens het koken; na het vullen verdict REJECTED, pakken geblokkeerd, magazijn weigert de pallet",
+    "outcome": "Raw data (peak-temp x hold) leidt tot een echte beslissing: de batch komt het magazijn niet in, in plaats van een klacht een week later. Er is geen herkookstap."
   },
-  "packs_per_pallet": 1200,
+  "packs_per_pallet": 480,
   "stale_threshold_s": 90,
   "fill_limits_ml": {
     "nominal": 1000,

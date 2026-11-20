@@ -219,3 +219,35 @@ def test_commit_goes_through_once_stock_is_received():
     db.dw_materials.update_one({"material_id": "cocoa"}, {"$set": {"stock_qty": 400.0}})
     assert flow.scan_report(b["batch_id"], operator_id="OP-7")["booked_materials"] == ["cocoa"]
     assert db.dw_materials.find_one({"material_id": "cocoa"})["stock_qty"] == 300.0
+
+
+# --- an aborted batch is finished: never dosing, never bookable (fout 3) ---
+
+def _abort(db, batch_id):
+    db.dw_batches.update_one({"batch_id": batch_id}, {"$set": {"state": "ABORTED"}})
+
+
+def test_aborted_batch_scanned_by_its_code_is_refused():
+    db, runner, flow, o, b = setup()
+    _abort(db, b["batch_id"])
+    with pytest.raises(ScanRejected) as ei:
+        flow.scan_order(b["batch_id"], operator_id="OP-7")
+    assert ei.value.reason == "aborted"
+
+
+def test_order_scan_skips_an_aborted_batch():
+    db, runner, flow, o, b = setup()
+    _abort(db, b["batch_id"])
+    r = flow.scan_order(o["order_id"], operator_id="OP-7")
+    assert r["batch_id"] is None and r["phase"] is None      # order without a batch
+    b2 = runner.create_batch("chocolate-vla-1L", planned_L=5000, order_id=o["order_id"])
+    assert flow.scan_order(o["order_id"], operator_id="OP-7")["batch_id"] == b2["batch_id"]
+
+
+def test_nothing_can_be_booked_on_an_aborted_batch():
+    db, runner, flow, o, b = setup()
+    _abort(db, b["batch_id"])
+    with pytest.raises(ValueError):
+        flow.weigh(b["batch_id"], "cocoa", qty_kg=10.0, lot_no="L-1", operator_id="OP-7")
+    with pytest.raises(ValueError):
+        flow.book_production(b["batch_id"], 100, operator_id="OP-7")

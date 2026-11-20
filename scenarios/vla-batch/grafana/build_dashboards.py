@@ -18,6 +18,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kpi_boards  # noqa: E402  (KPI dashboards from the BVIP catalogue snapshot)
 import vps_board  # noqa: E402  (VPS health, from the host measurement)
+import pi_board  # noqa: E402  (Raspberry Pi 5 health, behind the livestream)
+import stream_board  # noqa: E402  (the plant for the livestream, shared publicly)
 
 OUT = Path(__file__).parent / "dashboards"
 TD = {"type": "tdengine-datasource", "uid": "vla-tdengine"}
@@ -613,7 +615,9 @@ def historian_dataops() -> Board:
 
 BOARDS = [fabriek_overzicht, lijn_live, voorbereiding, oee_verliezen, logistiek_trace, onderhoud_cbm,
           historian_dataops] + kpi_boards.boards(Board, td, stat_opts) + [
-    lambda: vps_board.board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, TABLE_OPTS)]
+    lambda: vps_board.board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, TABLE_OPTS),
+    lambda: pi_board.board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD),
+    lambda: stream_board.board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, last_str, series, like)]
 
 
 def render(board: Board) -> str:

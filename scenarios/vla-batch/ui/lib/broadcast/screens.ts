@@ -11,12 +11,13 @@
  * GPU opent /broadcast?twin=1; dan komt TWIN_SCREEN vooraan. Een Pi 5 haalt
  * daarmee 15 fps (bankproef 2, 20-11-2026).
  *
- * Grafana staat er bewust (nog) niet in: anonymous staat uit en Grafana heeft
- * een eigen login. Zie README.md, stap 2.
+ * Grafana: via de proxy op de Pi (grafanaScreens); anonymous blijft uit. Zie broadcast/README.md.
  *
  * Titels in het Engels: de stream is EN-talig, net als de rest van de
  * DairyWorks-video's.
  */
+import { STORY_SECONDS } from "@/lib/twin/story";
+
 export type BroadcastScreen = {
   id: string;
   title: string;
@@ -33,14 +34,53 @@ export const BROADCAST_SCREENS: BroadcastScreen[] = [
   { id: "equipment", title: "Equipment: CIP, running hours, OEE", path: "/equipment?embed=1", seconds: 45 },
 ];
 
-/** De 3D-twin in het lichte uitzendprofiel; alleen met /broadcast?twin=1. */
+/**
+ * De 3D-twin in het lichte uitzendprofiel, in story-modus: de camera loopt de fabriek langs met
+ * Engelse uitleg per stop (lib/twin/story.ts, ongeveer 6 minuten). Alleen met /broadcast?twin=1.
+ */
 export const TWIN_SCREEN: BroadcastScreen = {
   id: "twin",
-  title: "3D site twin, live from the batch engine",
-  path: "/site?embed=1&broadcast=1",
-  seconds: 90,
+  title: "Plant tour: from raw milk to the customer, live",
+  path: "/site?embed=1&broadcast=1&story=1",
+  // + de laadtijd van de iframe, anders valt het einde van de laatste stop weg.
+  seconds: STORY_SECONDS + 5,
 };
 
-export function broadcastScreens({ twin }: { twin: boolean }): BroadcastScreen[] {
-  return twin ? [TWIN_SCREEN, ...BROADCAST_SCREENS] : BROADCAST_SCREENS;
+/**
+ * Grafana-dashboards in de Pi-carrousel. De Pi draait een kleine proxy op localhost:3002
+ * (broadcast/pi5/grafana-proxy.py) die als Viewer `stream-pi` inlogt; de browser ziet geen
+ * wachtwoord. Publieke dashboards werken niet: de TDengine-plugin vraagt vanuit de browser via
+ * /api/datasources/proxy, en dat vraagt een login (401, 20-11-2026). ?gf= noemt alleen uids.
+ */
+const GRAFANA_LOCAL = "http://localhost:3002/grafana";
+const GRAFANA_SCREENS: Record<string, { title: string; seconds: number }> = {
+  "stream-factory": { title: "Grafana: the historian behind the twin (cooking, quality, OEE)", seconds: 45 },
+  "pi5-health": { title: "Grafana: the Raspberry Pi 5 that renders this stream", seconds: 30 },
+};
+
+/** "stream-factory,pi5-health" → screens; onbekende uids vallen weg. */
+export function grafanaScreens(gf: string | undefined): Record<string, BroadcastScreen> {
+  const out: Record<string, BroadcastScreen> = {};
+  for (const uid of (gf ?? "").split(",")) {
+    const meta = GRAFANA_SCREENS[uid];
+    if (!meta) continue;
+    out[uid] = { id: `grafana-${uid}`, title: meta.title, path: `${GRAFANA_LOCAL}/d/${uid}/?kiosk&refresh=30s`, seconds: meta.seconds };
+  }
+  return out;
+}
+
+/**
+ * fps (10 t/m 30) gaat door naar de twin als framecap; zonder fps houdt die zijn standaard van 20.
+ * Met twin alleen Engelstalige schermen: rondleiding, Grafana-proces, Grafana-Pi (ongeveer 7 minuten).
+ * De vier 2D-schermen van vla-ui zijn Nederlands en blijven daarom alleen in de 2D-variant.
+ */
+export function broadcastScreens({ twin, fps, gf }: { twin: boolean; fps?: number; gf?: string }): BroadcastScreen[] {
+  if (!twin) return BROADCAST_SCREENS;
+  const path = fps ? `${TWIN_SCREEN.path}&fps=${fps}` : TWIN_SCREEN.path;
+  const g = grafanaScreens(gf);
+  return [
+    { ...TWIN_SCREEN, path },
+    ...(g["stream-factory"] ? [g["stream-factory"]] : []),
+    ...(g["pi5-health"] ? [g["pi5-health"]] : []),
+  ];
 }

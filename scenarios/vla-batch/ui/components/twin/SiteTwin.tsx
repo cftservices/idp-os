@@ -15,6 +15,9 @@ import { DatalayerPanel, type DlTab } from "./datalayer";
 import { TOURS, TourBar } from "./tour";
 import type { LensMarker } from "./objects/LensMarkers";
 import { useQualityMap, useWorkOrders } from "@/lib/twin/datalayer";
+import { STORY } from "@/lib/twin/story";
+import { StoryCaption } from "./StoryCaption";
+import type { StoryShot } from "./SiteScene";
 
 const SiteScene = dynamic(() => import("./SiteScene"), {
   ssr: false,
@@ -131,6 +134,11 @@ export default function SiteTwin() {
   // requestFullscreen (dat weigert de browser zonder klik; de kiosk-Chromium is
   // toch al schermvullend), en zonder de bedieningselementen.
   const [broadcast, setBroadcast] = useState(false);
+  const [broadcastFps, setBroadcastFps] = useState<number | undefined>(undefined);
+  // ?story=1: story mode for the livestream. `storyStep` only counts up; the stop is step % length,
+  // so the camera effect also fires when the story wraps around to the intro.
+  const [story, setStory] = useState(false);
+  const [storyStep, setStoryStep] = useState(0);
   const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => setWebgl(hasWebGL()), []);
@@ -142,6 +150,9 @@ export default function SiteTwin() {
     if (p.get("broadcast") === "1") {
       setBroadcast(true);
       setPresenting(true);
+      const fps = Number(p.get("fps"));
+      if (Number.isInteger(fps) && fps >= 10 && fps <= 30) setBroadcastFps(fps);
+      if (p.get("story") === "1") setStory(true);
     }
   }, []);
 
@@ -249,6 +260,21 @@ export default function SiteTwin() {
     if (follow === BATCH_FOLLOW && !model.batch) setFollow(null);
   }, [follow, model]);
 
+  const storyIndex = storyStep % STORY.length;
+  const storyStop = STORY[storyIndex];
+  useEffect(() => {
+    if (!story) return;
+    const id = window.setTimeout(() => setStoryStep((s) => s + 1), storyStop.seconds * 1000);
+    return () => window.clearTimeout(id);
+  }, [story, storyStep, storyStop.seconds]);
+  // Positions come from the static layout, so a new poll gives the same target; the camera only
+  // moves when `n` (the step) changes.
+  const storyShot: StoryShot | null = useMemo(
+    () => (story ? { target: storyStop.target(model), distance: storyStop.distance, n: storyStep + 1 } : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [story, storyStep],
+  );
+
   const labelled = useMemo(
     () => labelBudget(items, selected, hovered, lens || broadcast ? 0 : 6),
     [items, selected, hovered, lens, broadcast],
@@ -306,12 +332,16 @@ export default function SiteTwin() {
             showPath={showPath}
             lens={lensMarkers}
             broadcast={broadcast}
+            broadcastFps={broadcastFps}
+            shot={storyShot}
           />
         ) : (
           <SceneHolder text="3D-scène laden" />
         )}
       </div>
 
+      {/* Story mode: the English caption carries the story; the Dutch bars stay off screen. */}
+      {!story && (
       <TopBar
         m={model}
         items={items}
@@ -324,8 +354,13 @@ export default function SiteTwin() {
         lens={lens}
         onLens={() => setLens((l) => !l)}
       />
+      )}
 
-      <KpiCards m={model} series={get} order={order} showPath={showPath} onTogglePath={() => setShowPath((s) => !s)} />
+      {!story && (
+        <KpiCards m={model} series={get} order={order} showPath={showPath} onTogglePath={() => setShowPath((s) => !s)} />
+      )}
+
+      {story && <StoryCaption stop={storyStop} index={storyIndex} total={STORY.length} model={model} />}
 
       {broadcast ? null : lens ? (
         <DatalayerPanel tab={dlTab} onTab={setDlTab} onSelect={select} onClose={() => setLens(false)} />
@@ -367,6 +402,7 @@ export default function SiteTwin() {
         />
       )}
 
+      {!story && (
       <Timeline
         title={
           <span data-twin-batch={batch?.state ?? ""}>
@@ -385,6 +421,7 @@ export default function SiteTwin() {
         following={follow === BATCH_FOLLOW}
         onFollow={batch ? () => setFollow((f) => (f === BATCH_FOLLOW ? null : BATCH_FOLLOW)) : undefined}
       />
+      )}
 
       {!broadcast && (
       <CameraControls
