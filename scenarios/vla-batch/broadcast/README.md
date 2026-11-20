@@ -254,6 +254,29 @@ die staan buiten de scène. Zonder `broadcast=1` verandert er niets.
 15 fps is het plafond van de opname zelf. Volgende stap: een uur naar YouTube unlisted vanaf de
 Pi, met de twin in de carrousel.
 
+## Streamen vanaf de Pi 5
+
+`/broadcast?twin=1` zet de twin (90 s) vooraan in de carrousel; `/broadcast` zonder parameter blijft
+2D voor de VPS. [`pi5/stream.sh`](pi5/stream.sh) draait de pijplijn als systemd-user-unit
+`vla-stream`: tunnel, kiosk-Chromium en ffmpeg naar YouTube, met dezelfde encoder als de
+bankproef. Valt één van de drie om, dan herstart systemd het geheel na 15 s. Het overleeft een
+verbroken ssh-verbinding.
+
+```bash
+./stream.sh start 60     # uurproef: stopt na 60 minuten vanzelf
+./stream.sh start        # zonder einde; elke 12 uur een geplande herstart
+./stream.sh status       # unit, encoder-speed, temperatuur, throttling, CPU
+./stream.sh fps          # echte beeldsnelheid over 10 s
+./stream.sh stop
+```
+
+De stream key staat in `~/.broadcast.env` op de Pi (chmod 600, `YOUTUBE_STREAM_KEY=...`). ffmpeg
+noemt bij een fout de volledige uitvoer-URL; het script haalt de sleutel daaruit voordat het in
+het journal komt.
+
+**Eerste uitzending, 20-11-2026 17:29:** live op YouTube (unlisted), 1,02x, 15 fps, 2,6 Mbit/s,
+twin 14,6 echte fps, Pi 63 °C zonder throttling. De uitkomst van het hele uur volgt hieronder.
+
 ## Meetproef 1, 20-11-2026: no-go voor de 3D-twin op deze VPS
 
 Opzet: `broadcast.sh test`, 720p25, renderer begrensd op 1 kern. De proef is na 21 minuten

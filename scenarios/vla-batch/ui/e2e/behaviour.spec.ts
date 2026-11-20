@@ -76,7 +76,9 @@ test("de scan-gate: geweigerd, order zonder batch, open, en alleen logistiek", a
 
   // 4. Lopende batch: gate open, met de grondstoffen uit de engine. Tijdens
   //    een CIP loopt er geen batch; dan valt er niets te controleren.
-  const running = newest((b) => b.state !== "COMPLETE");
+  // Only a batch that really runs: a waiting batch is refused (line_busy) while
+  // another batch runs on its line, and an aborted one is not a demo case.
+  const running = newest((b) => ["DOSING", "COOKING", "COOLING", "FILLING"].includes(b.state));
   test.info().annotations.push({
     type: "lopende batch",
     description: running ? running.batch_id : "geen (CIP of stilstand), stap 4 overgeslagen",

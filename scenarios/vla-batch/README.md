@@ -421,7 +421,11 @@ The **SCADA Start** button creates a real MES batch (`/admin/command` `start`
 goes through `create_batch`), and is refused while the line is busy. On the
 **Werkvloer** (`/shopfloor`) the order scan opens the running batch for dosing;
 a finished batch opens only the logistics part (pallet, putaway, ship), and a
-closed order is refused.
+closed order is refused. A batch that is not running yet is refused (`line_busy`)
+while another batch runs on its line. The report scan (commit) checks every
+weighed material against stock first and refuses the whole booking on a shortage
+(`insufficient_stock`), so nothing is half-booked and stock never goes negative
+through the shop floor.
 
 ---
 
@@ -550,7 +554,7 @@ Control does not use MQTT Command topics: the engine calls the OPC-UA methods di
 
 Under-cooking (low peak-temp × hold) → starch gelatinisation `g` low → `end_viscosity_cP < 150`
 → out of the 150–300 cP spec → batch verdict **REJECTED** + critical alarm (a good batch lands
-around 260 cP). Raw data (peak-temp × hold) drives a **real decision**: the batch is rejected
+around 260 cP; above 300 cP, too thick, is rejected the same way since 20-11-2026). Raw data (peak-temp × hold) drives a **real decision**: the batch is rejected
 after filling and the warehouse gate refuses to palletise it. There is no hold-and-recook in
 this demo; **HOLD** is the verdict for a warning (out of tolerance, a failed non-critical
 sample). Inject it with the `cook_undertemp` fault (`InjectFault` on the Batch object) to demo
