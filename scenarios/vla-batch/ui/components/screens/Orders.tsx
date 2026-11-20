@@ -91,14 +91,15 @@ export function Orders() {
     router.replace(next.toString() ? `?${next.toString()}` : "?", { scroll: false });
   }
 
-  async function run(fn: () => Promise<unknown>, label: string, retryable?: () => Promise<void>) {
+  /** `done` is the full success message: "Order aangemaakt.", not a label plus "gelukt". */
+  async function run(fn: () => Promise<unknown>, done: string, retryable?: () => Promise<void>) {
     setBusy(true);
     setRefusal(null);
     setMessage(null);
     try {
       await fn();
       await orders.refetch();
-      setMessage(`${label} gelukt`);
+      setMessage(done);
     } catch (e) {
       setRefusal(e as Refusal);
       setRetry(() => retryable ?? null);
@@ -118,7 +119,7 @@ export function Orders() {
           target_qty_L: qty,
           due_date: due ? new Date(due).toISOString() : null,
         }),
-      "Order aangemaakt",
+      "Order aangemaakt.",
       // Bewust geen retry.
     );
   }
@@ -211,7 +212,7 @@ export function Orders() {
         </p>
       </section>
 
-      <section className="tile table-scroll p-0">
+      <section id="ordertabel" className="tile table-scroll scroll-mt-4 p-0">
         <table className="w-full border-collapse text-[0.8125rem]">
           <thead>
             <tr className="border-b border-line text-left">
@@ -229,7 +230,11 @@ export function Orders() {
             {(orders.data ?? []).length === 0 && (
               <tr>
                 <td colSpan={9} className="px-3 py-4 text-ink-muted">
-                  Nog geen orders. Maak er hierboven een aan.
+                  {orders.isPending
+                    ? "Laden."
+                    : orders.isError
+                      ? "Orders niet op te halen. Draait de engine?"
+                      : "Nog geen orders. Maak er hierboven een aan."}
                 </td>
               </tr>
             )}
@@ -287,7 +292,7 @@ export function Orders() {
                           };
                           // Enige plek met automatisch opnieuw proberen: na een
                           // geslaagde CIP is de batch alsnog aan te maken.
-                          run(make, "Batch aangemaakt", make);
+                          run(make, "Batch aangemaakt.", make);
                         }}
                         className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase hover:border-ink-muted disabled:opacity-40"
                       >
@@ -300,7 +305,7 @@ export function Orders() {
                           e.stopPropagation();
                           // Bewust GEEN retry: de stop-regel weigert zolang er
                           // geen productie is geboekt, en dat moet je zien.
-                          run(() => post(`/orders/${o.order_id}/close`, {}), "Order gesloten");
+                          run(() => post(`/orders/${o.order_id}/close`, {}), "Order gesloten.");
                         }}
                         className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase hover:border-ink-muted disabled:opacity-40"
                       >
@@ -361,9 +366,9 @@ export function Orders() {
       <NextStep
         steps={[
           {
-            href: "/scada",
+            href: "#ordertabel",
             label: "Batch aanmaken bij een order",
-            why: "Kan ook met de knop Batch in de tabel hierboven.",
+            why: "Met de knop Batch in de ordertabel. Start op SCADA maakt een batch zonder order.",
             done: (orders.data ?? []).some((o) => (o.progress?.batches_count ?? 0) > 0),
           },
           {

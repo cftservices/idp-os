@@ -56,7 +56,11 @@ export function Preparation() {
   const sets = prep.data?.sets ?? [];
   const stations = (prep.data?.stations ?? []).filter((s) => !lineFilter || s.line === lineFilter);
   const open = sets.filter((s) => s.state !== "verbruikt");
-  const used = sets.filter((s) => s.state === "verbruikt").slice(0, 8);
+  // Most recently CONSUMED first; the API sorts on created_at.
+  const used = sets
+    .filter((s) => s.state === "verbruikt")
+    .sort((a, b) => (b.state_changed_at ?? "").localeCompare(a.state_changed_at ?? ""))
+    .slice(0, 8);
   const choice = recipeId || lines.data?.[0]?.recipes[0]?.recipe_id || "";
 
   async function plan() {

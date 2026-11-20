@@ -136,13 +136,14 @@ export function Shopfloor() {
    * een weging, een boeking of een verzending nog eens uitvoeren zonder dat de
    * operator dat vraagt is dubbel boeken.
    */
-  async function run(fn: () => Promise<unknown>, label: string) {
+  /** `done` is the full message. Weighing stages only; booking happens at the report scan. */
+  async function run(fn: () => Promise<unknown>, done: string) {
     setBusy(true);
     setRefusal(null);
     setMessage(null);
     try {
       await fn();
-      setMessage(`${label} geboekt`);
+      setMessage(done);
     } catch (err) {
       setRefusal(err as Refusal);
     } finally {
@@ -189,7 +190,7 @@ export function Shopfloor() {
           lot_no: lot.trim(),
           operator_id: OPERATOR,
         }),
-      `Label ${material}`,
+      `Label ${material} gescand: hoort bij het recept.`,
     );
   }
 
@@ -226,7 +227,7 @@ export function Shopfloor() {
             }
           : r,
       );
-    }, materialId);
+    }, `${materialId} afgewogen. Geboekt wordt pas bij de rapport-scan.`);
   }
 
   async function commit() {
@@ -335,7 +336,11 @@ export function Shopfloor() {
                 1. Doseren &middot; batch <span className="mono">{batchId}</span>
               </span>
               <span className="flex items-center gap-2 text-[0.8125rem]">
-                {batch.data && <StatusPill status="run">{batch.data.state}</StatusPill>}
+                {batch.data && (
+                  <StatusPill status={batch.data.state === "COMPLETE" ? "done" : batch.data.state === "IDLE" ? "idle" : "run"}>
+                    {batch.data.state}
+                  </StatusPill>
+                )}
                 <CrossLink href={`/batches?batch=${batchId}`}>batchdetail</CrossLink>
               </span>
             </div>
@@ -441,7 +446,7 @@ export function Shopfloor() {
                       operator_id: OPERATOR,
                     });
                     await samples.refetch();
-                  }, "Monster")
+                  }, "Monster genomen.")
                 }
                 className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
               >
@@ -471,7 +476,7 @@ export function Shopfloor() {
                       onClick={() =>
                         run(
                           () => post(`/samples/${s.sample_id}/reprint-label`, {}),
-                          "Label herdrukt",
+                          "Label herdrukt.",
                         )
                       }
                       className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase hover:border-ink-muted disabled:opacity-40"
@@ -509,7 +514,7 @@ export function Shopfloor() {
                       operator_id: OPERATOR,
                     });
                     await batch.refetch();
-                  }, `${packs} pakken`)
+                  }, `${packs} pakken geboekt.`)
                 }
                 className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
               >
@@ -553,7 +558,7 @@ export function Shopfloor() {
                       operator_id: OPERATOR,
                     });
                     await hus.refetch();
-                  }, "Pallet")
+                  }, "Pallet gemaakt.")
                 }
                 className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
               >
@@ -594,7 +599,7 @@ export function Shopfloor() {
                           run(async () => {
                             await post(`/hu/${h.hu_id}/putaway`, { operator_id: OPERATOR });
                             await hus.refetch();
-                          }, "Inslag")
+                          }, "Pallet ingeslagen.")
                         }
                         className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase hover:border-ink-muted disabled:opacity-40"
                       >
@@ -607,7 +612,7 @@ export function Shopfloor() {
                           run(async () => {
                             await post(`/hu/${h.hu_id}/ship`, { operator_id: OPERATOR });
                             await hus.refetch();
-                          }, "Verzending")
+                          }, "Pallet verscheept.")
                         }
                         className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase hover:border-ink-muted disabled:opacity-40"
                       >

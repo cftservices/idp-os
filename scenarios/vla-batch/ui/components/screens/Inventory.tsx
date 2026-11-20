@@ -56,6 +56,16 @@ function topUpQty(m: Material): number {
   return Math.max(0, Math.ceil(m.reorder_level * 2 - Math.max(0, m.stock_qty)));
 }
 
+/**
+ * Een lotnummer per ontvangst. Eerder kreeg elke ontvangst van een materiaal hetzelfde
+ * lot (`L-MILK`), waardoor traceerbaarheid per levering niets kon onderscheiden.
+ */
+function receiptLot(materialId: string, now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+  return `L-${materialId.toUpperCase()}-${stamp}`;
+}
+
 export function Inventory() {
   const inventory = useInventory<InventoryPayload>();
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -71,7 +81,7 @@ export function Inventory() {
     try {
       await post(`/materials/${m.material_id}/receipt`, {
         qty: amount,
-        lot_no: `L-${m.material_id.toUpperCase()}`,
+        lot_no: receiptLot(m.material_id),
         operator_id: OPERATOR,
       });
       await inventory.refetch();
@@ -86,10 +96,7 @@ export function Inventory() {
   /** Alles onder de bestelgrens in een keer aanvullen. */
   async function topUpAll() {
     const low = (inventory.data?.materials ?? []).filter((m) => !m.is_finished_good && m.below_reorder);
-    if (low.length === 0) {
-      setMessage("Niets onder de bestelgrens.");
-      return;
-    }
+    if (low.length === 0) return; // the button is disabled then
     setBusy(true);
     setRefusal(null);
     setMessage(null);
@@ -99,7 +106,7 @@ export function Inventory() {
       for (const m of low) {
         await post(`/materials/${m.material_id}/receipt`, {
           qty: topUpQty(m),
-          lot_no: `L-${m.material_id.toUpperCase()}`,
+          lot_no: receiptLot(m.material_id),
           operator_id: OPERATOR,
         });
       }
@@ -131,6 +138,7 @@ export function Inventory() {
         <button
           type="button"
           disabled={busy || low.length === 0}
+          title={low.length === 0 ? "Niets onder de bestelgrens." : undefined}
           onClick={topUpAll}
           className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
         >
