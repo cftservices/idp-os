@@ -319,8 +319,21 @@ Op de VPS lopen batches vanzelf door, zonder operator. Lokaal staat dit uit.
   sluit zodra hij volledig is geproduceerd en de volgende klant begint.
   Autopilot-batches ouder dan 24 uur, of meer dan een uur vastgelopen in een
   lopende fase, worden elk uur opgeruimd.
-- `vla-factory`: `AUTOSTART_DELAY_S=30` ketent pas zelf als er 30 s geen
-  MES-batch kwam. Dat is het vangnet, zodat de bus nooit stilvalt.
+- `vla-factory`: `AUTOSTART_DELAY_S=180` ketent pas zelf als er 180 s geen
+  MES-batch kwam (was 30 s; op 18-11 haalde de engine dat niet meer bij CPU-steal).
+  Dat is het vangnet, zodat de bus nooit stilvalt. Bij het opstarten begint de
+  fabriek altijd één eigen batch, buiten de MES om.
+- **Demomodus per lijn (sinds 20-11-2026).** Op `/scada` → *Demomodus*, of
+  `POST /api/v1/demo/pause {"line":"L1","minutes":45}` en `POST /api/v1/demo/resume`.
+  Een gepauzeerde lijn krijgt geen autopilot-batch, geen CIP, geen stoomklepfout en
+  geen willekeurige storing, en de fabriek ketent niet zelf door (OPC-UA-methode
+  `SetAutostart`, elke minuut opnieuw gezet omdat een herstart hem weer aanzet).
+  De pauze staat in Mongo (`dw_autopilot`, key `demo-pause`), overleeft een
+  engine-herstart en loopt altijd af (standaard 45, hoogstens 180 minuten). Het
+  scenario telt alleen batches met `created_by: autopilot`. Live beproefd op 20-11:
+  een eigen batch op L1, daarna 4 minuten geen enkele start, en na hervatten weer
+  autostart aan en `demo_resumed` in het scenariolog. Een batch die je zelf start,
+  palletiseert de autopilot nooit: die ligt klaar voor *Pallet maken*.
 - Status: `GET /api/v1/autopilot` (`last_action`, `batches_started`, `cip_runs`).
 - Uitzetten: `DEMO_AUTOPILOT: "0"` in de overlay en `up -d vla-batch-engine`.
 - **Magazijnstroom** (`vla/warehouse.py`, `DEMO_AUTOPILOT_WAREHOUSE`, standaard

@@ -168,6 +168,8 @@ class VlaServer:
         # last value the SERVER wrote into each writable setpoint node; used to tell a
         # genuine client write apart from the server's own readback echo.
         self._last_setpoint_echo: dict[tuple[str, str, str], float] = {}
+        # self-chaining after COMPLETE (AUTOSTART_RECIPE); SetAutostart can hold it off
+        self.autostart = True
 
     async def init(self) -> None:
         await self.server.init()
@@ -272,6 +274,21 @@ class VlaServer:
 
         await batch_obj.add_method(ua.NodeId(base + ".StartCip", idx, ua.NodeIdType.String),
                                    ua.QualifiedName("StartCip", idx), start_cip, [], [I])
+
+        # Demo pause: the engine turns self-chaining off while a presenter has the line,
+        # so no batch starts outside the MES. Back on at every restart (env default).
+        server = self
+
+        @uamethod
+        def set_autostart(parent, enabled: bool) -> ua.Int32:
+            server.autostart = bool(enabled)
+            server._complete_since = None
+            log.info("autostart %s", "on" if server.autostart else "off")
+            return ua.Int32(0)
+
+        await batch_obj.add_method(ua.NodeId(base + ".SetAutostart", idx, ua.NodeIdType.String),
+                                   ua.QualifiedName("SetAutostart", idx), set_autostart,
+                                   [ua.VariantType.Boolean], [I])
 
     # ------------------------------------------------------------------ loops
     async def _apply_writable_setpoints(self) -> None:
@@ -383,7 +400,8 @@ class VlaServer:
         if self.p.state == "COMPLETE":
             if self._complete_since is None:
                 self._complete_since = self._elapsed
-            if AUTOSTART_RECIPE and self._elapsed - self._complete_since >= AUTOSTART_DELAY_S:
+            if AUTOSTART_RECIPE and self.autostart \
+                    and self._elapsed - self._complete_since >= AUTOSTART_DELAY_S:
                 self.p.start_batch(AUTOSTART_RECIPE)
                 self._complete_since = None
         else:

@@ -28,6 +28,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Protocol
 
+from . import demo_pause
 from . import model as M
 
 log = logging.getLogger("vla.cmms")
@@ -378,6 +379,8 @@ class CmmsConnector:
             for lid in M.LINES:
                 if self.equipment.line_down(lid):
                     continue
+                if demo_pause.is_paused(self.db, lid, now):
+                    continue  # a presenter has this line: no surprise breakdown
                 if dt > 0 and self.rng.random() < dt / self.mean_breakdown_interval_s:
                     eq = self.rng.choice(M.LINES[lid].equipment_ids)
                     self.report_breakdown(eq)

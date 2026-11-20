@@ -28,6 +28,7 @@ def sv(monkeypatch, tmp_path):
     mod._log_path = str(tmp_path / "single.jsonl")
     mod.BACKOFF_MIN_S = 0.0
     mod.stop.clear()
+    mod.line_paused = lambda line: False   # no engine here; tests that pause override it
     return mod
 
 
@@ -139,3 +140,55 @@ def test_clear_rc_1_is_success_but_inject_rc_5_is_not(sv, monkeypatch):
     assert sv.factory_call("u", "clear") == 1
     with pytest.raises(RuntimeError):
         sv.factory_call("u", 0.5)
+
+
+def test_demo_pause_clears_fault_holds_cycle_and_reasserts_after(sv, monkeypatch):
+    """While a presenter has the line the fault is cleared and nothing is counted; after
+    the pause the fault of the current phase is set again and the cycle finishes."""
+    calls = []
+    monkeypatch.setattr(sv, "factory_call", lambda url, action, **ctx: calls.append(action) or 0)
+    engine = FakeEngine()
+    polls = {"n": 0}
+
+    def paused(line):
+        polls["n"] += 1
+        return 30 <= polls["n"] < 33   # three polls paused, in the drift phase (25..35)
+
+    monkeypatch.setattr(sv, "line_paused", paused)
+    monkeypatch.setattr(sv, "completed_since", engine)
+    n = sv.run_cycle("L1", "opc.tcp://x", "2026-11-19T00:00:00", cycle=1)
+    assert n == 52
+    # start clear, drift 0.06, demo-pause clear, reassert 0.06, out_of_spec 0.5, repaired clear
+    assert calls == ["clear", 0.06, "clear", 0.06, 0.5, "clear"]
+    log = [json.loads(r) for r in open(sv._log_path, encoding="utf-8")]
+    events = [r["event"] for r in log]
+    assert events.count("demo_paused") == 1 and events.count("demo_resumed") == 1
+    # the engine was not asked for batches while paused
+    assert engine.n["L1"] == polls["n"] - 3
+
+
+def test_only_autopilot_batches_count(sv, monkeypatch):
+    rows = [
+        {"batch_id": "a", "state": "COMPLETE", "verdict": "APPROVED",
+         "completed_at": "2026-11-20T10:00", "created_by": "autopilot"},
+        {"batch_id": "b", "state": "COMPLETE", "verdict": "APPROVED",
+         "completed_at": "2026-11-20T10:01", "created_by": "op-01"},
+        {"batch_id": "c", "state": "COMPLETE", "verdict": "APPROVED",
+         "completed_at": "2026-11-20T10:02", "created_by": None},
+        {"batch_id": "d", "state": "COMPLETE", "verdict": "APPROVED",
+         "completed_at": "2026-11-20T10:03"},   # older engine without the field
+    ]
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return json.dumps(rows).encode()
+
+    monkeypatch.setattr(sv.urllib.request, "urlopen", lambda *a, **k: Resp())
+    got = [b["batch_id"] for b in sv.completed_since("L1", "2026-11-20T00:00")]
+    assert got == ["a", "d"]

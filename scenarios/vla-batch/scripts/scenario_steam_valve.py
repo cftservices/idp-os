@@ -27,6 +27,9 @@ unreachable the intended fault of the current phase is set again. Known gap: a f
 while the engine stays reachable goes unnoticed until the next phase change (at most one phase,
 ~25 min); the factory exposes no fault state to check against.
 
+Demo pause: while the engine reports the line paused (GET /demo/pause) the fault is cleared and
+the cycle waits; when the line comes back the phase's fault is set again. Only batches the
+autopilot started count (created_by), so a presenter's batch never lands in the answer key.
 Runs in its own container on the milkdemo network with the factory image (asyncua inside):
 compose service `vla-scenario` in docker-compose.vla.yml (profile "scenario").
 """
@@ -39,6 +42,7 @@ import os
 import signal
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -59,6 +63,7 @@ CALL_TIMEOUT_S = 20.0
 BACKOFF_MIN_S, BACKOFF_MAX_S = 5.0, 60.0
 BATCH = "ns=2;s=DairyWorks.Vla.Batch"
 FAULT = "cook_undertemp"
+AUTOPILOT = "autopilot"   # created_by of the batches this scenario counts
 
 PHASES = [("stable", None, 25), ("drift", 0.06, 10), ("out_of_spec", 0.5, 2), ("repaired", "clear", 15)]
 
@@ -92,9 +97,24 @@ def completed_since(line: str, start: str) -> list[dict]:
     """
     with urllib.request.urlopen(f"{ENGINE}/batches?line={line}", timeout=CALL_TIMEOUT_S) as r:
         rows = json.load(r)
+    # Only the autopilot's batches: a presenter's batch during a demo pause ran without the
+    # fault and does not belong in the answer key. An engine without created_by counts all.
     done = [b for b in rows if b.get("state") == "COMPLETE" and b.get("verdict")
-            and (b.get("completed_at") or "") >= start]
+            and (b.get("completed_at") or "") >= start
+            and b.get("created_by", AUTOPILOT) == AUTOPILOT]
     return sorted(done, key=lambda b: b["completed_at"])
+
+
+def line_paused(line: str) -> bool:
+    """True while a presenter has the line (engine demo pause). An engine without the
+    endpoint (404) has no pause."""
+    try:
+        with urllib.request.urlopen(f"{ENGINE}/demo/pause", timeout=CALL_TIMEOUT_S) as r:
+            return bool((json.load(r).get(line) or {}).get("paused"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        raise
 
 
 async def _call(url: str, action) -> int:
@@ -172,8 +192,24 @@ def run_cycle(line: str, url: str, start: str, cycle: int | None = None) -> int:
     with_retry(lambda: factory_call(url, "clear", phase="start", **ctx), "factory", **ctx)
     phase_i = 0
     seen: set[str] = set()
+    paused = False
     while phase_i < len(PHASES):
         name, _action, _n = PHASES[phase_i]
+        # Demo pause: a presenter has this line. Clear the fault once and hold the cycle;
+        # set the phase's fault again when the line comes back.
+        if with_retry(lambda: line_paused(line), "engine", **ctx):
+            if not paused:
+                paused = True
+                with_retry(lambda: factory_call(url, "clear", reason="demo_pause", **ctx),
+                           "factory", **ctx)
+                log("demo_paused", phase=name, **ctx)
+            if stop.wait(POLL_S):
+                raise Stopped()
+            continue
+        if paused:
+            paused = False
+            log("demo_resumed", phase=name, **ctx)
+            assert_intended()
         done = with_retry(lambda: completed_since(line, start), "engine",
                           on_recover=assert_intended, **ctx)
         for b in done:

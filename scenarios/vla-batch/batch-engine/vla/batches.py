@@ -860,6 +860,10 @@ class BatchRunner:
                 "completed_at": b.get("completed_at"),
                 "end_viscosity_cP": b.get("end_viscosity_cP"),
                 "verdict_ack": b.get("verdict_ack"),
+                # who started it ("autopilot" or an operator) and when: the scenario
+                # counts only autopilot batches, a demo pause hands the line to a person
+                "created_by": b.get("created_by"),
+                "created_at": b.get("created_at"),
             })
         return out
 

@@ -29,8 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vla import alarms as A, bvip, bvip_map, inventory, kpi as K, kpi_history, line as L, \
-    meters, model as M
+from vla import alarms as A, bvip, bvip_map, demo_pause, inventory, kpi as K, kpi_history, \
+    line as L, meters, model as M
 from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
@@ -398,6 +398,42 @@ def autopilot_status():
     return out
 
 
+class DemoPauseRequest(BaseModel):
+    line: str
+    minutes: float = demo_pause.DEFAULT_MINUTES
+    operator_id: str | None = None
+
+
+@app.get(f"{API}/demo/pause")
+def demo_pause_status():
+    """Per line: paused for a presenter or not (vla/demo_pause.py)."""
+    return demo_pause.status(STATE["db"])
+
+
+@app.post(f"{API}/demo/pause")
+def demo_pause_line(body: DemoPauseRequest):
+    """Hand a line to a presenter: no autopilot batch, CIP, scenario fault or random
+    breakdown on it, and no factory self-chaining, until resume or the time is up."""
+    try:
+        out = demo_pause.pause(STATE["db"], body.line, body.minutes, body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _runner(body.line)._event(None, "demo_paused", {
+        "line": body.line, "until": out["until"], "operator_id": body.operator_id})
+    return out
+
+
+@app.post(f"{API}/demo/resume")
+def demo_resume_line(body: DemoPauseRequest):
+    try:
+        out = demo_pause.resume(STATE["db"], body.line, body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _runner(body.line)._event(None, "demo_resumed", {
+        "line": body.line, "operator_id": body.operator_id})
+    return out
+
+
 @app.get(f"{API}/lines")
 def list_lines():
     """De productielijnen: hal, recepten, equipment en wat de autopilot doet."""
@@ -416,7 +452,8 @@ def list_lines():
                     "equipment": dict(ln.equipment),
                     "autopilot": {"recipe_id": st.get("recipe_id"),
                                   "last_action": st.get("last_action"),
-                                  "changeover_cips": st.get("changeover_cips")}
+                                  "changeover_cips": st.get("changeover_cips"),
+                                  "paused_until": st.get("paused_until")}
                     if st else None})
     return out
 
