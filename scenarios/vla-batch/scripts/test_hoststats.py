@@ -66,3 +66,22 @@ def test_env_file_points_at_stack_root():
     assert H.ENV_FILE.parent.name == "idp-os" or H.ENV_FILE.parent == \
         Path(__file__).resolve().parents[3]
     assert os.path.basename(H.ENV_FILE) == ".env"
+
+
+def test_backfill_parses_sadf_and_skips_restart_lines():
+    import hoststats_backfill as B
+    u = ("# hostname;interval;timestamp;CPU;%usr;%nice;%sys;%iowait;%steal;%irq;%soft;%guest;%gnice;%idle\n"
+         "srv;120;1000;-1;14.19;0.00;6.72;0.37;13.61;0.00;0.37;0.00;0.00;64.74\n"
+         "srv;-1;1100;LINUX-RESTART (2 CPU)\n")
+    q = ("# hostname;interval;timestamp;runq-sz;plist-sz;ldavg-1;ldavg-5;ldavg-15;blocked\n"
+         "srv;120;1000;3;1562;1.40;1.39;1.18;0\n")
+    merged = {}
+    for txt in (u, q):
+        for ts, v in B.parse_sadf(txt).items():
+            merged.setdefault(ts, {}).update(v)
+    assert list(merged) == [1000]
+    row = B.to_host_row(merged[1000], 7936.0)
+    assert row["cpu_user"] == 14.19 and row["cpu_system"] == 7.09 and row["cpu_steal"] == 13.61
+    assert row["load1"] == 1.4 and row["mem_avail_mb"] is None    # geen -r: leeg, niet verzonnen
+    stmts = B.insert_batches([(1000, row)], "srv")
+    assert stmts[0].startswith("INSERT INTO idp.vps_h_srv USING idp.vps_host TAGS ('srv') VALUES (1000000, 1.4")

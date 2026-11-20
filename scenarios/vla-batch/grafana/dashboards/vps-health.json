@@ -1139,8 +1139,10 @@
             "uid": "vla-tdengine"
           },
           "queryType": "SQL",
-          "formatType": "Table",
-          "sql": "select _wstart as ts, container_name, avg(cpu_pct) as cpu from idp.vps_container where ts >= $from and ts <= $to and running = 1 partition\nby container_name interval(2m)"
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, container_name, avg(cpu_pct) as cpu from idp.vps_container where ts >= $from and ts <= $to and running = 1 partition by container_name interval(2m)",
+          "colNameToGroup": "container_name",
+          "colNameFormatStr": "{{container_name}}"
         }
       ],
       "fieldConfig": {
@@ -1177,20 +1179,7 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "100% is één volledige vCPU.",
-      "transformations": [
-        {
-          "id": "partitionByValues",
-          "options": {
-            "fields": [
-              "container_name"
-            ],
-            "naming": {
-              "asLabels": false
-            }
-          }
-        }
-      ]
+      "description": "100% is één volledige vCPU."
     },
     {
       "id": 22,
@@ -1210,8 +1199,10 @@
             "uid": "vla-tdengine"
           },
           "queryType": "SQL",
-          "formatType": "Table",
-          "sql": "select _wstart as ts, container_name, avg(mem_mb) as geheugen from idp.vps_container where ts >= $from and ts <= $to and running = 1 partition\nby container_name interval(2m)"
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, container_name, avg(mem_mb) as geheugen from idp.vps_container where ts >= $from and ts <= $to and running = 1 partition by container_name interval(2m)",
+          "colNameToGroup": "container_name",
+          "colNameFormatStr": "{{container_name}}"
         }
       ],
       "fieldConfig": {
@@ -1246,20 +1237,7 @@
       "datasource": {
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
-      },
-      "transformations": [
-        {
-          "id": "partitionByValues",
-          "options": {
-            "fields": [
-              "container_name"
-            ],
-            "naming": {
-              "asLabels": false
-            }
-          }
-        }
-      ]
+      }
     },
     {
       "id": 23,

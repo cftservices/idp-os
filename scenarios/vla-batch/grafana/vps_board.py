@@ -21,11 +21,15 @@ def _ts(sql_cols: str, table: str = H, step: str = "1m", where: str = "") -> str
             f"where ts >= $from and ts <= $to{where} interval({step}) fill(null)")
 
 
-def _per_container(agg: str, alias: str) -> str:
-    # Tabelvorm met een tijdkolom voorop; de transformatie splitst per container.
-    # "partition\nby": met een spatie eist de plugin een group-by-configuratie.
-    return (f"select _wstart as ts, container_name, {agg} as {alias} from {C} "
-            f"where ts >= $from and ts <= $to and running = 1 partition\nby container_name interval(2m)")
+def _per_container(td, agg: str, alias: str) -> dict:
+    # Een serie per container via de group-by van de plugin zelf (colNameToGroup). Tabelvorm
+    # met Grafana's partitionByValues werkt hier niet: panelen lopen via het frontend-pad van
+    # de plugin en daar is de tijdkolom in tabelvorm geen tijd ("Data is missing a time field").
+    t = td(f"select _wstart as ts, container_name, {agg} as {alias} from {C} "
+           f"where ts >= $from and ts <= $to and running = 1 partition by container_name interval(2m)",
+           ts=True)
+    t.update({"colNameToGroup": "container_name", "colNameFormatStr": "{{container_name}}"})
+    return t
 
 
 def board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, TABLE_OPTS):
@@ -105,17 +109,15 @@ def board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, TABLE_OPTS):
               {"id": "unit", "value": "percent"}, {"id": "custom.axisPlacement", "value": "right"}]}])
 
     b.row("Containers")
-    split = [{"id": "partitionByValues", "options": {"fields": ["container_name"],
-                                                     "naming": {"asLabels": False}}}]
-    b.add("timeseries", "CPU per container", 12, 9, [td(_per_container("avg(cpu_pct)", "cpu"))],
+    b.add("timeseries", "CPU per container", 12, 9, [_per_container(td, "avg(cpu_pct)", "cpu")],
           options={**TS_OPTS, "legend": {"showLegend": True, "displayMode": "table", "placement": "right",
                                          "calcs": ["max", "mean"], "sortBy": "Max", "sortDesc": True}},
-          field={**TS_FIELD, "unit": "percent", "min": 0}, transforms=split,
+          field={**TS_FIELD, "unit": "percent", "min": 0},
           desc="100% is één volledige vCPU.")
-    b.add("timeseries", "Geheugen per container", 12, 9, [td(_per_container("avg(mem_mb)", "geheugen"))],
+    b.add("timeseries", "Geheugen per container", 12, 9, [_per_container(td, "avg(mem_mb)", "geheugen")],
           options={**TS_OPTS, "legend": {"showLegend": True, "displayMode": "table", "placement": "right",
                                          "calcs": ["lastNotNull"], "sortBy": "Last *", "sortDesc": True}},
-          field={**TS_FIELD, "unit": "decmbytes", "min": 0}, transforms=split)
+          field={**TS_FIELD, "unit": "decmbytes", "min": 0})
     b.add("table", "Containers nu", 24, 12, [td(
         # plugin: a multi-row table must start with a timestamp column
         f"select last(ts) as gemeten, container_name as container, last(running) as draait, "
