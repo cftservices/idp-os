@@ -116,14 +116,31 @@ function Group({
   );
 }
 
+/**
+ * Geen navigatie in de livestream. /broadcast is de carrousel zelf; de schermen
+ * die hij toont laden met ?embed=1 in een iframe. Via window in plaats van
+ * useSearchParams: dat laatste dwingt in Next 15 een Suspense-grens af rond
+ * elke statisch gerenderde route, en de Nav hangt op allemaal.
+ */
+function useEmbedded(pathname: string) {
+  const [embedded, setEmbedded] = useState(false);
+  useEffect(() => {
+    setEmbedded(new URLSearchParams(window.location.search).get("embed") === "1");
+  }, [pathname]);
+  return pathname.startsWith("/broadcast") || embedded;
+}
+
 export function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const badge = useAlarmBadge();
+  const hidden = useEmbedded(pathname);
 
   // Een routewissel sluit de la. Zonder dit blijft hij openstaan over het
   // scherm dat je net gekozen hebt.
   useEffect(() => setOpen(false), [pathname]);
+
+  if (hidden) return null;
 
   const current = ALL.find((i) => isActive(pathname, i.href));
 

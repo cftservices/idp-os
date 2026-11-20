@@ -127,6 +127,10 @@ export default function SiteTwin() {
   const [dlTab, setDlTab] = useState<DlTab>("bronnen");
   const [tourId, setTourId] = useState<string | null>(null);
   const [tourStep, setTourStep] = useState(0);
+  // ?broadcast=1: de livestream. Licht 3D-profiel, presentatiemodus aan zonder
+  // requestFullscreen (dat weigert de browser zonder klik; de kiosk-Chromium is
+  // toch al schermvullend), en zonder de bedieningselementen.
+  const [broadcast, setBroadcast] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => setWebgl(hasWebGL()), []);
@@ -135,6 +139,10 @@ export default function SiteTwin() {
     const t = p.get("tour");
     if (t && TOURS[t]) setTourId(t);
     if (p.get("lens") === "1") setLens(true);
+    if (p.get("broadcast") === "1") {
+      setBroadcast(true);
+      setPresenting(true);
+    }
   }, []);
 
   const quality = useQualityMap(lens);
@@ -273,7 +281,13 @@ export default function SiteTwin() {
   const get = (k: string) => series.get(k);
 
   return (
-    <main ref={rootRef} className="twin-root" data-twin-root="" data-presenting={presenting ? "" : undefined}>
+    <main
+      ref={rootRef}
+      className="twin-root"
+      data-twin-root=""
+      data-presenting={presenting ? "" : undefined}
+      data-broadcast={broadcast ? "" : undefined}
+    >
       <div className="twin-stage">
         {webgl === false ? (
           <SceneHolder text="Deze browser ondersteunt geen WebGL. De objectlijst toont dezelfde status." />
@@ -288,6 +302,7 @@ export default function SiteTwin() {
             order={order}
             showPath={showPath}
             lens={lensMarkers}
+            broadcast={broadcast}
           />
         ) : (
           <SceneHolder text="3D-scène laden" />
@@ -309,7 +324,7 @@ export default function SiteTwin() {
 
       <KpiCards m={model} series={get} order={order} showPath={showPath} onTogglePath={() => setShowPath((s) => !s)} />
 
-      {lens ? (
+      {broadcast ? null : lens ? (
         <DatalayerPanel tab={dlTab} onTab={setDlTab} onSelect={select} onClose={() => setLens(false)} />
       ) : (
       <TabPanel
@@ -368,6 +383,7 @@ export default function SiteTwin() {
         onFollow={batch ? () => setFollow((f) => (f === BATCH_FOLLOW ? null : BATCH_FOLLOW)) : undefined}
       />
 
+      {!broadcast && (
       <CameraControls
         onZoom={(dir) => setZoom((z) => ({ n: z.n + 1, dir }))}
         onReset={() => {
@@ -375,6 +391,7 @@ export default function SiteTwin() {
           setResetSignal((n) => n + 1);
         }}
       />
+      )}
     </main>
   );
 }

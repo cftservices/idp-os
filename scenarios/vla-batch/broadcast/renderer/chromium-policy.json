@@ -1,0 +1,9 @@
+{
+  "TranslateEnabled": false,
+  "PasswordManagerEnabled": false,
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "MetricsReportingEnabled": false,
+  "PromotionsEnabled": false,
+  "BrowserSignin": 0
+}

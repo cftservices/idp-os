@@ -1,0 +1,53 @@
+# DairyWorks-livestream: eigen compose-project, los van de demo.
+#
+#   docker compose -p vla-broadcast -f scenarios/vla-batch/broadcast/docker-compose.broadcast.yml ...
+#
+# Bewust NIET in -p idp-os: een `down` of een kale `up -d` van dit project mag
+# de milkdemo nooit raken. Gebruik scenarios/vla-batch/broadcast/broadcast.sh.
+#
+# De renderer praat via idp-network rechtstreeks met vla-ui:3000, dus zonder
+# Caddy en zonder basic auth. Geen poorten naar buiten.
+name: vla-broadcast
+
+services:
+  renderer:
+    build:
+      context: ./renderer
+    image: vla-broadcast-renderer:local
+    container_name: vla-broadcast-renderer
+    restart: unless-stopped
+    # 15 fps en 2500k: de stream toont alleen 2D-schermen, die veranderen bij
+    # een data-update (elke 1,5 à 5 s), niet per frame. Meer fps kost CPU
+    # zonder dat de kijker iets ziet. Zie README.md, meetproef 20-11-2026.
+    environment:
+      MODE: ${BROADCAST_MODE:-test}
+      BROADCAST_URL: http://vla-ui:3000/broadcast
+      FPS: ${BROADCAST_FPS:-15}
+      WIDTH: ${BROADCAST_WIDTH:-1280}
+      HEIGHT: ${BROADCAST_HEIGHT:-720}
+      VIDEO_BITRATE: ${BROADCAST_BITRATE:-2500k}
+      MAX_RUNTIME: ${BROADCAST_MAX_RUNTIME:-43200}
+    # Alleen YOUTUBE_STREAM_KEY. Staat op de VPS, chmod 600, nooit in git.
+    env_file:
+      - path: /root/idp-os/.broadcast.env
+        required: false
+    # CPU-plafond: de demo gaat voor. Haalt de renderer zijn beeld niet binnen
+    # één kern, dan zakt de stream, niet de fabriek.
+    cpus: "1.0"
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    shm_size: 512mb
+    pids_limit: 512
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - idp-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  idp-network:
+    external: true
