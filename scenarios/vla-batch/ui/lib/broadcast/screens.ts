@@ -11,8 +11,7 @@
  * GPU opent /broadcast?twin=1; dan komt TWIN_SCREEN vooraan. Een Pi 5 haalt
  * daarmee 15 fps (bankproef 2, 20-11-2026).
  *
- * Grafana: anonymous staat uit, dus alleen publiek gedeelde dashboards (grafanaScreens), met de
- * token van de renderer. Zie broadcast/README.md.
+ * Grafana: via de proxy op de Pi (grafanaScreens); anonymous blijft uit. Zie broadcast/README.md.
  *
  * Titels in het Engels: de stream is EN-talig, net als de rest van de
  * DairyWorks-video's.
@@ -48,24 +47,24 @@ export const TWIN_SCREEN: BroadcastScreen = {
 };
 
 /**
- * Publiek gedeelde Grafana-dashboards (grafana/stream_board.py, grafana/pi_board.py). Alleen deze
- * uids; de token komt van de renderer (?gf=uid:token,...), niet uit git. De Pi bereikt Grafana via
- * zijn tunnel op localhost:3001; dat is het enige adres dat we toestaan.
+ * Grafana-dashboards in de Pi-carrousel. De Pi draait een kleine proxy op localhost:3002
+ * (broadcast/pi5/grafana-proxy.py) die als Viewer `stream-pi` inlogt; de browser ziet geen
+ * wachtwoord. Publieke dashboards werken niet: de TDengine-plugin vraagt vanuit de browser via
+ * /api/datasources/proxy, en dat vraagt een login (401, 20-11-2026). ?gf= noemt alleen uids.
  */
-const GRAFANA_LOCAL = "http://localhost:3001/grafana";
+const GRAFANA_LOCAL = "http://localhost:3002/grafana";
 const GRAFANA_SCREENS: Record<string, { title: string; seconds: number }> = {
   "stream-factory": { title: "Grafana: the historian behind the twin (cooking, quality, OEE)", seconds: 45 },
   "pi5-health": { title: "Grafana: the Raspberry Pi 5 that renders this stream", seconds: 30 },
 };
 
-/** "stream-factory:abc…,pi5-health:def…" → screens; onbekende uids en rare tokens vallen weg. */
+/** "stream-factory,pi5-health" → screens; onbekende uids vallen weg. */
 export function grafanaScreens(gf: string | undefined): Record<string, BroadcastScreen> {
   const out: Record<string, BroadcastScreen> = {};
-  for (const part of (gf ?? "").split(",")) {
-    const [uid, token] = part.split(":");
+  for (const uid of (gf ?? "").split(",")) {
     const meta = GRAFANA_SCREENS[uid];
-    if (!meta || !/^[a-f0-9]{32}$/.test(token ?? "")) continue;
-    out[uid] = { id: `grafana-${uid}`, title: meta.title, path: `${GRAFANA_LOCAL}/public-dashboards/${token}`, seconds: meta.seconds };
+    if (!meta) continue;
+    out[uid] = { id: `grafana-${uid}`, title: meta.title, path: `${GRAFANA_LOCAL}/d/${uid}/?kiosk&refresh=30s`, seconds: meta.seconds };
   }
   return out;
 }

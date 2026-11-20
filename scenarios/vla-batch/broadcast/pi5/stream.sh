@@ -61,9 +61,13 @@ run() {
   [ -n "${YOUTUBE_STREAM_KEY:-}" ] || { log "YOUTUBE_STREAM_KEY ontbreekt in ${SLEUTELBESTAND}"; exit 2; }
   local sleutel="$YOUTUBE_STREAM_KEY"
   unset YOUTUBE_STREAM_KEY
-  # Publiek gedeelde Grafana-dashboards (uid:token,...), via de tunnel op localhost:3001.
-  # Een publieke link heeft geen login nodig; de tokens staan alleen hier, niet in git.
-  [ -n "${GRAFANA_PUBLIC:-}" ] && URL="${URL}&gf=${GRAFANA_PUBLIC}"
+  # Grafana in de carrousel als er een Viewer-login is (GRAFANA_USER/GRAFANA_PASS): de proxy op
+  # localhost:3002 logt in en de browser krijgt alleen dashboard-uids in de URL.
+  local grafana=0
+  if [ -n "${GRAFANA_USER:-}" ] && [ -n "${GRAFANA_PASS:-}" ]; then
+    grafana=1
+    URL="${URL}&gf=stream-factory,pi5-health"
+  fi
 
   # Een losse tunnel van de bankproef houdt poort 8091 bezet; die gaat eerst weg.
   [ -f "$HOME/.bankproef-tunnel.pid" ] && kill "$(cat "$HOME/.bankproef-tunnel.pid")" 2>/dev/null || true
@@ -73,6 +77,12 @@ run() {
   ssh -i "$TUNNEL_SLEUTEL" -o IdentitiesOnly=yes -o BatchMode=yes -o ExitOnForwardFailure=yes \
     -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -N -L 8091:127.0.0.1:8091 -L 3001:127.0.0.1:3001 "$VPS" &
   local tunnel=$!
+  local pids=("$tunnel")
+  if [ "$grafana" = 1 ]; then
+    python3 "$HIER/grafana-proxy.py" &
+    pids+=($!)
+  fi
+  unset GRAFANA_PASS
   for _ in $(seq 1 30); do curl -fsS -o /dev/null --max-time 5 "$URL" && break; sleep 2; done
   curl -fsS -o /dev/null --max-time 5 "$URL" || { log "${URL} niet bereikbaar"; exit 1; }
 
@@ -135,10 +145,10 @@ run() {
   [ -n "${STOP_NA_MIN:-}" ] && looptijd=$(( STOP_NA_MIN * 60 ))
   ( sleep "$looptijd"; touch "$GEPLAND"; kill "$ff" 2>/dev/null || true ) &
   local timer=$!
-  trap 'kill "$ff" "$chrome" "$tunnel" "$timer" 2>/dev/null || true; rm -f "$masker" "$lijst"' EXIT TERM INT
+  trap 'kill "$ff" "$chrome" "${pids[@]}" "$timer" 2>/dev/null || true; rm -f "$masker" "$lijst"' EXIT TERM INT
 
   set +e
-  wait -n "$tunnel" "$chrome" "$ff"
+  wait -n "${pids[@]}" "$chrome" "$ff"
   local rc=$?
   set -e
   if [ -f "$GEPLAND" ] && [ -n "${STOP_NA_MIN:-}" ]; then

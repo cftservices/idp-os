@@ -279,7 +279,7 @@ Engelstalige schermen, samen ongeveer 7 minuten per ronde:
    altijd live. In story-modus zijn de Nederlandse balken van de twin (zoekbalk, KPI-kaarten,
    batchbalk) verborgen.
 2. **Grafana `stream-factory`** ([`grafana/stream_board.py`](../grafana/stream_board.py)):
-   kooktemperatuur, viscositeit, OEE per lijn en pakken per batch.
+   kooktemperatuur, viscositeit, OEE per lijn en pakken per batch. Alleen TDengine, geen variabelen.
 3. **Grafana `pi5-health`**: de Pi die de stream maakt.
 
 De vier 2D-schermen van vla-ui zijn Nederlands en staan alleen in de 2D-variant (`/broadcast`, de
@@ -291,30 +291,38 @@ parameter 20). libx264 ultrafast met **constante bitrate** 2500k (`-minrate` plu
 YouTube voor. Gemeten: 30 fps, 1,01x, YouTube "Excellent", twin 25,6 echte fps tijdens een
 camerabeweging, Pi rond 70 °C zonder throttling.
 
-**Grafana in de stream.** Anonymous blijft uit. Twee dashboards zijn **publiek gedeeld** (Grafana
-"shared dashboards", alleen-lezen, alleen dat ene dashboard): `stream-factory` en `pi5-health`. Een
-publiek dashboard heeft twee grenzen, beide gemeten op 20-11-2026:
+**Grafana in de stream.** Anonymous blijft uit. Op de Pi draait
+[`pi5/grafana-proxy.py`](pi5/grafana-proxy.py) op `localhost:3002`: die logt in als de Grafana-gebruiker
+`stream-pi` (rol **Viewer**) en zet de sessie bij elk verzoek naar `localhost:3001` (de tunnel). De browser
+op de Pi krijgt alleen dashboard-uids in de URL (`?gf=stream-factory,pi5-health`) en ziet nooit een
+wachtwoord. De proxy logt opnieuw in bij een 401 of een doorverwijzing naar `/login`, neemt een
+geroteerde sessie over, en laat de `Origin`-kop weg (anders weigert Grafana's CSRF-controle elke POST).
+Hij hoort bij de stream: valt hij om, dan herstart systemd het geheel.
 
-- de JSON-datasource van de batch-engine draait in de browser en geeft daar "Plugin unavailable";
-- template-variabelen worden niet ingevuld, dus `fabriek-kpi` bleef helemaal leeg.
+Publiek gedeelde dashboards zijn geprobeerd en weer ingetrokken (20-11-2026). Grafana's eigen
+API-test gaf alle panelen data, maar in de browser vraagt de TDengine-plugin zijn data op via
+`/api/datasources/proxy`, en zonder login is dat een 401: "No data" in de stream. Les: toets een
+publiek dashboard in een browser, niet alleen via de API.
 
-Daarom draait `stream-factory` alleen op TDengine en heeft het geen variabelen. De gedeelde
-`fabriek-overzicht` en `fabriek-kpi` zijn weer ingetrokken. De tokens staan op de VPS in
-`/root/.gf-public-<uid>` en op de Pi in `~/.broadcast.env` (`GRAFANA_PUBLIC=uid:token,…`), niet in
-git. vla-ui neemt alleen bekende uids en tokens van 32 hex-tekens over. De Pi bereikt Grafana via
-dezelfde tunnel op `localhost:3001`.
+Het wachtwoord van `stream-pi` staat op de VPS in `/root/.gf-stream-pi` en op de Pi in
+`~/.broadcast.env` (`GRAFANA_USER`, `GRAFANA_PASS`), beide chmod 600, niet in git. De Viewer kan alle
+dashboards lezen; alleen de Pi heeft het wachtwoord.
 
-**Muziek.** Alle mp3's in `~/music` op de Pi gaan zacht onder het beeld (`MUZIEK_VOLUME`, standaard
-0,35); zonder mp3's een stil spoor. Alleen mp3: de concat-demuxer breekt bij gemengde codecs. Geen
-`-stream_loop` maar de lijst 200 keer achter elkaar, want `-stream_loop` met concat was op de Pi
-niet betrouwbaar. Gebruik alleen muziek uit de YouTube Audio Library. Nieuwe muziek geldt na
-`stop` en `start`.
+**Muziek.** Alle mp3's in `~/music` op de Pi gaan onder het beeld; zonder mp3's een stil spoor.
+Volume via `MUZIEK_VOLUME` in `~/.broadcast.env` (standaard 0,35, bedoeld voor normaal gemasterde
+muziek). Alleen mp3: de concat-demuxer breekt bij gemengde codecs. Geen `-stream_loop` maar de
+lijst 200 keer achter elkaar, want `-stream_loop` met concat was op de Pi niet betrouwbaar. Nieuwe
+muziek geldt na `stop` en `start`.
+
+Nu staat er één zelf gegenereerd ambient-nummer (`dairyworks-ambient-01.mp3`: een rustig akkoord
+in A-mineur met een lage grondtoon, 4 minuten, gemaakt met ffmpeg `aevalsrc`, gemiddeld −24 dB, dus
+met `MUZIEK_VOLUME=1.0`). Geen rechten van derden. Andere muziek alleen uit de YouTube Audio Library.
 
 **Sleutels op de VPS** (`/root/.ssh/authorized_keys`, elke wijziging met een `.bak-*` ernaast):
 
 | Sleutel op de Pi | Mag alleen |
 |---|---|
-| `~/.ssh/pi-bankproef` | doorsturen naar `127.0.0.1:8091` (vla-ui) en `127.0.0.1:3001` (Grafana); `command="/bin/false"` |
+| `~/.ssh/pi-bankproef` | doorsturen naar `127.0.0.1:8091` (vla-ui) en `127.0.0.1:3001` (Grafana, via de proxy); `command="/bin/false"` |
 | `~/.ssh/pi-health` | `scripts/pi_ingest.py pi5` voeden (forced command): één JSON-regel per minuut |
 
 De stream key staat in `~/.broadcast.env` op de Pi (chmod 600). ffmpeg noemt bij een fout de
@@ -392,9 +400,9 @@ Uit de eerste proef kwamen ook drie fouten in de container. Alle drie zijn gerep
 
 ## Stap 2: Grafana in de carrousel (gebouwd, 20-11-2026)
 
-Gebouwd via publiek gedeelde dashboards in plaats van een ingelogde Viewer; zie
-[Streamen vanaf de Pi 5](#streamen-vanaf-de-pi-5). De renderer op de VPS toont nog geen
-Grafana: hij heeft geen tunnel naar `localhost:3001`, en de 2D-variant is daar niet op ingericht.
+Gebouwd met een ingelogde Viewer (`stream-pi`) via een proxy op de Pi; zie
+[Streamen vanaf de Pi 5](#streamen-vanaf-de-pi-5). De renderer op de VPS toont nog geen Grafana: de
+2D-variant heeft die proxy niet.
 
 ## Stap 3: bedieningsscherm (later)
 
