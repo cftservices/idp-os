@@ -536,9 +536,18 @@ def onderhoud_cbm() -> Board:
         ("$.work_orders[*].wo_id", "Werkorder", "string"), ("$.work_orders[*].equipment_id", "Machine", "string"),
         ("$.work_orders[*].line", "Lijn", "string"), ("$.work_orders[*].kind", "Soort", "string"),
         ("$.work_orders[*].priority", "Prio", "string"), ("$.work_orders[*].cause", "Oorzaak", "string"),
-        ("$.work_orders[*].status", "Status", "string"), ("$.work_orders[*].technician.name", "Monteur", "string"),
-        ("$.work_orders[*].reported_at", "Gemeld", "time"), ("$.work_orders[*].done_at", "Gereed", "time")])],
-          options={**TABLE_OPTS, "sortBy": [{"displayName": "Gemeld", "desc": True}]})
+        # Monteur via jsonata: een gemelde werkorder heeft nog geen monteur, en een JSONPath op
+        # technician.name geeft dan een kortere kolom, waarna de plugin het hele paneel weigert.
+        ("$.work_orders[*].status", "Status", "string"),
+        ('$map(work_orders, function($a){ $a.technician ? $a.technician.name : "-" })', "Monteur", "string",
+         "jsonata"),
+        ("$.work_orders[*].reported_at", "Gemeld", "time"), ("$.work_orders[*].done_at", "Gereed", "time")],
+        # het gekozen dashboardvenster, niet de laatste 100 (dan zag je maar twee dagen)
+        "since=${__from:date:iso}&until=${__to:date:iso}&limit=10000")],
+          desc="Alle werkorders die in het gekozen tijdvenster zijn gemeld, nieuwste eerst. "
+               "Mongo bewaart ze vanaf 22 oktober 2026.",
+          options={**TABLE_OPTS, "sortBy": [{"displayName": "Gemeld", "desc": True}],
+                   "footer": {"show": True, "reducer": ["count"], "fields": ["Werkorder"]}})
     return b
 
 

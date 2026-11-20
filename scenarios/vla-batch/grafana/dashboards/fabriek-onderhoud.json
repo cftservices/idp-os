@@ -494,7 +494,20 @@
           "method": "GET",
           "urlPath": "/cmms/work-orders",
           "cacheDurationSeconds": 0,
-          "params": [],
+          "params": [
+            [
+              "since",
+              "${__from:date:iso}"
+            ],
+            [
+              "until",
+              "${__to:date:iso}"
+            ],
+            [
+              "limit",
+              "10000"
+            ]
+          ],
           "fields": [
             {
               "jsonPath": "$.work_orders[*].wo_id",
@@ -539,10 +552,10 @@
               "language": "jsonpath"
             },
             {
-              "jsonPath": "$.work_orders[*].technician.name",
+              "jsonPath": "$map(work_orders, function($a){ $a.technician ? $a.technician.name : \"-\" })",
               "name": "Monteur",
               "type": "string",
-              "language": "jsonpath"
+              "language": "jsonata"
             },
             {
               "jsonPath": "$.work_orders[*].reported_at",
@@ -567,7 +580,13 @@
         "showHeader": true,
         "cellHeight": "sm",
         "footer": {
-          "show": false
+          "show": true,
+          "reducer": [
+            "count"
+          ],
+          "fields": [
+            "Werkorder"
+          ]
         },
         "sortBy": [
           {
@@ -579,7 +598,8 @@
       "datasource": {
         "type": "marcusolsson-json-datasource",
         "uid": "vla-batch-engine"
-      }
+      },
+      "description": "Alle werkorders die in het gekozen tijdvenster zijn gemeld, nieuwste eerst. Mongo bewaart ze vanaf 22 oktober 2026."
     }
   ]
 }

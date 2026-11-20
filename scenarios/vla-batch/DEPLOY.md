@@ -89,6 +89,14 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
 - **Gemeten op 2026-10-22:** `offline` 22 s (publiek daarna 502), `online` 37 s tot alles
   200 geeft. Back-up ~7 min en 1,2 GB, waarvan 1,1 GB mongo: het archief
   `dw_uns_archivearchive` (55 mln. rijen, 11 GB ongecomprimeerd, TTL 1 jaar) is het grootste deel.
+- **Bewaartermijn van het Mongo-archief: 30 dagen (sinds 2026-11-20).** Het archief was een
+  tweede kopie van de procesdata die niemand las (alles leest TDengine) en nam 92% van Mongo
+  in. Gezet met `collMod dw_uns_archivearchive expireAfterSeconds 2592000`, daarna
+  `compact`: 1,54 naar 0,44 GB, Mongo-volume 2,3 naar 1,2 GB. ⚠ MonsterMQ zet bij het
+  **aanmaken** van de collectie zelf 365 dagen (`MessageArchiveMongoDB.kt`, `expireAfter`), dus
+  na een verse installatie of een terugzet zonder deze collectie staat het weer op een jaar.
+  Opnieuw zetten met dezelfde `collMod`; de termijn controleren met
+  `db.getCollectionInfos({name: "dw_uns_archivearchive"})[0].options.expireAfterSeconds`.
   De testback-up `/root/backups/idp-os/test-2026-10-22` is gecontroleerd met `gzip -t`,
   `mongorestore --dryRun` en `tar -tzf`.
 - Na `online` duurt het ~1 min voor de site antwoordt; de autopilot vult het magazijn

@@ -598,13 +598,19 @@ def cmms_work_orders(line: str | None = Query(default=None),
                      status: str | None = Query(default=None),
                      equipment_id: str | None = Query(default=None),
                      open_only: bool = Query(default=False),
-                     limit: int = Query(default=100, ge=1, le=1000)):
+                     limit: int = Query(default=100, ge=1, le=10000),
+                     since: str | None = Query(default=None),
+                     until: str | None = Query(default=None)):
+    """Werkorders, nieuwste eerst. since/until begrenzen op het meldtijdstip (ISO met
+    tijdzone); het Grafana-paneel geeft daarmee het gekozen dashboardvenster mee."""
     c = _cmms()
+    try:
+        rows = c.list(line=_check_line(line), status=status, equipment_id=equipment_id,
+                      open_only=open_only, limit=limit, since=since, until=until)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"adapter": c.adapter.name, "status": c.status,
-            "technicians": TECHNICIANS,
-            "work_orders": c.list(line=_check_line(line), status=status,
-                                  equipment_id=equipment_id, open_only=open_only,
-                                  limit=limit)}
+            "technicians": TECHNICIANS, "work_orders": rows}
 
 
 class BreakdownRequest(BaseModel):

@@ -265,10 +265,24 @@ class CmmsConnector:
 
     def list(self, line: Optional[str] = None, status: Optional[str] = None,
              equipment_id: Optional[str] = None, open_only: bool = False,
-             limit: int = 200) -> list[dict]:
+             limit: int = 200, since: Optional[str] = None,
+             until: Optional[str] = None) -> list[dict]:
+        """Nieuwste eerst. since/until (ISO, ook Grafana's ...Z) begrenzen op reported_at."""
+        bounds = {}
+        for name, value in (("since", since), ("until", until)):
+            if value:
+                dt = _parse(value)
+                if dt is None or dt.tzinfo is None:
+                    raise ValueError(f"{name} moet een ISO-tijdstip met tijdzone zijn: {value!r}")
+                bounds[name] = dt
         rows = self.adapter.all()
         out = []
         for r in rows:
+            if bounds:
+                rep = _parse(r.get("reported_at"))
+                if rep is None or ("since" in bounds and rep < bounds["since"]) \
+                        or ("until" in bounds and rep >= bounds["until"]):
+                    continue
             if line and r.get("line") != line:
                 continue
             if status and r.get("status") != status:

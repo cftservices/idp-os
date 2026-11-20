@@ -71,6 +71,12 @@ def jsonata(doc, expr):
     if m:
         a, k, v, f = m.groups()
         return [x[f] for x in doc.get(a, []) if str(x.get(k)) == v and f in x]
+    # $map(A, function($a){ $a.x ? $a.x.y : "-" }): een geneste waarde met een vaste
+    # vervanger, zodat de kolom even lang blijft als de rest
+    m = re.fullmatch(r'\$map\((\w+), function\(\$a\)\{ \$a\.(\w+) \? \$a\.\2\.(\w+) : "([^"]*)" \}\)', expr)
+    if m:
+        a, x, y, dflt = m.groups()
+        return [(r.get(x) or {}).get(y, dflt) if r.get(x) else dflt for r in doc.get(a, [])]
     m = re.fullmatch(r"\$map\((.+), function\(\$a\)\{ \$a\.(\w+) \}\)", expr)
     if m:
         arr = jpath(doc, "$" + ("" if m.group(1) == "$" else "." + m.group(1)) + "[*]")
@@ -81,8 +87,13 @@ def jsonata(doc, expr):
 def run_json(t):
     if t.get("queryParams"):
         return None, "queryParams wordt door de plugin genegeerd, gebruik params"
-    # mirror the plugin: only `params` pairs reach the URL
-    qs = urllib.parse.urlencode([tuple(kv) for kv in t.get("params") or []])
+    # mirror the plugin: only `params` pairs reach the URL; Grafana fills in the
+    # dashboard window, here the last two days
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc)
+    win = {"${__from:date:iso}": (now - _dt.timedelta(days=2)).isoformat().replace("+00:00", "Z"),
+           "${__to:date:iso}": now.isoformat().replace("+00:00", "Z")}
+    qs = urllib.parse.urlencode([(k, win.get(v, v)) for k, v in (t.get("params") or [])])
     url = API + t["urlPath"] + ("?" + qs if qs else "")
     try:
         doc = json.load(u.urlopen(url, timeout=60))
