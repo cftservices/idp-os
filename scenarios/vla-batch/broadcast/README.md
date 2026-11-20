@@ -314,9 +314,8 @@ muziek). Alleen mp3: de concat-demuxer breekt bij gemengde codecs. Geen `-stream
 lijst 200 keer achter elkaar, want `-stream_loop` met concat was op de Pi niet betrouwbaar. Nieuwe
 muziek geldt na `stop` en `start`.
 
-Nu staat er één zelf gegenereerd ambient-nummer (`dairyworks-ambient-01.mp3`: een rustig akkoord
-in A-mineur met een lage grondtoon, 4 minuten, gemaakt met ffmpeg `aevalsrc`, gemiddeld −24 dB, dus
-met `MUZIEK_VOLUME=1.0`). Geen rechten van derden. Andere muziek alleen uit de YouTube Audio Library.
+Een zelf gegenereerd ambient-nummer (sinussen via ffmpeg `aevalsrc`) is geprobeerd en weer weggehaald:
+het klonk als één toon. `~/music` is leeg, de stream is stil. Gebruik muziek uit de YouTube Audio Library.
 
 **Sleutels op de VPS** (`/root/.ssh/authorized_keys`, elke wijziging met een `.bak-*` ernaast):
 
