@@ -94,6 +94,10 @@ class BatchRunner:
         planned_L = float(planned_L) if planned_L else recipe.basis_L
         if planned_L <= 0:
             raise ValueError("planned_L must be > 0")
+        # A started batch on a busy line used to be refused only in start_batch,
+        # AFTER the batch document existed, leaving an orphan IDLE batch behind.
+        if auto_start and self.factory_busy():
+            raise ValueError("factory line is busy with another batch")
 
         # Release-gate: check recipe status is "released"
         rec_doc = self.db.dw_recipes.find_one({"recipe_id": recipe_id})
@@ -280,6 +284,14 @@ class BatchRunner:
     START_TIMEOUT_S = 30.0
     FOLLOW_TIMEOUT_S = 900.0
 
+    def factory_busy(self) -> bool:
+        """True when the factory of this line reports a running batch over the UNS.
+        Without a connected bus (offline, selftest) nothing can be known: False."""
+        if self.bus is None or not getattr(self.bus, "connected", False):
+            return False
+        return self._bus_str("Batch", "state") in (M.DOSING, M.COOKING, M.COOLING,
+                                                   M.FILLING)
+
     def start_batch(self, batch_id: str,
                     telemetry: Optional[dict[str, Any]] = None) -> dict:
         """Send StartBatch and drive the batch to COMPLETE.
@@ -304,10 +316,8 @@ class BatchRunner:
         recipe = M.get_recipe(batch["recipe_id"])
         live = (telemetry is None and self.bus is not None
                 and getattr(self.bus, "connected", False))
-        if live:
-            fstate = self._bus_str("Batch", "state")
-            if fstate in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
-                raise ValueError("factory line is busy with another batch")
+        if live and self.factory_busy():
+            raise ValueError("factory line is busy with another batch")
 
         # started_at is provisional here: the moment of the command. In live mode the follow
         # thread moves it to the moment the factory is seen running, so the batch duration is

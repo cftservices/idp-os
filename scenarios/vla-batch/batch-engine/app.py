@@ -1205,10 +1205,19 @@ def admin_command(body: AdminCommand):
         raise HTTPException(503, "engine not initialized")
 
     if cmd == "start":
+        # Start goes through the MES, never straight to the factory: a raw
+        # StartBatch made a run the MES did not know (no batch, no CIP gate,
+        # no verdict, no EBR). The runner pushes the setpoints and sends
+        # StartBatch over OPC-UA itself.
         recipe_id = str(p.get("recipe_id") or M.get_line(line).recipes[0])
-        result = control.start_batch(recipe_id)
-        if bus is not None:
-            bus.start_batch(recipe_id)
+        try:
+            batch = _runner(line).create_batch(
+                recipe_id, p.get("planned_L"), auto_start=True,
+                operator_id=p.get("operator_id"))
+        except ValueError as e:
+            raise _refused(e)
+        result = {"batch_id": batch["batch_id"], "state": batch["state"],
+                  "order_id": batch.get("order_id"), "recipe_id": recipe_id}
     elif cmd == "stop":
         runner = _runner(line)
         active = next((b for b in runner.list_batches(line=line)

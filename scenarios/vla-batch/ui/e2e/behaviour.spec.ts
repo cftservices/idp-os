@@ -23,25 +23,70 @@ test("geen enkele request gaat naar een dubbel /api/v1-prefix", async ({ page })
   expect(bad, `dubbel prefix in: ${bad.join(", ")}`).toHaveLength(0);
 });
 
-test("de scan-gate heeft drie toestanden, niet twee", async ({ page }) => {
+type Batch = { batch_id: string; state: string; created_at?: string };
+
+async function scanCode(page: import("@playwright/test").Page, code: string) {
   await page.goto("/shopfloor");
+  await page.getByPlaceholder(/ORD-/).fill(code);
+  await page.getByRole("button", { name: "Scannen" }).click();
+}
+
+test("de scan-gate: geweigerd, order zonder batch, open, en alleen logistiek", async ({
+  page,
+  request,
+}) => {
+  // De vorige versie van deze test eindigde op `telling + 1 > 0` en kon dus
+  // nooit zakken. Ondertussen las het scherm `batch_id` uit een antwoord dat
+  // `{order, batch}` gaf, en bleef de gate altijd dicht. Elke toestand hier
+  // controleert daarom wat er WEL en wat er NIET mag staan.
 
   // 1. Weigering: een code die niet bestaat.
-  await page.getByPlaceholder(/ORD-/).fill("BESTAAT-NIET");
-  await page.getByRole("button", { name: "Scannen" }).click();
+  await scanCode(page, "BESTAAT-NIET");
   await expect(page.getByText("Geweigerd").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Gate open")).toHaveCount(0);
 
-  // 2. De middelste toestand is de reden dat deze test bestaat: een order die
-  //    wel bestaat maar nog geen batch heeft, mag NIET groen zijn. Zonder die
-  //    toestand lijkt de gate open terwijl er niets te wegen valt.
-  //    De letterlijke tekst hoort erbij, want die vertelt wat je moet doen.
-  const hint = page.getByText(/nog geen batch/i);
-  const open = page.getByText("Gate open");
-  // Afhankelijk van de databasestand is een van beide zichtbaar; het panel mag
-  // alleen open staan bij een echte gate.
-  const openCount = await open.count();
-  const hintCount = await hint.count();
-  expect(openCount + hintCount + 1).toBeGreaterThan(0);
+  // 2. Order zonder batch: neutraal, niet groen, en geen doseerpanel.
+  const order = await (
+    await request.post("/api/v1/orders", {
+      data: { recipe_id: "chocolate-vla-1L", target_qty_L: 1000 },
+    })
+  ).json();
+  await scanCode(page, order.order_id);
+  await expect(page.getByText("Order zonder batch")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/nog geen batch/i)).toBeVisible();
+  await expect(page.getByText("Gate open")).toHaveCount(0);
+  await expect(page.getByText(/1\. Doseren/)).toHaveCount(0);
+
+  const batches: Batch[] = await (await request.get("/api/v1/batches?line=L1")).json();
+  const newest = (state: (b: Batch) => boolean) =>
+    batches
+      .filter(state)
+      .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))
+      .at(-1);
+
+  // 3. Afgeronde batch: alleen het logistieke deel, geen weging meer.
+  const done = newest((b) => b.state === "COMPLETE");
+  expect(done, "geen afgeronde batch op L1 om te scannen").toBeTruthy();
+  await scanCode(page, done!.batch_id);
+  await expect(page.getByText("Batch afgerond, alleen logistiek")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText(/4\. Pallets, inslag en verzending/)).toBeVisible();
+  await expect(page.getByText(/1\. Doseren/)).toHaveCount(0);
+
+  // 4. Lopende batch: gate open, met de grondstoffen uit de engine. Tijdens
+  //    een CIP loopt er geen batch; dan valt er niets te controleren.
+  const running = newest((b) => b.state !== "COMPLETE");
+  test.info().annotations.push({
+    type: "lopende batch",
+    description: running ? running.batch_id : "geen (CIP of stilstand), stap 4 overgeslagen",
+  });
+  if (running) {
+    await scanCode(page, running.batch_id);
+    await expect(page.getByText("Gate open")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/1\. Doseren/)).toBeVisible();
+    await expect(page.getByText(/van [\d.,]+ kg/).first()).toBeVisible();
+  }
 });
 
 test("het venster staat in de URL en overleeft de terugknop", async ({ page }) => {

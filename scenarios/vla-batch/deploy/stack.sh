@@ -38,7 +38,7 @@ SITE=${SITE:-https://milkdemo.techflow24.com}
 SERVICES=(
     mongo monstermq vla-tdengine
     vla-factory vla-opcua-init vla-factory-l2 vla-l2-opcua-init
-    vla-batch-engine vla-tdengine-bridge vla-scenario
+    vla-batch-engine vla-ci-sync vla-tdengine-bridge vla-scenario
     vla-ollama vla-ai grafana vla-ui
 )
 # Antwoordsleutel van het stoomklep-scenario (vla-scenario); gaat mee in de back-up.

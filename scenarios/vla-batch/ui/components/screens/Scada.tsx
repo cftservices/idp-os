@@ -58,8 +58,11 @@ export function Scada() {
     setRefusal(null);
     setMessage(null);
     try {
-      await fn();
-      setMessage(`${label} geaccepteerd`);
+      const out = await fn();
+      // Een start meldt welke batch er in de MES is aangemaakt.
+      setMessage(
+        typeof out === "string" ? `${label} geaccepteerd: batch ${out}` : `${label} geaccepteerd`,
+      );
     } catch (e) {
       setRefusal(e as Refusal);
       setRetry(() => retryable ?? null);
@@ -125,19 +128,38 @@ export function Scada() {
       <section className="tile flex flex-col gap-3">
         <span className="eyebrow">Lijnbesturing</span>
         <div className="flex flex-wrap gap-2">
-          {(["start", "stop"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                run(() => cmd({ equipment_id: "Batch", cmd: c, params: {} }), c, undefined)
-              }
-              className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
-            >
-              {c === "start" ? "Start" : "Stop"}
-            </button>
-          ))}
+          {/* Start maakt een batch in de MES (met order, CIP-poort en verdict) en
+              start die; hij stuurt de fabriek nooit buiten de MES om. */}
+          <button
+            type="button"
+            disabled={busy || !looseRecipe}
+            title={`Batch ${looseRecipe} in de MES aanmaken en starten`}
+            onClick={() =>
+              run(async () => {
+                const r = (await cmd({
+                  equipment_id: "Batch",
+                  cmd: "start",
+                  params: { recipe_id: looseRecipe, operator_id: OPERATOR },
+                })) as { opcua?: { batch_id?: string } };
+                return r.opcua?.batch_id;
+              }, "start")
+            }
+            className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+          >
+            Start
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => cmd({ equipment_id: "Batch", cmd: "stop", params: {} }), "stop")}
+            className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+          >
+            Stop
+          </button>
+          <span className="self-center text-[0.8125rem] text-ink-muted">
+            Start maakt een batch <span className="mono">{looseRecipe}</span> in de MES, met de
+            CIP-poort en een verdict.
+          </span>
           <button
             type="button"
             disabled={busy}

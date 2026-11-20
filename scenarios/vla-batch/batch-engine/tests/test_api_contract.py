@@ -95,3 +95,30 @@ def test_ack_all_route_acks_open_alarms_and_rejects_unknown_priority():
         assert set(body) == {"acknowledged", "alarm_ids"}
         assert body["acknowledged"] == len(body["alarm_ids"])
         assert c.get("/api/v1/alarms", params={"state": "open"}).json() == []
+
+
+def test_admin_start_creates_a_mes_batch_not_a_raw_factory_run():
+    """The SCADA Start button: the run must exist in the MES, with an order,
+    and pass the CIP gate like any other batch."""
+    with client() as c:
+        assert c.post("/api/v1/equipment/cook-unit-01/cip",
+                      json={"operator_id": "OP-7"}).status_code == 200
+        r = c.post("/api/v1/admin/command", json={
+            "equipment_id": "Batch", "cmd": "start",
+            "params": {"line": "L1", "operator_id": "OP-7"}})
+        assert r.status_code == 200, r.text
+        started = r.json()["opcua"]
+        bid = started["batch_id"]
+        batch = c.get(f"/api/v1/batches/{bid}").json()
+        assert batch["line"] == "L1" and batch["order_id"] == started["order_id"]
+        assert batch["created_by"] == "OP-7"
+
+        # the CIP gate applies to Start as well
+        mon = appmod.STATE["equipment"]
+        mon.db.dw_equipment_meta.update_one(
+            {"equipment_id": "cook-unit-01"}, {"$set": {"dirty": True}})
+        r2 = c.post("/api/v1/admin/command", json={
+            "equipment_id": "Batch", "cmd": "start", "params": {"line": "L1"}})
+        assert r2.status_code == 400
+        assert r2.json()["detail"]["reason"] == "cip_required"
+        c.post("/api/v1/equipment/cook-unit-01/cip", json={"operator_id": "OP-7"})
