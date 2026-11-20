@@ -307,7 +307,8 @@ services:
     volumes:
       - vla-tdengine-data:/var/lib/taos
       - vla-tdengine-log:/var/log/taos
-    mem_limit: 640m
+    # 640m zat op 19-11-2026 op 92-96% (585-613 MiB); verhoogd naar 768m.
+    mem_limit: 768m
     networks:
       - idp-network
     healthcheck:
