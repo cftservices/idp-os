@@ -513,7 +513,7 @@ function RackRow({ z, origin }: { z: number; origin: [number, number] }) {
 }
 
 export function ColdStore({ logistics, visual, transit }: { logistics: Logistics; visual: Visual; transit: Transit }) {
-  const { palette } = useTwin();
+  const { palette, broadcast } = useTwin();
   const [x0, z0] = COLDSTORE.min;
   const [x1, z1] = COLDSTORE.max;
   const [door0, door1] = COLDSTORE.door;
@@ -601,11 +601,13 @@ export function ColdStore({ logistics, visual, transit }: { logistics: Logistics
           <RackPallet key={hu.hu_id} hu={hu} slot={slot} transit={transit} origin={origin} />
         ))}
         {/* Op de achterwand: de voorkant boven de docks is van de dockchips. */}
-        <Html position={[cx - origin[0], h + 0.4, z0 + 0.6 - origin[1]]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-          <div className="twin-chip" data-twin-occupancy={logistics.rack.length}>
-            {logistics.rack.length}/{RACK_SLOTS} vakken · {logistics.totals.packsStored.toLocaleString("nl-NL")} packs
-          </div>
-        </Html>
+        {!broadcast && (
+          <Html position={[cx - origin[0], h + 0.4, z0 + 0.6 - origin[1]]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+            <div className="twin-chip" data-twin-occupancy={logistics.rack.length}>
+              {logistics.rack.length}/{RACK_SLOTS} vakken · {logistics.totals.packsStored.toLocaleString("nl-NL")} packs
+            </div>
+          </Html>
+        )}
       </Pickable>
     </group>
   );
@@ -935,8 +937,8 @@ function DockChip({
   total: number;
   ship?: SimShipment;
 }) {
-  const { labelled } = useTwin();
-  if (labelled.has(id)) return null;
+  const { labelled, broadcast } = useTwin();
+  if (broadcast || labelled.has(id)) return null;
   const cargo = cargoLine(ship);
   // De docks staan 3,4 m uit elkaar en de chips zijn veel breder. Alle chips hangen daarom aan
   // hetzelfde punt boven het midden van de dockrij en staan in pixels onder elkaar: een dockbord,
@@ -954,9 +956,9 @@ function DockChip({
 
 /** Chip boven een vertrekkende truck: welke order en klant hij vervoert. */
 function TruckChip({ id, ship, lane = 0 }: { id: string; ship: SimShipment; lane?: number }) {
-  const { labelled } = useTwin();
+  const { labelled, broadcast } = useTwin();
   // Vertrekkende trucks rijden achter elkaar; alleen de voorste draagt een chip, de rest via hover.
-  if (labelled.has(id) || lane > 0) return null;
+  if (broadcast || labelled.has(id) || lane > 0) return null;
   return (
     <Html position={[0, 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
       <div className="twin-chip">

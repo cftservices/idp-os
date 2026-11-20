@@ -249,13 +249,16 @@ export default function SiteTwin() {
     if (follow === BATCH_FOLLOW && !model.batch) setFollow(null);
   }, [follow, model]);
 
-  const labelled = useMemo(() => labelBudget(items, selected, hovered, lens ? 0 : 6), [items, selected, hovered, lens]);
+  const labelled = useMemo(
+    () => labelBudget(items, selected, hovered, lens || broadcast ? 0 : 6),
+    [items, selected, hovered, lens, broadcast],
+  );
   const meta = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.meta])), [items]);
 
   const ctx: TwinCtx | null = useMemo(
     () =>
-      palette ? { palette, selected, hovered, select, hover: setHovered, reducedMotion, labelled, meta } : null,
-    [palette, selected, hovered, select, reducedMotion, labelled, meta],
+      palette ? { palette, selected, hovered, select, hover: setHovered, reducedMotion, labelled, meta, broadcast } : null,
+    [palette, selected, hovered, select, reducedMotion, labelled, meta, broadcast],
   );
 
   const tour = tourId ? TOURS[tourId] : null;

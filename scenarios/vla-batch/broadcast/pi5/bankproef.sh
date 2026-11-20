@@ -20,7 +20,7 @@
 # Stuurt niets naar YouTube en wijzigt niets op de VPS. Exitcode 0 = go, 1 = no-go, 2 = opzet fout.
 set -euo pipefail
 
-URL="${URL:-http://localhost:8091/site?broadcast=1}"
+URL="${URL:-http://localhost:8091/site?broadcast=1&embed=1}"
 DUUR="${DUUR:-15}"                 # minuten
 FPS="${FPS:-15}"
 BITRATE="${BITRATE:-2500k}"
@@ -68,7 +68,21 @@ OUTPUT=$(awk '/ connected/ { print $1; exit }' <<<"$XRANDR")
 [ -n "$OUTPUT" ] || stop "geen scherm aangesloten. Zonder HDMI-monitor of HDMI-dummy draait er geen GPU-sessie"
 MODI=$(awk -v o="$OUTPUT" '$1 == o { f = 1; next } f && /^[^ ]/ { exit } f { print $1 }' <<<"$XRANDR")
 MODE_OUD=$(awk -v o="$OUTPUT" '$1 == o { f = 1; next } f && /^[^ ]/ { exit } f && /\*/ { print $1; exit }' <<<"$XRANDR")
-grep -qx "${BREEDTE}x${HOOGTE}" <<<"$MODI" || stop "${OUTPUT} kent geen ${BREEDTE}x${HOOGTE}"
+# Een geforceerde uitgang zonder scherm (video=HDMI-A-1:...D) heeft geen EDID en biedt dan
+# alleen 1024x768. 1280x720 voegen we zelf toe; de modeline komt van `cvt 1280 720 60`.
+MODE_NIEUW="${BREEDTE}x${HOOGTE}"
+if ! grep -qx "$MODE_NIEUW" <<<"$MODI"; then
+  if grep -qx "${MODE_NIEUW}_60.00" <<<"$MODI"; then
+    MODE_NIEUW="${MODE_NIEUW}_60.00"
+  elif [ "$MODE_NIEUW" = 1280x720 ]; then
+    log "${OUTPUT} kent geen 1280x720 (geen EDID); ik voeg die mode toe"
+    xrandr --newmode 1280x720_60.00 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
+    xrandr --addmode "$OUTPUT" 1280x720_60.00 || stop "kan 1280x720 niet toevoegen aan ${OUTPUT}"
+    MODE_NIEUW=1280x720_60.00
+  else
+    stop "${OUTPUT} kent geen ${MODE_NIEUW}"
+  fi
+fi
 XSET=$(xset q)
 SS_OUD=$(awk '/timeout:/ { print $2; exit }' <<<"$XSET")
 DPMS_OUD=0; grep -q "DPMS is Enabled" <<<"$XSET" && DPMS_OUD=1
@@ -87,7 +101,7 @@ opruimen() {
 }
 trap opruimen EXIT
 
-xrandr --output "$OUTPUT" --mode "${BREEDTE}x${HOOGTE}"
+xrandr --output "$OUTPUT" --mode "$MODE_NIEUW"
 xset s off
 xset -dpms
 
