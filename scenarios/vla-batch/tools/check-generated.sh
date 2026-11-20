@@ -29,6 +29,27 @@ else
   FAIL=1
 fi
 
+# Grafana: de fabriek-*.json zijn uitvoer van build_dashboards.py (+ kpi_boards.py).
+echo "[check] Grafana-dashboards tegen hun generator..."
+if python grafana/build_dashboards.py --check; then
+  echo "[check] OK: dashboards actueel"
+else
+  echo "[check] FOUT: draai python grafana/build_dashboards.py"
+  FAIL=1
+fi
+
+# De BVIP-catalogus staat in een andere repo. Alleen als die er is (BVIP_CATALOGUE of de
+# standaardlocatie), anders overgeslagen: CI heeft die checkout niet.
+echo "[check] BVIP-catalogussnapshot..."
+rc=0
+python tools/sync-bvip-catalogue.py --check || rc=$?   # set -e: zonder || stopt het script hier
+if [ "$rc" -eq 1 ]; then
+  echo "[check] FOUT: draai python tools/sync-bvip-catalogue.py"
+  FAIL=1
+elif [ "$rc" -eq 2 ]; then
+  echo "[check] OVERGESLAGEN: catalogus niet beschikbaar"
+fi
+
 # --------------------------------------------------------- 2. anonimisatie
 # De denylist. Bewust breed: liever een vals alarm dan een echte naam in een
 # publieke demo. Staat een term hier terecht in (bijvoorbeeld in een citaat),
@@ -44,7 +65,14 @@ factory-model/park-aliases.json
 factory-model/park-conditioning.json
 factory-model/park-faults.json
 monstermq-init/init-park.sh
-monstermq-init/init-vla-opcua.sh"
+monstermq-init/init-vla-opcua.sh
+batch-engine/vla/bvip_catalogue.json
+grafana/dashboards/fabriek-kpi.json
+grafana/dashboards/fabriek-kpi-productie.json
+grafana/dashboards/fabriek-kpi-kwaliteit.json
+grafana/dashboards/fabriek-kpi-onderhoud.json
+grafana/dashboards/fabriek-kpi-energie.json
+grafana/dashboards/fabriek-kpi-proces.json"
 
 echo "[check] anonimisatie..."
 for f in $TARGETS; do

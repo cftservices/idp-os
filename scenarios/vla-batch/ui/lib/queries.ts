@@ -56,6 +56,7 @@ export const keys = {
   kpi: (window: string, compare: boolean) => ["kpi", window, compare] as const,
   model: ["ui", "model"] as const,
   logistics: ["logistics"] as const,
+  demoPause: ["demo-pause"] as const,
 };
 
 type Extra<T> = Omit<UseQueryOptions<T, Refusal, T>, "queryKey" | "queryFn">;
@@ -204,6 +205,25 @@ export function useForkliftHistory(id: string | null, extra?: Extra<ForkliftHist
 }
 
 /** Detail bevriest de lijst-loop: zie useBatches(frozen). */
+/** Demomodus per lijn (vla/demo_pause.py): een presentator heeft de lijn, de autopilot niet. */
+export type DemoPauseLine = {
+  line: string;
+  paused: boolean;
+  until: string | null;
+  since: string | null;
+  by: string | null;
+  minutes_left: number;
+};
+
+export function useDemoPause(extra?: Extra<Record<string, DemoPauseLine>>) {
+  return usePolled<Record<string, DemoPauseLine>>(
+    keys.demoPause,
+    "/demo/pause",
+    POLL.lists,
+    extra,
+  );
+}
+
 export function useBatch<T = Record<string, unknown>>(id: string | null, extra?: Extra<T>) {
   return usePolled<T>(keys.batch(id ?? "none"), `/batches/${id}`, POLL.lists, {
     enabled: Boolean(id),

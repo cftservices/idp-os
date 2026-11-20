@@ -71,6 +71,82 @@
                         "setpoint": 3.5
                       }
                     ]
+                  },
+                  {
+                    "id": "WC-PAST-01",
+                    "name": "Intake pasteuriser 01",
+                    "equipment_id": "pasteurizer-01",
+                    "physics_type": "plate-heat-exchanger",
+                    "process_type": "continuous",
+                    "description": "Pasteur op de melk uit de silo, met regeneratie; vervuilt met draaiuren, CIP reinigt. SYNTHETISCH (fase 3).",
+                    "mqtt_namespace": "DairyWorks/Vla/Receiving/pasteurizer-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Receiving.pasteurizer-01",
+                    "tags": [
+                      {
+                        "id": "pasteurizer-01:product_flow_kg_s",
+                        "display_name": "Productdebiet",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/product_flow_kg_s",
+                        "engineering_unit": "kg/s",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:cold_t_in_C",
+                        "display_name": "Melk in (koud)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/cold_t_in_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:regen_t_out_C",
+                        "display_name": "Na regeneratie",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/regen_t_out_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:hold_t_C",
+                        "display_name": "Houdtemperatuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/hold_t_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:hot_t_in_C",
+                        "display_name": "Heet water in",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/hot_t_in_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:hot_t_out_C",
+                        "display_name": "Heet water uit",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/hot_t_out_C",
+                        "engineering_unit": "°C",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:dp_bar",
+                        "display_name": "Drukval",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/dp_bar",
+                        "engineering_unit": "bar",
+                        "writable": false
+                      },
+                      {
+                        "id": "pasteurizer-01:run_h_since_cip",
+                        "display_name": "Draaiuren sinds CIP",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Receiving/pasteurizer-01/Status/run_h_since_cip",
+                        "engineering_unit": "h",
+                        "writable": false
+                      }
+                    ]
                   }
                 ]
               },
@@ -335,6 +411,153 @@
                         "engineering_unit": "L",
                         "writable": false,
                         "setpoint": 1.0
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "AREA-UTIL",
+                "name": "Utilities",
+                "description": "Energie- en watermeters en het CIP-station van de lijn. SYNTHETISCH (fase 3).",
+                "work_centers": [
+                  {
+                    "id": "WC-EMTR-01",
+                    "name": "Energy meter 01",
+                    "equipment_id": "energy-meter-01",
+                    "physics_type": "meter",
+                    "process_type": "continuous",
+                    "description": "Tellers: gas naar de ketel, elektriciteit, stoom.",
+                    "mqtt_namespace": "DairyWorks/Vla/Utilities/energy-meter-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Utilities.energy-meter-01",
+                    "tags": [
+                      {
+                        "id": "energy-meter-01:heat_kwh_total",
+                        "display_name": "Gas (ketel)",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/energy-meter-01/Status/heat_kwh_total",
+                        "engineering_unit": "kWh",
+                        "writable": false
+                      },
+                      {
+                        "id": "energy-meter-01:electricity_kwh_total",
+                        "display_name": "Elektriciteit",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/energy-meter-01/Status/electricity_kwh_total",
+                        "engineering_unit": "kWh",
+                        "writable": false
+                      },
+                      {
+                        "id": "energy-meter-01:steam_kg_total",
+                        "display_name": "Stoom",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/energy-meter-01/Status/steam_kg_total",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      }
+                    ]
+                  },
+                  {
+                    "id": "WC-WMTR-01",
+                    "name": "Water meter 01",
+                    "equipment_id": "water-meter-01",
+                    "physics_type": "meter",
+                    "process_type": "continuous",
+                    "description": "Teller: water (CIP).",
+                    "mqtt_namespace": "DairyWorks/Vla/Utilities/water-meter-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Utilities.water-meter-01",
+                    "tags": [
+                      {
+                        "id": "water-meter-01:water_L_total",
+                        "display_name": "Water",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/water-meter-01/Status/water_L_total",
+                        "engineering_unit": "L",
+                        "writable": false
+                      }
+                    ]
+                  },
+                  {
+                    "id": "WC-CIP-01",
+                    "name": "CIP station 01",
+                    "equipment_id": "cip-station-01",
+                    "physics_type": "cip",
+                    "process_type": "continuous",
+                    "description": "Reiniging in plaats: vijf stappen, ~60 procesminuten; verbruik van de laatste cyclus.",
+                    "mqtt_namespace": "DairyWorks/Vla/Utilities/cip-station-01/Status",
+                    "opcua_node_base": "ns=2;s=DairyWorks.Vla.Utilities.cip-station-01",
+                    "tags": [
+                      {
+                        "id": "cip-station-01:step",
+                        "display_name": "Stap",
+                        "opcua_datatype": "String",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/step",
+                        "engineering_unit": "",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:cip_count",
+                        "display_name": "Aantal reinigingen",
+                        "opcua_datatype": "Int64",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/cip_count",
+                        "engineering_unit": "count",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_water_L",
+                        "display_name": "Laatste: water",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_water_L",
+                        "engineering_unit": "L",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_caustic_kg",
+                        "display_name": "Laatste: loog",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_caustic_kg",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_acid_kg",
+                        "display_name": "Laatste: zuur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_acid_kg",
+                        "engineering_unit": "kg",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_heat_kwh",
+                        "display_name": "Laatste: gas",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_heat_kwh",
+                        "engineering_unit": "kWh",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_electricity_kwh",
+                        "display_name": "Laatste: elektriciteit",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_electricity_kwh",
+                        "engineering_unit": "kWh",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_duration_s",
+                        "display_name": "Laatste: duur",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_duration_s",
+                        "engineering_unit": "s",
+                        "writable": false
+                      },
+                      {
+                        "id": "cip-station-01:last_past_run_h",
+                        "display_name": "Laatste: pasteur-draaiuren",
+                        "opcua_datatype": "Double",
+                        "mqtt_topic": "DairyWorks/Vla/Utilities/cip-station-01/Status/last_past_run_h",
+                        "engineering_unit": "h",
+                        "writable": false
                       }
                     ]
                   }
@@ -2389,7 +2612,24 @@
     "value_per_pack": 0.62,
     "cost_per_kg_material": { "MILK": 0.48, "SUGAR": 0.85, "STARCH": 1.60, "COCOA": 4.20 },
     "cost_per_downtime_hour": 450.0,
-    "rework_cost_per_batch": 620.0
+    "rework_cost_per_batch": 620.0,
+    "labour_cost_per_hour": 75.0,
+    "parts_cost_per_breakdown": { "receiving": 180.0, "process": 250.0, "cook": 400.0, "cooler": 300.0, "filler": 220.0 },
+    "asset_replacement_value": { "receiving": 120000.0, "process": 180000.0, "cook": 350000.0, "cooler": 220000.0, "filler": 450000.0 },
+    "gas_price_per_kwh": 0.06,
+    "electricity_price_per_kwh": 0.18,
+    "water_price_per_m3": 2.5,
+    "caustic_price_per_kg": 0.55,
+    "acid_price_per_kg": 0.9,
+    "cip_labour_hours": 0.5,
+    "sales_price_per_pack": 1.35,
+    "co2_kg_per_kwh": { "gas": 0.202, "electricity": 0.35 }
   },
-  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld."
+  "process_constants": {
+    "product_cp_kj_kg_k": 3.85,
+    "pasteuriser_area_m2": 14.0,
+    "pasteuriser_ref_flow_kg_s": 11.0,
+    "_bron": "Gelijk aan de constanten in factory/physics.py (CP_PRODUCT_KJ_KG_K, PAST_AREA_M2, PAST_REF_FLOW_KG_S). De engine kent zo het ontwerp van de wisselaar, maar meet U en Rf zelf uit de signalen."
+  },
+  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld. Onderhoudskosten (labour_cost_per_hour, parts_cost_per_breakdown per machinerol, asset_replacement_value per machinerol) zijn per 2026-11-19 toegevoegd voor KPI-MNT-002/004, met dezelfde status: demo-aanname, geen meting. Idem voor energie-, water- en chemieprijzen, CO2-factoren (gas 0,202 en elektriciteit 0,35 kg/kWh), CIP-arbeid en verkoopprijs per pak (fase 3), en voor process_constants."
 }

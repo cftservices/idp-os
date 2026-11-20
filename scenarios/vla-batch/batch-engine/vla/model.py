@@ -37,6 +37,10 @@ IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE = (
     "IDLE", "DOSING", "COOKING", "COOLING", "FILLING", "COMPLETE",
 )
 BATCH_STATES = [IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE]
+# MES-only end state (ISA-88 "Aborted"): the factory never ran the batch, so nothing is
+# booked for it. The factory itself never reports ABORTED.
+ABORTED = "ABORTED"
+FINISHED_STATES = (COMPLETE, ABORTED)
 
 # ---------------------------------------------------------------------------
 # Equipment-state classification — THE single source of truth.

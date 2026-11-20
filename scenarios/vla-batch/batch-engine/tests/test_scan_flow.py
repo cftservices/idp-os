@@ -94,3 +94,55 @@ def test_scan_endpoint_rejection_shape():
     body = r.json()["detail"]
     assert body["reason"] == "unknown"
     assert "scan rejected" in body["message"]
+
+
+# --- the shop-floor screen reads flat fields: batch_id, phase, materials ---
+
+def _finish(runner, batch_id, peak=88.0):
+    runner.start_batch(batch_id, telemetry={
+        "peak_cook_temp_C": peak, "hold_elapsed_sec": 300.0,
+        "packs_total": 4980, "reject_count": 20,
+        "dose_actuals": {"milk": 5000.0, "sugar": 500.0, "starch": 250.0, "cocoa": 100.0}})
+
+
+def test_order_scan_returns_open_batch_with_materials():
+    db, runner, flow, o, b = setup()
+    flow.weigh(b["batch_id"], "cocoa", qty_kg=60.0, lot_no="L-1", operator_id="OP-7")
+    r = flow.scan_order(o["order_id"], operator_id="OP-7")
+    assert r["batch_id"] == b["batch_id"] and r["order_id"] == o["order_id"]
+    assert r["phase"] == "dosing"
+    cocoa = next(m for m in r["materials"] if m["material_id"] == "cocoa")
+    assert cocoa["qty_target"] == 100.0 and cocoa["qty_staged"] == 60.0
+    assert cocoa["remaining"] == 40.0
+
+
+def test_order_without_batch_has_no_batch_id():
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    orders = OrderManager(db, bus=None)
+    runner = BatchRunner(db, bus=None, rng=random.Random(10), orders=orders)
+    flow = ScanFlow(db, runner, orders)
+    o = orders.create_order("chocolate-vla-1L", target_qty_L=5000)
+    r = flow.scan_order(o["order_id"], operator_id="OP-7")
+    assert r["ok"] is True and r["batch_id"] is None and r["phase"] is None
+    assert r["materials"] == []
+
+
+def test_complete_batch_opens_logistics_not_dosing():
+    db, runner, flow, o, b = setup()
+    _finish(runner, b["batch_id"])
+    r = flow.scan_order(b["batch_id"], operator_id="OP-7")
+    assert r["batch_id"] == b["batch_id"] and r["phase"] == "logistics"
+    assert r["materials"] == []
+    # scanning the order picks the same finished batch while the order is open
+    assert flow.scan_order(o["order_id"], operator_id="OP-7")["phase"] == "logistics"
+
+
+def test_closed_order_is_refused_but_its_batch_still_scans():
+    db, runner, flow, o, b = setup()
+    _finish(runner, b["batch_id"])
+    flow.orders.close_order(o["order_id"])
+    with pytest.raises(ScanRejected) as ei:
+        flow.scan_order(o["order_id"], operator_id="OP-7")
+    assert ei.value.reason == "not_active"
+    assert flow.scan_order(b["batch_id"], operator_id="OP-7")["phase"] == "logistics"

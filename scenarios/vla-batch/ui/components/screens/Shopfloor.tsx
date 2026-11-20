@@ -33,13 +33,20 @@ import type { Refusal } from "@/lib/refusal";
  *
  * Die middelste is er bewust ingezet om vals-groen te voorkomen. Zonder hem
  * lijkt de gate open terwijl er niets te wegen valt.
+ *
+ * Een AFGERONDE batch opent alleen het logistieke deel (pallet, inslag,
+ * verzending): wegen en boeken kan daar niet meer. Ook een afgekeurde batch
+ * opent zo, met opzet: de weigering "niet goedgekeurd" bij de pallet is het
+ * punt dat de demo laat zien.
  */
 
-type GateState = "idle" | "open" | "no-batch" | "rejected";
+type GateState = "idle" | "open" | "logistics" | "no-batch" | "rejected";
 
+/** Antwoord van POST /scan/order (vla/scan.py scan_order). */
 type ScanResult = {
-  order_id?: string;
+  order_id?: string | null;
   batch_id?: string | null;
+  phase?: "dosing" | "logistics" | null;
   materials?: Array<{
     material_id: string;
     qty_target: number;
@@ -115,8 +122,11 @@ export function Shopfloor() {
   const [sampleType, setSampleType] = useState<string>("viscosity");
   const [packs, setPacks] = useState(100);
   const [huPacks, setHuPacks] = useState(50);
+  const [lot, setLot] = useState("");
+  const [labelMaterial, setLabelMaterial] = useState("");
 
-  const batchId = gate === "open" ? (result?.batch_id ?? null) : null;
+  const batchId =
+    gate === "open" || gate === "logistics" ? (result?.batch_id ?? null) : null;
   const batch = useBatch<BatchDetail>(batchId);
   const samples = useSamples<Sample[]>(batchId);
   const hus = useHandlingUnits<Hu[]>(batchId);
@@ -149,7 +159,9 @@ export function Shopfloor() {
       const res = await post<ScanResult>("/scan/order", { code, operator_id: OPERATOR });
       setResult(res);
       // De middelste toestand: order gevonden, batch nog niet.
-      setGate(res.batch_id ? "open" : "no-batch");
+      setGate(
+        !res.batch_id ? "no-batch" : res.phase === "logistics" ? "logistics" : "open",
+      );
       // De code in de URL houden maakt de dienst deelbaar en overleeft een
       // refresh op de tablet.
       const next = new URLSearchParams(params.toString());
@@ -164,6 +176,23 @@ export function Shopfloor() {
     }
   }
 
+  /** Een losse labelscan. Een grondstof die niet in het recept zit weigert. */
+  async function scanLabel(e: React.FormEvent) {
+    e.preventDefault();
+    const material = labelMaterial.trim();
+    if (!batchId || !material || !lot.trim()) return;
+    await run(
+      () =>
+        post("/scan/label", {
+          batch_id: batchId,
+          material_id: material,
+          lot_no: lot.trim(),
+          operator_id: OPERATOR,
+        }),
+      `Label ${material}`,
+    );
+  }
+
   async function weigh(materialId: string, qty: number, total: boolean) {
     if (!batchId) return;
     await run(async () => {
@@ -172,17 +201,31 @@ export function Shopfloor() {
       await post("/scan/label", {
         batch_id: batchId,
         material_id: materialId,
-        lot_no: "L-0000",
+        lot_no: lot.trim(),
         operator_id: OPERATOR,
       });
-      await post("/scan/weigh", {
+      const g = await post<{ booked: number; remaining: number }>("/scan/weigh", {
         batch_id: batchId,
         material_id: materialId,
         qty_kg: total ? null : qty,
-        lot_no: "L-0000",
+        lot_no: lot.trim(),
         operator_id: OPERATOR,
         total,
       });
+      // De weging geeft de nieuwe stand terug; zonder dit blijft de regel
+      // de stand van het scanmoment tonen.
+      setResult((r) =>
+        r
+          ? {
+              ...r,
+              materials: (r.materials ?? []).map((m) =>
+                m.material_id === materialId
+                  ? { ...m, qty_staged: g.booked, remaining: g.remaining }
+                  : m,
+              ),
+            }
+          : r,
+      );
     }, materialId);
   }
 
@@ -242,6 +285,9 @@ export function Shopfloor() {
 
         <span className="flex items-center gap-2">
           {gate === "open" && <StatusPill status="ok">Gate open</StatusPill>}
+          {gate === "logistics" && (
+            <StatusPill status="done">Batch afgerond, alleen logistiek</StatusPill>
+          )}
           {/* NEUTRAAL, niet groen en niet rood. */}
           {gate === "no-batch" && <StatusPill status="idle">Order zonder batch</StatusPill>}
           {gate === "rejected" && <StatusPill status="alarm">Geweigerd</StatusPill>}
@@ -272,8 +318,17 @@ export function Shopfloor() {
 
       {/* Panel alleen open bij een echte gate. De kaarten worden geleegd zodra
           de gate dat niet is, anders blijft er oude context staan. */}
-      {gate === "open" && batchId && (
+      {(gate === "open" || gate === "logistics") && batchId && (
         <>
+          {gate === "logistics" && (
+            <p className="text-[0.8125rem] text-ink-muted">
+              Batch <span className="mono">{batchId}</span> is afgerond
+              {batch.data?.verdict ? ` (${batch.data.verdict})` : ""}: wegen, monsters en
+              productie boeken kan niet meer. Alleen pallets, inslag en verzending.
+            </p>
+          )}
+          {gate === "open" && (
+          <>
           <section className="tile flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="eyebrow">
@@ -284,6 +339,40 @@ export function Shopfloor() {
                 <CrossLink href={`/batches?batch=${batchId}`}>batchdetail</CrossLink>
               </span>
             </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-[0.8125rem]">
+                Lotnummer
+                <input
+                  value={lot}
+                  onChange={(e) => setLot(e.target.value)}
+                  placeholder="van het grondstoflabel"
+                  className="w-44 border border-line-strong bg-surface px-2 py-1.5 mono"
+                />
+              </label>
+              <form onSubmit={scanLabel} className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1 text-[0.8125rem]">
+                  Label scannen
+                  <input
+                    value={labelMaterial}
+                    onChange={(e) => setLabelMaterial(e.target.value)}
+                    placeholder="grondstof, bv. cocoa"
+                    className="w-44 border border-line-strong bg-surface px-2 py-1.5 mono"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={busy || !labelMaterial.trim() || !lot.trim()}
+                  className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+                >
+                  Scan
+                </button>
+              </form>
+            </div>
+            {!lot.trim() && (
+              <p className="text-[0.6875rem] text-ink-faint">
+                Elke weging draagt het lot van de grondstof: vul eerst het lotnummer in.
+              </p>
+            )}
             {(result?.materials ?? []).map((m) => (
               <div
                 key={m.material_id}
@@ -301,7 +390,8 @@ export function Shopfloor() {
                 </span>
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || !lot.trim()}
+                  title={lot.trim() ? undefined : "Vul eerst het lotnummer van het label in"}
                   onClick={() => weigh(m.material_id, m.remaining ?? m.qty_target, true)}
                   className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase hover:border-ink-muted disabled:opacity-40"
                 >
@@ -434,6 +524,9 @@ export function Shopfloor() {
               weigert het sluiten van de order.
             </p>
           </section>
+
+          </>
+          )}
 
           <section className="tile flex flex-col gap-3">
             <span className="eyebrow">4. Pallets, inslag en verzending</span>

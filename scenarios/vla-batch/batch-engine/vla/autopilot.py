@@ -44,6 +44,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from vla import demo_pause
 from vla import model as M
 from vla.equipment import EQUIPMENT_IDS, CipRequired
 from vla.logistics_sim import CUSTOMERS
@@ -52,6 +53,7 @@ log = logging.getLogger("vla.autopilot")
 
 OPERATOR = "autopilot"
 RUNNING = (M.DOSING, M.COOKING, M.COOLING, M.FILLING)
+FACTORY_CIP = "CIP"   # factory batch state while it cleans in place (fase 3)
 # Customer orders: size in batches (cycled) and delivery deadline. At ~2 min
 # a batch an order of 12 takes ~25 min, well inside the lead time.
 ORDER_BATCHES = (6, 8, 10, 12)
@@ -59,6 +61,9 @@ ORDER_LEAD_HOURS = 2.0
 # A running batch nobody follows any more (engine restart) is dropped after
 # this, instead of staying COOKING/COOLING in every list until keep_hours.
 ORPHAN_PRUNE_S = 3600.0
+# While a line is paused for a demo, the factory's self-chaining is held off again at
+# this interval: a factory restart turns it back on.
+AUTOSTART_REASSERT_S = 60.0
 # collections whose rows belong to one batch (pruned with the batch)
 BATCH_COLLECTIONS = ("dw_doses", "dw_samples", "dw_batch_events", "dw_alarms",
                      "dw_handling_units", "dw_production", "dw_shipments")
@@ -116,6 +121,9 @@ class Autopilot:
         self.warehouse = warehouse
         self._idle_since: Optional[float] = None
         self._last_prune: Optional[float] = None
+        # demo pause: None = not yet told, True/False = what the factory was last told
+        self._autostart: Optional[bool] = None
+        self._autostart_at: Optional[float] = None
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self.status: dict = {"enabled": True, "line": self.line.line_id,
@@ -127,7 +135,8 @@ class Autopilot:
                              "prep": prep is not None, "last_prep_id": None,
                              "last_error": None,
                              "warehouse": warehouse is not None,
-                             "warehouse_last": None}
+                             "warehouse_last": None,
+                             "paused_until": None}
 
     # ------------------------------------------------------------ lifecycle
 
@@ -159,6 +168,48 @@ class Autopilot:
         self.status["last_action"] = action
         self.status["last_action_at"] = _now().isoformat()
         return action
+
+    def _start_factory_cip(self) -> None:
+        """Run the clean in the factory too (fase 3): the MES record above is the
+        administration, this is the 60 process minutes of water, caustic, acid and
+        heat. A factory without StartCip (older image) or offline is not an error:
+        the CIP is then only booked, as before."""
+        control = getattr(self.runner, "control", None)
+        if control is None or not hasattr(control, "start_cip"):
+            return
+        res = control.start_cip() or {}
+        if res.get("rc") not in (0, None):
+            self.status["last_error"] = f"StartCip rc={res.get('rc')}"
+        elif res.get("error"):
+            self.status["last_error"] = f"StartCip: {res['error']}"
+
+    def _tell_autostart(self, enabled: bool, now: float) -> None:
+        """Hold the factory's self-chaining off during a demo pause, on again after it.
+        Off is re-sent every AUTOSTART_REASSERT_S (a factory restart turns it on); a
+        factory that is offline or lacks SetAutostart (older image) is not an error."""
+        recent = self._autostart_at is not None \
+            and now - self._autostart_at < AUTOSTART_REASSERT_S
+        if self._autostart is enabled and (enabled or recent):
+            return
+        if self._autostart is None and recent:
+            return  # unreachable a moment ago: each attempt can block ~10 s
+        control = getattr(self.runner, "control", None)
+        if control is None or not hasattr(control, "set_autostart"):
+            self._autostart, self._autostart_at = enabled, now
+            return
+        res = control.set_autostart(enabled) or {}
+        self._autostart_at = now
+        if res.get("connected") is False or res.get("error"):
+            # unreachable: try again on the next step, not only after the interval
+            self._autostart = None
+            self.status["last_error"] = f"SetAutostart: {res.get('error')}"
+        elif res.get("rc") not in (0, None):
+            self._autostart = None
+            self.status["last_error"] = f"SetAutostart rc={res.get('rc')}"
+        else:
+            self._autostart = enabled
+            if (self.status.get("last_error") or "").startswith("SetAutostart"):
+                self.status["last_error"] = None   # it worked after all: no stale error
 
     def _factory_state(self) -> Optional[str]:
         if self.bus is None:
@@ -210,6 +261,19 @@ class Autopilot:
                 log.exception("autopilot: warehouse step failed")
                 self.status["last_error"] = f"warehouse: {e}"
 
+        # Demo pause: the line belongs to a presenter. Nothing above is line work
+        # (retention, preparation, the warehouse only moves autopilot pallets).
+        until = demo_pause.paused_until(self.db, self.line.line_id)
+        self.status["paused_until"] = until.isoformat() if until else None
+        if until is not None:
+            self._idle_since = None
+            self._tell_autostart(False, now)
+            return self._record("paused")
+        if self._autostart is not True:
+            # after a pause, and once after every engine start (a pause may have
+            # ended while the engine was down)
+            self._tell_autostart(True, now)
+
         live = self.bus is not None
         if live and not getattr(self.bus, "connected", False):
             return self._record("wait_bus")
@@ -223,6 +287,10 @@ class Autopilot:
             # factory runs its own self-chained batch; wait for COMPLETE
             self._idle_since = None
             return self._record("wait_factory")
+        if live and self._factory_state() == FACTORY_CIP:
+            # the line is being cleaned in place (~60 process minutes)
+            self._idle_since = None
+            return self._record("wait_cip")
 
         if self._idle_since is None:
             self._idle_since = now
@@ -248,12 +316,15 @@ class Autopilot:
                 self._idle_since = None
                 return self._record(f"wait_repair {','.join(down)}")
         if self.equipment is not None and self.equipment.is_dirty(cook):
+            reason = self.equipment.cip_status(cook).get("reason") or "vervuiling"
             try:
-                self.equipment.perform_cip(cook, operator_id=OPERATOR)
+                self.equipment.perform_cip(cook, operator_id=OPERATOR, reason=reason)
             except ValueError as e:
                 self.status["last_error"] = str(e)
                 return self._record("cip_refused")
             self.status["cip_runs"] += 1
+            self.status["last_cip_reason"] = reason
+            self._start_factory_cip()
             return self._record("cip")
 
         if self.equipment is not None and \
@@ -266,6 +337,7 @@ class Autopilot:
                 return self._record("cip_refused")
             self.status["cip_runs"] += 1
             self.status["changeover_cips"] += 1
+            self._start_factory_cip()
             return self._record(f"cip productwissel -> {recipe_id}")
 
         try:

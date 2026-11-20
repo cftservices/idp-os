@@ -39,6 +39,20 @@ def produce(db, events: Events, material_id: str, qty: float,
     return _mutate(db, events, material_id, abs(float(qty)), batch_id, "production")
 
 
+def block(db, events: Events, material_id: str, qty: float,
+          batch_id: Optional[str], kind: str) -> Optional[float]:
+    """Take finished goods of a HOLD (kind "quarantine") or REJECTED (kind "scrap")
+    batch out of available stock again.
+
+    The packs were booked as production at fill time, before the verdict. A
+    batch that is not APPROVED is never palletised or shipped, so without this
+    the stock of finished goods only ever grows.
+    """
+    if kind not in ("quarantine", "scrap"):
+        raise ValueError(f"unknown block kind {kind!r}")
+    return _mutate(db, events, material_id, -abs(float(qty)), batch_id, kind)
+
+
 def receive(db, events: Events, material_id: str, qty: float,
             lot_no: Optional[str] = None,
             operator_id: Optional[str] = None) -> Optional[float]:

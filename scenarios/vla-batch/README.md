@@ -40,13 +40,13 @@
   │  vla-factory  │  ──── OPC-UA subscribe (Status nodes) ─────────▶  │   monstermq        │
   │ asyncua OPC-UA│                                                   │  NATIVE OPC-UA     │
   │ server + batch│      ▲  registered by one-shot vla-opcua-init     │  client            │
-  │ physics       │      │  (GraphQL addOpcUaDevice "vla")            │  (ingest)          │
+  │ physics       │      │  (GraphQL opcUaDevice.add "vla")           │  (ingest)          │
   │ (no public    │      │                                           └─────────┬──────────┘
   │  port)        │      └── vla-opcua-init (curl → :4000/graphql)              │ publishes
   └───────┬───────┘                                                            ▼
           │ OPC-UA methods (StartBatch/Stop/SetSetpoint/…)   ┌──────────────────────────────────────┐
           │  ◀── control-pad ───────────────────────────────│ monstermq:1883  (DATA LAYER / UNS bus)│
-          └─────────────────────────────────────────────────│ archive group dw_uns_archive (DairyWorks/Vla/#)
+          └─────────────────────────────────────────────────│ archive group dw_uns_archive (Vla/# + Vla-L2/#)
                                                     ┌────────└───┬───────────────────┬───────────────┘
                        archive → Mongo              │            │                   │
                        (idp.dw_uns_archive)         ▼            ▼                   ▼
@@ -61,16 +61,16 @@
                                                        │ ┌──────────────┐ │             │ REST
                                                        │ │ vla-tdengine │ │             ▼
                                                        │ │  historian   │ │   ┌───────────────────┐
-                                                       │ │  (TSDB-OSS)  │ │   │   vla-dashboard   │
-                                                       │ └──────┬───────┘ │   │  nginx SPA        │
+                                                       │ │  (TSDB-OSS)  │ │   │   vla-ui          │
+                                                       │ └──────┬───────┘ │   │  Next.js          │
                                                        └────────┼─────────┘   │  proxy /api → engine
                                                                 │             └───────────────────┘
                                                                 ▼                       │
-                                                         ┌──────────────┐               │  web-facing (Traefik)
+                                                         ┌──────────────┐               │  web-facing (Caddy)
                                                          │   grafana    │               ▼
                                                          │ reads TDengine│      https://milkdemo.${DOMAIN}
                                                          └──────┬───────┘             (basic-auth)
-                                                                │ web-facing (Traefik)
+                                                                │ web-facing (Caddy)
                                                                 ▼
                                                 https://milkdemo.${DOMAIN}/grafana
 
@@ -78,8 +78,15 @@
    OPC-UA client (asyncua client + paho-mqtt) if the native ingest hits quirks.
 ```
 
-**Only `vla-dashboard` and `grafana` are web-facing** (via Traefik). The bus (MonsterMQ),
-the OPC-UA endpoint (vla-factory), and the databases (mongo, vla-tdengine) stay internal.
+The diagram shows line L1. Line L2 is a second factory (`vla-factory-l2`, own OPC-UA server)
+registered by `vla-l2-opcua-init` and published under `DairyWorks/Vla-L2/#`; everything
+downstream is shared.
+
+**Only `vla-ui` and `grafana` are web-facing**, through the `aios-caddy` container that owns
+80/443 on the VPS (our block is written by `deploy/attach-ingress-caddy.sh`), behind basic auth.
+The TDengine explorer has its own host behind a double lock (see `DEPLOY.md`, *Ingress*). The
+bus (MonsterMQ), the OPC-UA endpoints, the batch engine and the databases stay internal. The
+nginx SPA `vla-dashboard` and Traefik are in the compose files but are not started on the VPS.
 
 ---
 
@@ -87,16 +94,19 @@ the OPC-UA endpoint (vla-factory), and the databases (mongo, vla-tdengine) stay 
 
 **Ingest (Status → UNS) — NATIVE.** MonsterMQ has its own OPC-UA client. The one-shot
 **`vla-opcua-init`** container registers the factory as an OPC-UA device via GraphQL
-(`addOpcUaDevice`, name `vla`, endpoint `opc.tcp://vla-factory:4840/DairyWorks`), and
-MonsterMQ then subscribes to every Status node and republishes it onto the UNS under
-`DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}`. The device config persists in Mongo, so
-the init runs once and exits. **This is the primary ingest path** — no separate bridge
-process is needed to get the factory onto the data layer.
+(`mutation { opcUaDevice { add(...) } }`, name `vla`, endpoint
+`opc.tcp://vla-factory:4840/DairyWorks`), and MonsterMQ then subscribes to every Status node
+and republishes it onto the UNS under `DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}`.
+`vla-l2-opcua-init` does the same for line L2. The device config persists in Mongo; on a
+rerun the inits only add addresses that are missing (`opcUaDevice { addAddress }`), so a new
+tag reaches a running stack with `up --no-deps --force-recreate vla-opcua-init
+vla-l2-opcua-init`. **This is the primary ingest path** — no separate bridge process is
+needed to get the factory onto the data layer.
 
 **Control (commands → factory) — DIRECT OPC-UA.** The `vla-batch-engine` commands the
 factory **directly via OPC-UA methods** (`StartBatch`, `Stop`, `SetSetpoint`, `TakeSample`,
-`InjectFault`, `ClearFault` on the line-level `Batch` object) — it does not route control
-through separate MQTT Command topics. (MonsterMQ's `writeConfig` on the device also exposes
+`InjectFault`, `ClearFault`, `StartCip`, `SetAutostart` on the line-level `Batch` object) —
+it does not route control through separate MQTT Command topics. (MonsterMQ's `writeConfig` on the device also exposes
 manual node-writes via `DairyWorks/Vla/write/{nodeId}` for ad-hoc setpoint pokes, but the
 MES control path is method calls.)
 
@@ -105,7 +115,7 @@ hits config quirks (most likely an **ns-index mismatch**: asyncua's `urn:dairywo
 assumed to land on `ns=2`, verify in the MonsterMQ logs — `docker logs monstermq | grep -i
 opcua`), start the standalone connector instead. It does the same OPC-UA ↔ MQTT job in
 ~150 lines of asyncua + paho-mqtt. Do **not** run it alongside an enabled `vla` device
-(double-publish) — disable the device first (`toggleOpcUaDevice(name:"vla",enabled:false)`).
+(double-publish) — disable the device first (`opcUaDevice { toggle(name:"vla",enabled:false) }`).
 
 See the full v2 architecture docs in the CFT Services **Datalayer** doc set
 (`05-Backend` — OPC-UA/MQTT/REST contracts + deployment + Docker diagram, and
@@ -125,9 +135,10 @@ S=/root/idp-os/scenarios/vla-batch/deploy/stack.sh
 $S status | offline | online [--build] | backup [--met-historian] | restore <dir> | remove
 ```
 
-`online` starts a fixed list of 13 services with `--no-deps` (so `fastapi`, `vla-dashboard`
-and `vla-tdgpt` stay off), pulls the local model if missing, re-attaches the ingress and
-checks the site. Full runbook, service table, security checks and the "offline and back
+`online` starts a fixed list of 15 services with `--no-deps` (13 long-running plus the two
+one-shot OPC-UA inits; `fastapi`, `vla-dashboard`, `vla-tdgpt` and the machine park stay
+off), pulls the local model if missing, re-attaches the ingress and checks the site. A
+nightly backup runs at 02:00 UTC (`stack.sh backup --nachtelijk`, the last three are kept). Full runbook, service table, security checks and the "offline and back
 again" matrix: [`DEPLOY.md`](DEPLOY.md), top section.
 
 ### Locally
@@ -156,7 +167,7 @@ docker compose -f docker-compose.slim.yml \
 ```
 
 **Fallback ingest** — only if MonsterMQ's native OPC-UA client fails (see *Ingest + control
-paths*). First disable the native device (GraphQL `toggleOpcUaDevice(name:"vla",enabled:false)`),
+paths*). First disable the native device (GraphQL `opcUaDevice { toggle(name:"vla",enabled:false) }`),
 then start the standalone connector:
 
 ```bash
@@ -218,6 +229,20 @@ curl -s -X POST http://vla-batch-engine:8000/api/v1/batches \
 | POST | `/batches/{batch_id}/ack-verdict` | acknowledge a batch verdict (idempotent) |
 | GET | `/report/period` | plant-wide management report over the last `days` days (`?format=json\|pdf`) |
 | GET | `/report/equipment/{equipment_id}` | per-equipment maintenance report over the last `days` days (`?format=json\|pdf`) |
+| GET | `/lines`, `/line/live` | both lines with autopilot state (incl. `paused_until`); live process view |
+| GET | `/alarms` | alarm list (`?line=`) |
+| POST | `/alarms/ack-all` | acknowledge every open alarm (the *Alles bevestigen* button) |
+| POST | `/alarms/{alarm_id}/shelve` | shelve an alarm for a while |
+| GET | `/inventory` | stock per material and finished goods |
+| POST | `/materials/{material_id}/receipt` | goods receipt (also booked by the logistics simulation) |
+| GET / POST | `/prep-orders` | preparation room sets |
+| GET | `/orders/{order_id}/trace` | order → batch → pallet → truck timeline |
+| GET | `/logistics` | shipments, forklifts and inbound suppliers (in memory) |
+| GET | `/kpi/summary` | management KPIs, losses and alarm load over a window, with comparison |
+| GET | `/kpi/bvip` | the 29 BVIP KPIs plus the state of the KPI writer (`?line=L1\|L2\|PLANT`) |
+| GET | `/autopilot` | autopilot per line: last action, batches started, CIP runs, warehouse |
+| GET / POST | `/demo/pause`, POST `/demo/resume` | demo mode per line (see *Demo mode* below) |
+| GET / POST / DELETE | `/park/faults`, `/park/{equipment_id}/fault`, `/park/clear-all` | fault injection on the 12-machine park (profile `park`, not running on the VPS) |
 
 ### Fase 1 (v0.4): orders + scan-driven shop-floor flow
 
@@ -251,16 +276,21 @@ registration. Covered end-to-end by `selftest.py` check 11 and
 
 Adds a maintenance/KPI cluster (`EquipmentMonitor`, `dw_equipment_meta` /
 `dw_equipment_state` / `dw_cbm_alerts`) on top of the fase-0/1/2 batch, order
-and handling-unit flow. The **CBM fouling model lives in the MES layer as a
-documented substitution**: the factory sim itself is untouched — cook-unit
-heat-up time per batch is trended (`heatup_history`, last 20 batches) and, once
-it crosses `BASE_HEATUP_SEC × 1.35`, raises a fouling alert ("plan CIP
-cleaning") *before* the equipment is forced Dirty. Only after
-`DIRTY_AFTER_BATCHES` (4) batches without a CIP does the unit flip to `Dirty`
-and `create_batch` refuses new work on it — **alert-before-Dirty** is the
-predictive half of the Solve story, complementing the reactive
-under-cook/viscosity Solve from fase 0. A `POST /equipment/{id}/cip` clears the
-counter, the Dirty flag and any open alerts, and the line is available again.
+and handling-unit flow. Cook-unit heat-up time per batch is trended
+(`heatup_history`, last 20 batches) and, once it crosses `BASE_HEATUP_SEC × 1.35`,
+raises a fouling alert ("plan CIP cleaning") *before* the equipment is forced
+Dirty — **alert-before-Dirty** is the predictive half of the Solve story,
+complementing the reactive under-cook/viscosity Solve from fase 0.
+
+**When the line counts as Dirty (since fase 3, 19-11-2026).** The factory now
+simulates an intake pasteuriser that fouls over running hours; the engine
+(`vla/meters.py`, `METERS=1`) computes the fouling resistance Rf from its
+temperatures and flow. At `CIP_RF_LIMIT` (0.06 m²K/kW, around 12 batches) the
+line is Dirty and `create_batch` refuses new work. `CIP_AFTER_BATCHES` is the
+fallback counter: 16 on the VPS, default 4 for local runs and the tests (the
+example below shows that default). A CIP runs in the factory (`StartCip`, state
+`CIP`, 60 process minutes, about 4 real minutes at `TIME_SCALE` 15) and clears
+the counter, the Dirty flag and any open alerts.
 
 **The refusal is self-explaining.** `POST /batches` and `POST /orders/{id}/batches`
 answer `400` with a structured `detail` (`CipRequired`, same shape as the scan
@@ -284,8 +314,10 @@ Performance × Quality` — computed per equipment from the state-history
 durations (availability), the cook-unit heat-up trend vs its clean baseline
 (performance, 1.0 elsewhere), and the approved-vs-total pack ratio **of the
 equipment's own line** (quality), so a HOLD on L2 no longer lowers the score of
-L1. Availability stays 1.0 in the demo: the simulation has no downtime, and we
-show that rather than invent stops.
+L1. Availability comes from the state history: CIP, breakdowns
+(`DEMO_BREAKDOWNS=1`, closed by a CMMS work order in `vla/cmms.py`) and idle
+time all lower it. Work orders are created by the batch engine itself, not by
+N8N; N8N does not run in this demo.
 
 **Throughput KPI.** The norm (5,200 packs/h) is *per line* and in *real time*.
 The tile therefore takes the packs per line, divides by the **elapsed** part of
@@ -316,7 +348,8 @@ The batch report is now explicitly an **Electronic Batch Record (EBR)**:
 order/lot genealogy, doses, process events, alarms and the **verdict
 acknowledgement** (`POST /batches/{id}/ack-verdict`, operator sign-off,
 idempotent) are all part of the one report artifact
-(`report_type: "Electronic Batch Record (BIRT-style)"`). Two new report
+(`report_type: "Electronic Batch Record (BIRT-style)"`; the PDF is rendered
+with reportlab, BIRT itself is not part of the stack). Two new report
 endpoints sit alongside it for the maintenance/management side: `GET
 /report/period` (plant-wide KPI roll-up over N days) and `GET
 /report/equipment/{id}` (per-equipment maintenance report — CIP history,
@@ -371,30 +404,77 @@ and never touches `docker.sock`. Engine env: `OLLAMA_URL`, `OLLAMA_MODEL`,
 `DEMO_BREAKDOWNS`, `GIT_SHA`, `HOSTSTATS_FILE`. Tests:
 `tests/test_datalayer.py`.
 
+### Demo mode per line (since 20-11-2026)
+
+On the VPS the autopilot drives both lines. A presenter takes one line with
+**SCADA → Demomodus** (30, 45 or 90 minutes) or `POST /demo/pause
+{"line":"L1","minutes":45}`. A paused line gets no autopilot batch, no CIP, no
+steam-valve fault from `vla-scenario` and no random breakdown, and the factory
+does not chain a batch by itself (`SetAutostart(false)`, re-sent every minute
+because a factory restart turns it back on). The pause lives in Mongo
+(`dw_autopilot`, key `demo-pause`, `vla/demo_pause.py`), survives an engine
+restart and always ends (max 180 minutes). The other line keeps running. A batch
+started by hand is never palletised by the autopilot, so it is free for a manual
+pallet. Tests: `tests/test_demo_pause.py`, `factory/test_autostart.py`.
+
+The **SCADA Start** button creates a real MES batch (`/admin/command` `start`
+goes through `create_batch`), and is refused while the line is busy. On the
+**Werkvloer** (`/shopfloor`) the order scan opens the running batch for dosing;
+a finished batch opens only the logistics part (pallet, putaway, ship), and a
+closed order is refused.
+
 ---
 
 ## Component map
 
 | Service | Owner submap | Build context | Web-facing | Role |
 |---------|--------------|---------------|:----------:|------|
-| `vla-factory` | `factory/` | `./scenarios/vla-batch/factory` | — (internal `4840`) | asyncua OPC-UA server + ISA-88 batch FSM + viscosity physics |
-| `vla-opcua-init` | `monstermq-init/` | `curlimages/curl` | — (one-shot) | **primary ingest** — registers the `vla` OPC-UA device in MonsterMQ (GraphQL `addOpcUaDevice`), then exits |
+| `vla-factory`, `vla-factory-l2` | `factory/` | `./scenarios/vla-batch/factory` | — (internal `4840`) | asyncua OPC-UA server per line + ISA-88 batch FSM + viscosity, pasteuriser, CIP and meter physics |
+| `vla-opcua-init`, `vla-l2-opcua-init` | `monstermq-init/` | `curlimages/curl` | — (one-shot) | **primary ingest** — register the line as an OPC-UA device in MonsterMQ (GraphQL `opcUaDevice.add`, missing tags via `addAddress`), then exit |
 | `vla-connector` | `connector/` | `./scenarios/vla-batch/connector` | — (**profile `fallback`**) | optional fallback: standalone OPC-UA client ↔ MQTT if native ingest quirks |
 | `vla-batch-engine` | `batch-engine/` | `./scenarios/vla-batch/batch-engine` | — (internal `8000`) | FastAPI MES-laag: `/api/v1` batches/samples/report; commands factory **direct via OPC-UA methods**; Mongo domein-collections |
 | `vla-tdengine` | (image) | `tdengine/tdengine:latest` | — | historian (TSDB-OSS), db `idp` |
 | `vla-tdengine-bridge` | (reuse) | `./tdengine-poc` | — | MonsterMQ → TDengine bridge, `MQTT_TOPICS=DairyWorks/Vla/#,DairyWorks/Vla-L2/#,DairyWorks/Prep/#,DairyWorks/Vla-B/#` (unmodified `bridge.py`) |
-| `vla-dashboard` | `dashboard/` | `nginx:alpine` | ✅ `milkdemo.${DOMAIN}` | sales + admin SPA; nginx proxies `/api` → batch-engine |
-| `grafana` | `grafana/` | slim-base image | ✅ `milkdemo.${DOMAIN}/grafana` | reads `vla-tdengine` + batch engine; 7 factory dashboards generated by `grafana/build_dashboards.py` (see DEPLOY.md) |
-| `monstermq` / `mongo` / `traefik` | (slim-base) | slim-base | traefik only | bus (+ native OPC-UA client) + store + TLS/routing |
+| `vla-ui` | `ui/` | `./scenarios/vla-batch/ui` | ✅ `milkdemo.${DOMAIN}` | Next.js: management, lines, SCADA, shop floor, orders, batches, equipment, reports, 3D `/site`; proxies `/api/v1` → batch-engine |
+| `grafana` | `grafana/` | slim-base image | ✅ `milkdemo.${DOMAIN}/grafana` | reads `vla-tdengine` + batch engine; 13 `fabriek-*` dashboards generated by `grafana/build_dashboards.py`, plus `vla-line`, `vla-mes` and `vps-health` (see DEPLOY.md) |
+| `vla-ci-sync` | `ci-sync/` | `./scenarios/vla-batch/ci-sync` | — | pushes batch history and daily KPI inputs to the aios workspace (Continuous Improvement) |
+| `vla-scenario` | `scripts/` | `techflow/vla-factory` image | — | recurring steam-valve problem, alternating L1/L2 (`scenario_steam_valve.py --loop`) |
+| `vla-ollama` | (image) | `ollama/ollama` | — | local model `qwen2.5:1.5b`; the engine uses it for the root-cause summary (`vla/rca.py`) |
+| `vla-ai` | `ai-nl2sql/` | `./scenarios/vla-batch/ai-nl2sql` | — (127.0.0.1:8095 only) | "talk to your factory": question → SQL on the historian via the local model; not public |
+| `monstermq` / `mongo` | (slim-base) | slim-base | — | bus (+ native OPC-UA client) + store |
+| `vla-dashboard`, `traefik`, `fastapi`, `vla-tdgpt` | — | — | — | in the compose files, **not started** on the VPS (ingress is `aios-caddy`) |
+
+### Screens (`vla-ui`)
+
+Next.js app under `ui/`, behind the same basic auth. The API proxy lives in
+`app/api/v1/[...path]/route.ts` (60 s timeout for PDF renders, structured refusals passed on
+unchanged).
+
+| Route | Screen |
+|---|---|
+| `/` | Plant: is the shift on plan |
+| `/management` | KPIs and the loss block in euros |
+| `/site` | 3D site-twin (`?lens=1` datalayer lens, `?tour=ep1…ep4`) |
+| `/line` | live process view of L1 and L2 |
+| `/voorbereiding` | preparation room: weighing and premix for both lines |
+| `/alarms` | acknowledge (one by one or *Alles bevestigen*) and shelve |
+| `/shopfloor` | Werkvloer: scan, weigh, book, pallet, putaway, ship |
+| `/scada` | setpoints, Start, fault injection, Demomodus |
+| `/storingen` | fault injection on the machine park (line Vla-B) |
+| `/orders`, `/batches`, `/equipment`, `/voorraad` | orders, batches and verdicts, CIP/running hours/OEE, stock and receipts |
+| `/reports`, `/report/[batchId]` | PDF per period, batch (EBR) and equipment |
+| `/analyse` | Grafana trends (embeds `vla-line`) |
+| `/broadcast` | screen carousel for the livestream (`broadcast/`, off by default) |
 
 ### The integration layer (this agent's deliverables)
 
 | File | Purpose |
 |------|---------|
 | `factory-model/isa95-vla.json` | ISA-95/88 single source of truth — areas, equipment, exact tags, recipe `chocolate-vla-1L`, sample types, methods, UNS convention |
-| `monstermq-init/init-vla-opcua.sh` | one-shot GraphQL `addOpcUaDevice` — registers the factory as MonsterMQ's native OPC-UA ingest (24 Status tags), enables `writeConfig` |
-| `docker-compose.vla.yml` | scenario overlay on `idp-network`; wires the vla services + `vla-opcua-init` + fallback `vla-connector` + grafana override |
-| `../../monstermq/config.yaml` (patch) | added archive group `dw_uns_archive` → `DairyWorks/Vla/#`, 30-day retention |
+| `monstermq-init/init-vla-opcua.sh`, `init-vla-l2-opcua.sh` | one-shot GraphQL `opcUaDevice.add` / `addAddress` — registers each line as MonsterMQ's native OPC-UA ingest, enables `writeConfig`; the L2 init also adds `DairyWorks/Vla-L2/#` to the archive group on a running broker |
+| `docker-compose.vla.yml` | scenario overlay on `idp-network`; wires the vla services + inits + fallback `vla-connector` + grafana override |
+| `docker-compose.vps-shared.yml` | VPS overlay: no Traefik, host ports on 127.0.0.1 only, autopilot, `vla-scenario` |
+| `../../monstermq/config.yaml` (patch) | archive group `dw_uns_archive` → `DairyWorks/Vla/#` and `DairyWorks/Vla-L2/#`. Read only on a fresh install; the Mongo TTL is 30 days on the VPS (MonsterMQ creates the collection with 365, see DEPLOY.md) |
 | `.env.example` | DOMAIN, DASHBOARD_AUTH, MONGO_*, TD_* with inline docs |
 | `README.md` | this file |
 
@@ -456,16 +536,22 @@ come exclusively from palette tokens (`lint:tokens`).
 
 ```
 DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}          # e.g. .../Cook/cook-unit-01/Status/viscosity_cP
-DairyWorks/Vla/{Area}/{Equipment}/Command/{cmd}
 DairyWorks/Vla/Batch/Status/{state|batch_id|active_recipe}
-DairyWorks/Vla/Batch/Command/{StartBatch|Stop|InjectFault|ClearFault|TakeSample}
+DairyWorks/Vla/Utilities/{energy-meter-01|water-meter-01}/Status/{tag}
+DairyWorks/Vla-L2/...                                     # line L2, same tree, equipment -02
+DairyWorks/Prep/...                                       # preparation room
 ```
 
-Payload JSON: `{"value": <scalar>, "unit": "<u>", "ts": "<iso8601>", "quality": "GOOD"}`.
+Control does not use MQTT Command topics: the engine calls the OPC-UA methods directly
+(see *Ingest + control paths*). Payload JSON: `{"value": <scalar>, "unit": "<u>", "ts":
+"<iso8601>", "quality": "GOOD"}`.
 
 ## The Solve (why this demo matters)
 
 Under-cooking (low peak-temp × hold) → starch gelatinisation `g` low → `end_viscosity_cP < 150`
-→ out of the 150–300 cP spec → batch verdict **HOLD/REJECTED** + critical alarm. Raw data
-(peak-temp × hold) drives a **real decision**: hold/re-cook instead of blind-filling. Inject
-it with the `cook_undertemp` fault (`InjectFault` on the Batch object) to demo it live.
+→ out of the 150–300 cP spec → batch verdict **REJECTED** + critical alarm (a good batch lands
+around 260 cP). Raw data (peak-temp × hold) drives a **real decision**: the batch is rejected
+after filling and the warehouse gate refuses to palletise it. There is no hold-and-recook in
+this demo; **HOLD** is the verdict for a warning (out of tolerance, a failed non-critical
+sample). Inject it with the `cook_undertemp` fault (`InjectFault` on the Batch object) to demo
+it live.

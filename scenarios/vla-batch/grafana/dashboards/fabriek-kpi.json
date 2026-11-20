@@ -1,0 +1,1973 @@
+{
+  "uid": "fabriek-kpi",
+  "title": "Fabriek — KPI's (alle 29)",
+  "description": "De 29 industriële KPI's uit de BVIP-catalogus: rollende waarde over 8 uur met het verloop als sparkline. Niet-aantoonbare KPI's tonen wat er ontbreekt.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "lijn",
+        "label": "Lijn",
+        "type": "custom",
+        "hide": 0,
+        "query": "Fabriek : PLANT,L1 : L1,L2 : L2",
+        "current": {
+          "text": "Fabriek",
+          "value": "PLANT"
+        },
+        "options": [
+          {
+            "text": "Fabriek",
+            "value": "PLANT",
+            "selected": true
+          },
+          {
+            "text": "L1",
+            "value": "L1",
+            "selected": false
+          },
+          {
+            "text": "L2",
+            "value": "L2",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Waarden uit de KPI-historie (`idp.kpi`, elke 5 minuten, rollend venster 8 uur). Uren zijn procesuren. Per domein staat het detail, inclusief de exacte waarde over de gekozen periode, op de eigen pagina. Een grijs vak is **niet aantoonbaar**: de demo heeft die input (nog) niet, en dan staat er geen getal."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Productie",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Overall Equipment Effectiveness (PRD-001)",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-001' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-001 · OEE\nFormule (catalogus): (run_hours / planned_hours) * (units_produced / ideal_units_at_run) * (units_good / units_produced) * 100\nBron in de demo: Batches per lijn: looptijd (unie van batchspans), geplande tijd (lijn 24/7 gepland), gevulde en goedgekeurde pakken; ideaal tempo per lijn uit KPI_IDEAL_PACKS_PER_H. Uren in procestijd.\nDoel 80, waarschuwing 70, kritiek 60 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Stilstandpercentage (PRD-002)",
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-002' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 8
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 18
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-002 · Downtime Percentage\nFormule (catalogus): downtime_hours / planned_hours * 100\nBron in de demo: Unie van Down/Error-intervallen van de machines van de lijn, gedeeld door de geplande tijd. Procesuren.\nDoel 8, waarschuwing 12, kritiek 18 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Doorzet (PRD-003)",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-003' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4400
+              },
+              {
+                "color": "yellow",
+                "value": 4800
+              },
+              {
+                "color": "green",
+                "value": 5200
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-003 · Throughput\nFormule (catalogus): units_produced / run_hours\nBron in de demo: Gevulde pakken / looptijd. De catalogusnorm (6/u) is generiek; de kleur volgt de lijnnorm uit het fabrieksmodel.\nKleur volgt de lijnnorm uit het fabrieksmodel (5200 packs/h), niet de generieke catalogusnorm (6 unit/h).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Capaciteitsbenutting (PRD-004)",
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-004' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-004 · Capacity Utilization\nFormule (catalogus): units_produced / ideal_units * 100\nBron in de demo: Gevulde pakken / (geplande uren x ideaal tempo).\nDoel 80, waarschuwing 70, kritiek 60 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "First Pass Yield (PRD-005)",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-005' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "yellow",
+                "value": 94
+              },
+              {
+                "color": "green",
+                "value": 96
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-005 · First Pass Yield\nFormule (catalogus): units_first_pass / units_produced * 100\nBron in de demo: Goede pakken van APPROVED batches / gevulde pakken.\nLet op: Er bestaat geen herbewerking in de demo, dus 'goed zonder herbewerking' is 'goed in een goedgekeurde batch'.\nDoel 96, waarschuwing 94, kritiek 90 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 8,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 6,
+        "y": 8,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Herbewerkingsgraad** · `KPI-PRD-006`\n\n**Niet aantoonbaar** · ontbreekt: `units_reworked`\n\nEr wordt geen herbewerking geboekt: HOLD en REJECTED gaan niet terug het proces in. niet in de demo."
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Omsteltijd (PRD-007)",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-007' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-007 · Changeover Time\nFormule (catalogus): changeover_hours\nBron in de demo: Tijd tussen het einde van een batch en de start van de volgende batch met een ander recept op dezelfde lijn (inclusief reiniging), geteld bij de start van de nieuwe batch. Procesuren.\nLet op: L1 maakt één product en heeft dus geen omstellingen; de catalogusdrempels (500 h) gelden per jaar.\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Planningsbetrouwbaarheid (PRD-008)",
+      "gridPos": {
+        "x": 18,
+        "y": 8,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-008' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "yellow",
+                "value": 88
+              },
+              {
+                "color": "green",
+                "value": 92
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-008 · Schedule Adherence\nFormule (catalogus): orders_on_time / orders_planned * 100\nBron in de demo: Orders van de lijn met een leverdatum in de periode die al verstreken is: op tijd = afgerond voor de leverdatum. Een order die nog kan halen telt nog niet mee.\nDoel 92, waarschuwing 88, kritiek 80 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Kwaliteit",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Defectpercentage (QUA-001)",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-QUA-001' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-QUA-001 · Defect Rate\nFormule (catalogus): units_defective / units_inspected * 100\nBron in de demo: Afgekeurde pakken (vuller) / gevulde pakken.\nDoel 2, waarschuwing 3, kritiek 5 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Kosten van slechte kwaliteit (QUA-002)",
+      "gridPos": {
+        "x": 6,
+        "y": 14,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-QUA-002' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-QUA-002 · Cost of Poor Quality\nFormule (catalogus): scrap_cost + rework_cost + other_quality_cost\nBron in de demo: Afkeur x waarde per pak + HOLD/REJECTED-batches x herwerkkosten, uit het kostenmodel van de fabriek (demo-aanname).\nLet op: Overige kwaliteitskosten (klachten, audits) bestaan niet in de demo; de catalogusdrempels zijn per jaar.\nOntbreekt (telt als 0): other_quality_cost\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 14,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Defecten per leverancier** · `KPI-QUA-003`\n\n**Niet aantoonbaar** · ontbreekt: `components_defective`, `components_received`\n\nGeen ingangskeuring: goederenontvangst boekt alleen hoeveelheden. niet in de demo."
+      }
+    },
+    {
+      "id": 15,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 18,
+        "y": 14,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Auditbevindingen** · `KPI-QUA-004`\n\n**Niet aantoonbaar** · ontbreekt: `audit_findings`\n\nEr is geen kwaliteitssysteem met audits in de demo. niet in de demo."
+      }
+    },
+    {
+      "id": 16,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Afsluiting corrigerende acties** · `KPI-QUA-005`\n\n**Niet aantoonbaar** · ontbreekt: `corrective_actions_closed`, `corrective_actions_total`\n\nCorrectieve acties (8D) leven in de CI-module van aios; er is geen koppeling terug. niet in de demo."
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Onderhoud",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Gemiddelde tijd tussen storingen (MNT-001)",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-MNT-001' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 150
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "green",
+                "value": 500
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-MNT-001 · MTBF\nFormule (catalogus): operating_hours / failures\nBron in de demo: Productieve tijd (Running/Dirty) van de machines van de lijn / storingswerkorders in de periode. Procesuren. Zonder storing geen waarde (niet oneindig).\nLet op: Gepoold over de machines van de lijn; de catalogus rekent per asset. De storingsfrequentie is die van DEMO_BREAKDOWNS.\nDoel 500, waarschuwing 300, kritiek 150 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Onderhoudskostenratio (MNT-002)",
+      "gridPos": {
+        "x": 6,
+        "y": 25,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-MNT-002' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "orange",
+                "value": 4
+              },
+              {
+                "color": "red",
+                "value": 6
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-MNT-002 · Maintenance Cost Ratio\nFormule (catalogus): maintenance_costs / asset_replacement_value * 100\nBron in de demo: Kosten per storingswerkorder (reparatietijd x uurtarief + onderdelen per machinerol) gedeeld door het naar tijd evenredige deel van de vervangingswaarde (waarde x procesuren / 8760). Opgeteld over een periode is dat het onderhoudskostenpercentage per jaar.\nLet op: Tarieven en vervangingswaarden zijn demo-aannames uit cost_model; gepland en CBM-onderhoud hebben nog geen kosten.\nDoel 3, waarschuwing 4, kritiek 6 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Herhaalstoringen (MNT-003)",
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-MNT-003' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-MNT-003 · Repeat Failure Rate\nFormule (catalogus): repeat_failures / failures * 100\nBron in de demo: Een storing is een herhaling als dezelfde machine binnen 7 procesdagen eerder met dezelfde oorzaak uitviel.\nLet op: De demo kent twee storingsmodi per machinerol en storingen komen vaak voor (DEMO_BREAKDOWNS), dus het aandeel herhalingen is hoog.\nDoel 10, waarschuwing 15, kritiek 25 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Onderhoudskosten per eenheid (MNT-004)",
+      "gridPos": {
+        "x": 18,
+        "y": 25,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-MNT-004' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "orange",
+                "value": 4
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-MNT-004 · Maintenance Cost per Unit\nFormule (catalogus): maintenance_costs / units_produced\nBron in de demo: Kosten per storingswerkorder (zie MNT-002) / gevulde pakken.\nLet op: Demo-aannames uit cost_model; alleen storingswerkorders.\nDoel 3, waarschuwing 4, kritiek 5 EUR/unit (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Energie",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Energie per eenheid (ENE-001)",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-ENE-001' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 2.1
+              },
+              {
+                "color": "red",
+                "value": 2.3
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-ENE-001 · Energy Consumption per Unit\nFormule (catalogus): energy_kwh / units_produced\nBron in de demo: Gas naar de ketel plus elektriciteit (tellers energy-meter) / gevulde pakken.\nLet op: Gesimuleerde meters: warmte uit massa x cp x temperatuurstijging, motoren over procestijd (door de versnelling aan de lage kant).\nDoel 2, waarschuwing 2.1, kritiek 2.3 kWh/unit (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Energiekosten per omzet (ENE-002)",
+      "gridPos": {
+        "x": 6,
+        "y": 31,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-ENE-002' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.2
+              },
+              {
+                "color": "orange",
+                "value": 0.3
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-ENE-002 · Energy Cost per Revenue\nFormule (catalogus): energy_costs / revenue * 100\nBron in de demo: Gas x gasprijs + elektriciteit x stroomprijs, gedeeld door goede pakken x verkoopprijs.\nLet op: Prijzen en verkoopprijs zijn demo-aannames uit cost_model; omzet is goedgekeurde pakken x prijs, geen gefactureerde omzet.\nDoel 0.2, waarschuwing 0.3, kritiek 0.5 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Water per eenheid (ENE-003)",
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-ENE-003' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 5.5
+              },
+              {
+                "color": "red",
+                "value": 6.5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-ENE-003 · Water Consumption per Unit\nFormule (catalogus): water_l / units_produced\nBron in de demo: Water (teller water-meter, vooral CIP) / gevulde pakken.\nDoel 5, waarschuwing 5.5, kritiek 6.5 l/unit (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "CO2 per eenheid (ENE-004)",
+      "gridPos": {
+        "x": 18,
+        "y": 31,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-ENE-004' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "orange",
+                "value": 0.55
+              },
+              {
+                "color": "red",
+                "value": 0.65
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-ENE-004 · Carbon Emissions per Unit\nFormule (catalogus): co2_kg / units_produced\nBron in de demo: Gas x 0,202 + elektriciteit x 0,35 kg CO2 per kWh, gedeeld door gevulde pakken.\nLet op: Emissiefactoren zijn demo-aannames uit cost_model.\nDoel 0.5, waarschuwing 0.55, kritiek 0.65 kg/unit (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 27,
+      "type": "stat",
+      "title": "Afvalpercentage (ENE-005)",
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-ENE-005' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 8
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-ENE-005 · Waste Percentage\nFormule (catalogus): waste_kg / raw_material_kg * 100\nBron in de demo: Afval = (afgekeurde pakken + pakken van HOLD/REJECTED-batches) x dichtheid; grondstof = gedoseerde kg.\nLet op: Spoelverliezen van de CIP zijn niet als product meegeteld.\nDoel 5, waarschuwing 6, kritiek 8 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "Procesvoering",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 29,
+      "type": "stat",
+      "title": "Warmtestroom (PAC-100)",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-100' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatt",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-100 · Heat Duty\nFormule (catalogus): product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in)\nBron in de demo: Debiet x cp x (houdtemperatuur - temperatuur na regeneratie): de warmte die de verwarmingssectie levert.\nLet op: Hangt af van de grootte van de installatie; de catalogusnorm (600 kW) geldt voor een grotere pasteur, dus geen kleur.\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Warmteoverdrachtscoëfficiënt U (PAC-101)",
+      "gridPos": {
+        "x": 6,
+        "y": 42,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-101' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2.8
+              },
+              {
+                "color": "yellow",
+                "value": 3.2
+              },
+              {
+                "color": "green",
+                "value": 3.6
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-101 · Overall Heat Transfer Coefficient\nFormule (catalogus): product_flow_kg_s * cp_kj_kg_k * (product_t_out - product_t_in) / (hx_area_m2 * lmtd(hot_t_in - product_t_out, hot_t_out - product_t_in))\nBron in de demo: Warmtedoorgangscoefficient U = duty / (oppervlak x LMTD), uit de gemeten temperaturen aan beide zijden en het debiet.\nDoel 3.6, waarschuwing 3.2, kritiek 2.8 kW/m2/K (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Vervuilingsweerstand (PAC-102)",
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-102' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.03
+              },
+              {
+                "color": "orange",
+                "value": 0.06
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-102 · Fouling Resistance\nFormule (catalogus): 1 / u_actual - 1 / u_clean_at_flow\nBron in de demo: Rf = 1/U - 1/U_schoon, met U_schoon de U van de eerste metingen na de laatste CIP. Stuurt ook het reinigingsmoment (grens 0,06).\nDoel 0.03, waarschuwing 0.06, kritiek 0.1 m2*K/kW (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Genormaliseerde drukval (PAC-103)",
+      "gridPos": {
+        "x": 18,
+        "y": 42,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-103' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurebar",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1.0
+              },
+              {
+                "color": "orange",
+                "value": 1.25
+              },
+              {
+                "color": "red",
+                "value": 1.5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-103 · Normalized Pressure Drop\nFormule (catalogus): dp_bar * pow(ref_flow_kg_s / product_flow_kg_s, 2)\nBron in de demo: Drukval x (referentiedebiet / debiet)^2.\nDoel 1.0, waarschuwing 1.25, kritiek 1.5 bar (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "Warmteterugwinning (PAC-104)",
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-104' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 86
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 92
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-104 · Heat Recovery Ratio\nFormule (catalogus): (regen_t_out - cold_t_in) / (hold_t - cold_t_in) * 100\nBron in de demo: (temperatuur na regeneratie - melk in) / (houdtemperatuur - melk in).\nDoel 92, waarschuwing 90, kritiek 86 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "Looptijd tussen reinigingen (PAC-105)",
+      "gridPos": {
+        "x": 6,
+        "y": 47,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-105' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 8
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 12
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-105 · Run Length Between Cleanings\nFormule (catalogus): avg(run_hours_between_cip)\nBron in de demo: Draaiuren van de pasteur tussen twee reinigingen, uit de CIP-cycli die in de periode afliepen.\nLet op: De demo reinigt na ~12 batches = ~1,5 procesuur pasteurtijd; een echte pasteur draait 8 tot 12 uur, dus deze KPI staat rood.\nDoel 12, waarschuwing 10, kritiek 8 h (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 35,
+      "type": "stat",
+      "title": "Reinigingskosten per cyclus (PAC-106)",
+      "gridPos": {
+        "x": 12,
+        "y": 47,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PAC-106' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 400
+              },
+              {
+                "color": "orange",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 700
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PAC-106 · Cleaning Cost per Cycle\nFormule (catalogus): cip_chemicals_eur + cip_water_eur + cip_energy_eur + cip_labor_eur\nBron in de demo: Per CIP-cyclus: loog en zuur x kiloprijs + water x m3-prijs + gas en elektriciteit x prijs + 0,5 uur arbeid.\nLet op: Prijzen zijn demo-aannames uit cost_model.\nDoel 400, waarschuwing 500, kritiek 700 EUR (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    }
+  ]
+}

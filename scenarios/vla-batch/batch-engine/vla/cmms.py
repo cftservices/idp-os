@@ -28,6 +28,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Protocol
 
+from . import demo_pause
 from . import model as M
 
 log = logging.getLogger("vla.cmms")
@@ -47,7 +48,9 @@ FAILURE_MODES = {
                   ("Toevoerklep sluit niet", "mechanisch", (180, 360))],
     "process": [("Roerwerkmotor thermisch beveiligd", "elektrisch", (180, 420)),
                 ("Doseerklep lekt", "mechanisch", (150, 300))],
-    "cook": [("Stoomregelklep hangt", "mechanisch", (240, 480)),
+    # Niet "Stoomregelklep hangt": dat is de oorzaak die scripts/scenario_steam_valve.py
+    # naspeelt als kwaliteitsprobleem. Dezelfde tekst als storing vertroebelt de 8D.
+    "cook": [("Condenspot stoomtoevoer verstopt", "mechanisch", (240, 480)),
              ("Temperatuurvoeler defect", "elektrisch", (150, 300))],
     "cooler": [("Koelwaterpomp uitgevallen", "mechanisch", (210, 420)),
                ("Flowmeter koelwater wijkt af", "proces", (150, 270))],
@@ -88,7 +91,7 @@ class CmmsAdapter(Protocol):
     name: str
 
     def create(self, wo: dict) -> dict: ...
-    def update(self, wo_id: str, fields: dict) -> None: ...
+    def update(self, wo_id: str, fields: dict, scope: Optional[dict] = None) -> None: ...
     def get(self, wo_id: str) -> Optional[dict]: ...
     def all(self) -> list[dict]: ...
 
@@ -106,8 +109,10 @@ class DemoCmmsAdapter:
         self.db.dw_work_orders.insert_one(dict(wo))
         return wo
 
-    def update(self, wo_id: str, fields: dict) -> None:
-        self.db.dw_work_orders.update_one({"wo_id": wo_id}, {"$set": fields})
+    def update(self, wo_id: str, fields: dict, scope: Optional[dict] = None) -> None:
+        # scope (equipment_id, kind, reported_at) pins the update to ONE document,
+        # also when an older document carries the same number (incident 17-11-2026).
+        self.db.dw_work_orders.update_one({"wo_id": wo_id, **(scope or {})}, {"$set": fields})
 
     def get(self, wo_id: str) -> Optional[dict]:
         return self.db.dw_work_orders.find_one({"wo_id": wo_id})
@@ -137,6 +142,17 @@ class CmmsConnector:
         self.status = {"adapter": self.adapter.name, "auto_breakdowns": auto_breakdowns,
                        "last_tick": None, "created": 0, "completed": 0,
                        "last_error": None}
+        self._ensure_unique_index()
+
+    def _ensure_unique_index(self) -> None:
+        """A work order number is unique in the store. If duplicates already exist
+        the index cannot be built: say so loudly instead of failing silently."""
+        try:
+            self.db.dw_work_orders.create_index("wo_id", unique=True)
+        except Exception as e:  # pragma: no cover - only with a real Mongo
+            log.error("cmms: unique index on wo_id not created (%s); duplicate "
+                      "work order numbers exist and must be renumbered", e)
+            self.status["last_error"] = f"duplicate wo_id: {e}"
 
     # ------------------------------------------------------------ lifecycle
 
@@ -194,7 +210,7 @@ class CmmsConnector:
         if equipment_id not in M.ALL_EQUIPMENT_IDS:
             raise ValueError(f"unknown equipment: {equipment_id}")
         wo = {
-            "wo_id": f"WO-{uuid.uuid4().hex[:6].upper()}",
+            "wo_id": self._new_wo_id(),
             "equipment_id": equipment_id,
             "line": M.line_of_equipment(equipment_id),
             "area": M.area_of(equipment_id),
@@ -220,6 +236,13 @@ class CmmsConnector:
         log.info("werkorder %s: %s %s (%s)", wo["wo_id"], kind, equipment_id, cause)
         return wo
 
+    def _new_wo_id(self) -> str:
+        for _ in range(20):
+            wo_id = f"WO-{uuid.uuid4().hex[:8].upper()}"
+            if self.adapter.get(wo_id) is None:
+                return wo_id
+        raise RuntimeError("could not find a free work order number")
+
     def report_breakdown(self, equipment_id: str, cause: Optional[str] = None,
                          repair_s: Optional[float] = None) -> dict:
         """Storing: machine Down en een werkorder. Eén open storing per machine."""
@@ -243,10 +266,24 @@ class CmmsConnector:
 
     def list(self, line: Optional[str] = None, status: Optional[str] = None,
              equipment_id: Optional[str] = None, open_only: bool = False,
-             limit: int = 200) -> list[dict]:
+             limit: int = 200, since: Optional[str] = None,
+             until: Optional[str] = None) -> list[dict]:
+        """Nieuwste eerst. since/until (ISO, ook Grafana's ...Z) begrenzen op reported_at."""
+        bounds = {}
+        for name, value in (("since", since), ("until", until)):
+            if value:
+                dt = _parse(value)
+                if dt is None or dt.tzinfo is None:
+                    raise ValueError(f"{name} moet een ISO-tijdstip met tijdzone zijn: {value!r}")
+                bounds[name] = dt
         rows = self.adapter.all()
         out = []
         for r in rows:
+            if bounds:
+                rep = _parse(r.get("reported_at"))
+                if rep is None or ("since" in bounds and rep < bounds["since"]) \
+                        or ("until" in bounds and rep >= bounds["until"]):
+                    continue
             if line and r.get("line") != line:
                 continue
             if status and r.get("status") != status:
@@ -269,7 +306,9 @@ class CmmsConnector:
         upd = {"status": status, "history": hist, **fields}
         if key:
             upd[key] = ts
-        self.adapter.update(wo["wo_id"], upd)
+        self.adapter.update(wo["wo_id"], upd, scope={
+            "equipment_id": wo["equipment_id"], "kind": wo["kind"],
+            "reported_at": wo.get("reported_at")})
         wo = dict(wo, **upd)
         self._publish(wo)
         self._event(wo, f"work_order_{status}")
@@ -340,6 +379,8 @@ class CmmsConnector:
             for lid in M.LINES:
                 if self.equipment.line_down(lid):
                     continue
+                if demo_pause.is_paused(self.db, lid, now):
+                    continue  # a presenter has this line: no surprise breakdown
                 if dt > 0 and self.rng.random() < dt / self.mean_breakdown_interval_s:
                     eq = self.rng.choice(M.LINES[lid].equipment_ids)
                     self.report_breakdown(eq)

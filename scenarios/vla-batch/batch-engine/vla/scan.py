@@ -36,29 +36,65 @@ class ScanFlow:
 
     def scan_order(self, code: str, operator_id: Optional[str] = None,
                    for_start: bool = False) -> dict:
+        """The gate. Answers with the batch to work on and the phase it is in:
+
+        dosing     the batch is still bookable: weigh, sample, book production
+        logistics  the batch is COMPLETE: only pallets, putaway and shipping.
+                   A REJECTED batch also opens here on purpose, so the pallet
+                   refusal ("not approved") is what the operator sees.
+        None       an order without a batch yet
+
+        A scanned ORDER code picks its open batch first, then its latest
+        finished one. A closed order is refused; a finished batch scanned by
+        its own code is not, because logistics happens after the order closes.
+        """
         order = self.orders.get_order(code) if self.orders else None
         batch = None
         if order is None:
             batch = self.db.dw_batches.find_one({"batch_id": code})
             if batch is None:
                 self._reject(None, code, "unknown", operator_id)
-            if batch.get("order_id"):
+            if batch.get("order_id") and self.orders:
                 order = self.orders.get_order(batch["order_id"])
-        if order is not None and order["status"] == M.ORDER_DONE:
-            self._reject(batch and batch.get("batch_id"), code, "not_active",
-                         operator_id)
-        if batch is not None and batch["state"] == M.COMPLETE:
-            self._reject(batch["batch_id"], code, "not_active", operator_id)
+        else:
+            if order["status"] == M.ORDER_DONE:
+                self._reject(None, code, "not_active", operator_id)
+            batch = self._batch_of_order(order["order_id"])
         if for_start:
             active = next((b for b in self.db.dw_batches.find({})
                            if b["state"] in (M.DOSING, M.COOKING, M.COOLING,
                                              M.FILLING)), None)
             if active is not None:
                 self._reject(active["batch_id"], code, "line_busy", operator_id)
-        self._event(batch and batch.get("batch_id"), "order_scanned",
-                    {"code": code, "operator_id": operator_id,
-                     "order_id": order and order.get("order_id")})
-        return {"ok": True, "order": order, "batch": batch}
+        batch_id = batch and batch.get("batch_id")
+        order_id = (order and order.get("order_id")) or (batch and batch.get("order_id"))
+        self._event(batch_id, "order_scanned",
+                    {"code": code, "operator_id": operator_id, "order_id": order_id})
+        phase = None
+        if batch is not None:
+            phase = "logistics" if batch["state"] == M.COMPLETE else "dosing"
+        return {"ok": True, "order": order, "batch": batch,
+                # flat fields for the shop-floor screen
+                "order_id": order_id, "batch_id": batch_id, "phase": phase,
+                "materials": self._materials(batch_id) if phase == "dosing" else []}
+
+    def _batch_of_order(self, order_id: str) -> Optional[dict]:
+        rows = sorted(self.db.dw_batches.find({"order_id": order_id}),
+                      key=lambda b: b.get("created_at") or "")
+        open_ = [b for b in rows if b["state"] != M.COMPLETE]
+        return (open_ or rows or [None])[-1]
+
+    def _materials(self, batch_id: str) -> list[dict]:
+        out = []
+        for d in self.db.dw_doses.find({"batch_id": batch_id}):
+            target = float(d["qty_target"])
+            prepared = float(d.get("qty_prepared") or 0.0)
+            out.append({"material_id": d["material_id"], "qty_target": target,
+                        "qty_staged": prepared if d.get("qty_prepared") is not None else None,
+                        "remaining": round(max(0.0, target - prepared), 4),
+                        "booked": d.get("qty_actual") is not None,
+                        "tol_min": d.get("tol_min"), "tol_max": d.get("tol_max")})
+        return out
 
     # ------------------------------------------------------ step 2: label scan
 

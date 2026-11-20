@@ -154,6 +154,25 @@ function CameraRig({
   return null;
 }
 
+/**
+ * Uitzendprofiel: een vaste beeldsnelheid in plaats van "zo vaak als de
+ * browser kan". De renderer op de VPS heeft geen GPU; Chromium tekent WebGL
+ * dan op de CPU (SwiftShader), en die CPU deelt hij met de encoder en de demo.
+ * Met frameloop "demand" tekent R3F alleen na een invalidate(); dit interval
+ * geeft er precies `fps` per seconde.
+ */
+function FrameCap({ fps }: { fps: number }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    const id = window.setInterval(() => invalidate(), Math.round(1000 / fps));
+    return () => window.clearInterval(id);
+  }, [fps, invalidate]);
+  return null;
+}
+
+/** Beeldsnelheid van de 3D-scène in de uitzending. De encoder neemt 25 fps op. */
+const BROADCAST_FPS = 20;
+
 export default function SiteScene({
   model,
   ctx,
@@ -164,6 +183,7 @@ export default function SiteScene({
   order = null,
   showPath = false,
   lens = null,
+  broadcast = false,
 }: {
   model: TwinModel;
   ctx: TwinCtx;
@@ -174,6 +194,8 @@ export default function SiteScene({
   order?: ActiveOrder | null;
   showPath?: boolean;
   lens?: LensMarker[] | null;
+  /** Licht profiel voor de livestream: geen schaduwen, geen reflecties, vaste fps. */
+  broadcast?: boolean;
 }) {
   const { palette, reducedMotion } = ctx;
   const flowing = model.batch ? ACTIVE_STATES.has(model.batch.state) : false;
@@ -195,12 +217,14 @@ export default function SiteScene({
 
   return (
     <Canvas
-      shadows
-      dpr={[1, 2]}
-      frameloop={reducedMotion && !presenting ? "demand" : "always"}
+      // Zonder shadowMap negeert de renderer elke castShadow in de objecten;
+      // die hoeven dus niet per object uit.
+      shadows={!broadcast}
+      dpr={broadcast ? 1 : [1, 2]}
+      frameloop={broadcast || (reducedMotion && !presenting) ? "demand" : "always"}
       camera={{ position: CAMERA_HOME, fov: 32, near: 1, far: 400 }}
       onPointerMissed={() => ctx.select(null)}
-      gl={{ antialias: true, preserveDrawingBuffer: true }}
+      gl={broadcast ? { antialias: false, preserveDrawingBuffer: false } : { antialias: true, preserveDrawingBuffer: true }}
       aria-label="3D-weergave van de site"
       data-twin-canvas=""
     >
@@ -210,16 +234,22 @@ export default function SiteScene({
         <fog attach="fog" args={[palette.sky, 120, 320]} />
         <hemisphereLight args={[palette["roof-edge"], palette.ground, 1.1]} />
         <ambientLight intensity={0.45} />
-        {/* Studio-reflecties voor RVS en lak: alleen lichtvlakken, geen HDR-download. */}
-        <Environment resolution={256} environmentIntensity={0.8}>
-          <Lightformer form="rect" intensity={2.5} position={[0, 12, 0]} rotation-x={Math.PI / 2} scale={[40, 12, 1]} />
-          <Lightformer form="rect" intensity={1.2} position={[-30, 6, 0]} rotation-y={Math.PI / 2} scale={[30, 6, 1]} />
-          <Lightformer form="rect" intensity={1.2} position={[30, 6, 0]} rotation-y={-Math.PI / 2} scale={[30, 6, 1]} />
-        </Environment>
+        {/* Studio-reflecties voor RVS en lak: alleen lichtvlakken, geen HDR-download.
+            In de uitzending niet: een cube-render per frame is op de CPU te duur. */}
+        {!broadcast && (
+          <Environment resolution={256} environmentIntensity={0.8}>
+            <Lightformer form="rect" intensity={2.5} position={[0, 12, 0]} rotation-x={Math.PI / 2} scale={[40, 12, 1]} />
+            <Lightformer form="rect" intensity={1.2} position={[-30, 6, 0]} rotation-y={Math.PI / 2} scale={[30, 6, 1]} />
+            <Lightformer form="rect" intensity={1.2} position={[30, 6, 0]} rotation-y={-Math.PI / 2} scale={[30, 6, 1]} />
+          </Environment>
+        )}
+        {/* Zonder Environment mist RVS zijn reflectie; wat extra omgevingslicht houdt het leesbaar. */}
+        {broadcast && <ambientLight intensity={0.35} />}
+        {broadcast && <FrameCap fps={BROADCAST_FPS} />}
         <directionalLight
           position={[-22, 42, 28]}
           intensity={2.4}
-          castShadow
+          castShadow={!broadcast}
           shadow-mapSize={[2048, 2048]}
           shadow-bias={-0.0004}
           shadow-radius={6}
@@ -298,7 +328,9 @@ export default function SiteScene({
           maxDistance={200}
           maxPolarAngle={1.3}
           autoRotate={presenting && !reducedMotion}
-          autoRotateSpeed={0.6}
+          // OrbitControls draait per getekend frame; bij 20 in plaats van 60 fps
+          // compenseert de snelheid, zodat de rondgang even lang duurt.
+          autoRotateSpeed={broadcast ? 0.6 * (60 / BROADCAST_FPS) : 0.6}
         />
         {showPath && order && <OrderPath order={order} model={model} />}
         {lens && <LensMarkers markers={lens} onSelect={ctx.select} />}

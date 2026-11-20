@@ -6,7 +6,8 @@ import { ProcessView } from "@/components/screens/ProcessView";
 import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
-import { useLines, useOrders, useUiModel } from "@/lib/queries";
+import { shortTime } from "@/lib/format";
+import { useDemoPause, useLines, useOrders, useUiModel } from "@/lib/queries";
 import { LINE_LABEL, LineSwitch, useLineParam } from "@/components/toolkit/LineSwitch";
 import type { Refusal } from "@/lib/refusal";
 
@@ -30,6 +31,111 @@ import type { Refusal } from "@/lib/refusal";
 const OPERATOR = "op-01";
 
 type Order = { order_id: string; status: string; recipe_id?: string; line?: string };
+
+const PAUSE_MINUTES = [30, 45, 90] as const;
+
+/**
+ * Demomodus: de lijn aan een presentator geven. Op de VPS loopt alles vanzelf
+ * (autopilot, CIP, stoomklepscenario, willekeurige storingen); dat maakt de demo
+ * levend, maar een eigen batch is dan niet te volgen. Een pauze geldt per lijn en
+ * loopt altijd af, zodat een vergeten pauze de demo niet stillegt.
+ */
+function DemoModus({
+  lineId,
+  busy,
+  run,
+}: {
+  lineId: string;
+  busy: boolean;
+  run: (fn: () => Promise<unknown>, label: string) => Promise<void>;
+}) {
+  const pause = useDemoPause();
+  const [minutes, setMinutes] = useState<number>(45);
+  const st = pause.data?.[lineId];
+
+  return (
+    <section className="tile flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="eyebrow">Demomodus {lineId}</span>
+        {st && (
+          <StatusPill status={st.paused ? "idle" : "run"}>
+            {st.paused ? "Gepauzeerd voor de demo" : "Autopilot actief"}
+          </StatusPill>
+        )}
+      </div>
+      {st?.paused ? (
+        <p className="text-[0.8125rem]">
+          Tot <span className="num">{shortTime(st.until)}</span> (nog{" "}
+          <span className="num">{Math.ceil(st.minutes_left)}</span> min)
+          {st.by ? (
+            <>
+              , door <span className="mono">{st.by}</span>
+            </>
+          ) : null}
+          . Geen batches, CIP, storingen of stoomklepfout van de autopilot op deze lijn, en de
+          fabriek start niet zelf door. Start hieronder je eigen batch; reinigen doe je zelf
+          via <CrossLink href="/equipment">Equipment</CrossLink>.
+        </p>
+      ) : (
+        <p className="text-[0.8125rem] text-ink-muted">
+          Deze lijn draait vanzelf: elke paar minuten een batch, CIP als de kookunit vuil is,
+          af en toe een storing. Pauzeer voor een live demo; de andere lijn blijft draaien.
+        </p>
+      )}
+      <div className="flex flex-wrap items-end gap-3">
+        {st?.paused ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await post("/demo/resume", { line: lineId, operator_id: OPERATOR });
+                await pause.refetch();
+              }, "hervatten")
+            }
+            className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+          >
+            Autopilot hervatten
+          </button>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1 text-[0.8125rem]">
+              Duur
+              <select
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+                className="border border-line-strong bg-surface px-2 py-1"
+              >
+                {PAUSE_MINUTES.map((m) => (
+                  <option key={m} value={m}>
+                    {m} minuten
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={busy || !st}
+              onClick={() =>
+                run(async () => {
+                  await post("/demo/pause", { line: lineId, minutes, operator_id: OPERATOR });
+                  await pause.refetch();
+                }, "pauze")
+              }
+              className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+            >
+              Lijn {lineId} pauzeren
+            </button>
+          </>
+        )}
+      </div>
+      <p className="text-[0.6875rem] text-ink-faint">
+        Een lopende batch van de autopilot maakt eerst af. Na het hervatten neemt de autopilot
+        de lijn weer over, ook de CIP als je die hebt laten liggen.
+      </p>
+    </section>
+  );
+}
 
 export function Scada() {
   const orders = useOrders<Order[]>();
@@ -58,8 +164,11 @@ export function Scada() {
     setRefusal(null);
     setMessage(null);
     try {
-      await fn();
-      setMessage(`${label} geaccepteerd`);
+      const out = await fn();
+      // Een start meldt welke batch er in de MES is aangemaakt.
+      setMessage(
+        typeof out === "string" ? `${label} geaccepteerd: batch ${out}` : `${label} geaccepteerd`,
+      );
     } catch (e) {
       setRefusal(e as Refusal);
       setRetry(() => retryable ?? null);
@@ -122,22 +231,43 @@ export function Scada() {
 
       <ProcessView lineId={lineId} />
 
+      <DemoModus lineId={lineId} busy={busy} run={run} />
+
       <section className="tile flex flex-col gap-3">
         <span className="eyebrow">Lijnbesturing</span>
         <div className="flex flex-wrap gap-2">
-          {(["start", "stop"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                run(() => cmd({ equipment_id: "Batch", cmd: c, params: {} }), c, undefined)
-              }
-              className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
-            >
-              {c === "start" ? "Start" : "Stop"}
-            </button>
-          ))}
+          {/* Start maakt een batch in de MES (met order, CIP-poort en verdict) en
+              start die; hij stuurt de fabriek nooit buiten de MES om. */}
+          <button
+            type="button"
+            disabled={busy || !looseRecipe}
+            title={`Batch ${looseRecipe} in de MES aanmaken en starten`}
+            onClick={() =>
+              run(async () => {
+                const r = (await cmd({
+                  equipment_id: "Batch",
+                  cmd: "start",
+                  params: { recipe_id: looseRecipe, operator_id: OPERATOR },
+                })) as { opcua?: { batch_id?: string } };
+                return r.opcua?.batch_id;
+              }, "start")
+            }
+            className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+          >
+            Start
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => cmd({ equipment_id: "Batch", cmd: "stop", params: {} }), "stop")}
+            className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+          >
+            Stop
+          </button>
+          <span className="self-center text-[0.8125rem] text-ink-muted">
+            Start maakt een batch <span className="mono">{looseRecipe}</span> in de MES, met de
+            CIP-poort en een verdict.
+          </span>
           <button
             type="button"
             disabled={busy}

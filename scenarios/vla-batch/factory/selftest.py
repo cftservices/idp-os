@@ -173,6 +173,142 @@ def main() -> int:
     all_ok &= check("temp_C changes during a batch", len(temps) > 1,
                     f"{len(temps)} distinct values")
 
+    # ---- natural variation (SIM_VARIATION) ---------------------------------
+    # Twelve batches with the seeded variation on: the viscosity must vary (or a
+    # control chart has nothing to show), stay in spec without a fault, and be
+    # reproducible from the seed. A fault must still push a batch out of spec.
+    def visc_series(seed: int, n: int = 12) -> list[float]:
+        pv = VlaProcess(variation=True, seed=seed)
+        out = []
+        for i in range(n):
+            pv.start_batch(RECIPE, batch_id=f"SELFTEST-VAR-{i}")
+            t = 0
+            while pv.state != COMPLETE and t < MAX_TICKS:
+                pv.tick(DT)
+                t += 1
+            out.append(round(pv.viscosity_cP, 2))
+        return out
+
+    var_a, var_b = visc_series(46), visc_series(46)
+    spread = max(var_a) - min(var_a)
+    all_ok &= check("viscosity varies batch to batch", spread > 2.0,
+                    f"min {min(var_a):.1f}, max {max(var_a):.1f} cP")
+    all_ok &= check("varied batches stay in spec",
+                    all(SPEC_MIN <= v <= SPEC_MAX for v in var_a), "")
+    all_ok &= check("variation is reproducible from the seed", var_a == var_b, "")
+    pf = VlaProcess(variation=True, seed=46)
+    pf.start_batch(RECIPE, batch_id="SELFTEST-VAR-FAULT")
+    pf.inject_fault("cook_undertemp", 0.6)
+    t = 0
+    while pf.state != COMPLETE and t < MAX_TICKS:
+        pf.tick(DT)
+        t += 1
+    all_ok &= check("fault still out of spec with variation on", pf.viscosity_cP < SPEC_MIN,
+                    f"{pf.viscosity_cP:.1f} cP")
+
+    # Fouling rate: with variation on, the number of batches until the CIP limit differs
+    # per cleaning cycle (no metronome), stays plausible, and comes back from the seed.
+    def batches_to_limit(seed: int, cycles: int = 8, run_h: float = 0.126,
+                         limit: float = 0.06) -> list[int]:
+        pv = VlaProcess(variation=True, seed=seed)
+        out = []
+        for _ in range(cycles):
+            n = 0
+            while pv._past_rf() < limit and n < 100:
+                pv._draw_foul_batch()
+                pv._foul(run_h)
+                n += 1
+            out.append(n)
+            pv._clean()
+        return out
+
+    foul_a, foul_b = batches_to_limit(46), batches_to_limit(46)
+    flat = VlaProcess(variation=False)
+    n_flat = 0
+    while flat._past_rf() < 0.06:
+        flat._draw_foul_batch()
+        flat._foul(0.126)
+        n_flat += 1
+    all_ok &= check("fouling rate varies per cleaning cycle", len(set(foul_a)) >= 3,
+                    f"batches to Rf 0.06: {foul_a} (without variation {n_flat})")
+    all_ok &= check("fouling cycles stay plausible (7 to 20 batches)",
+                    all(7 <= n <= 20 for n in foul_a), "")
+    all_ok &= check("fouling spread is reproducible from the seed", foul_a == foul_b, "")
+    all_ok &= check("without variation the fouling curve is unchanged", n_flat == 13,
+                    f"{n_flat} batches")
+
+    # ---- utilities, intake pasteuriser, CIP (fase 3) ------------------------
+    print("\n-- utilities, pasteur en CIP --")
+    import physics as P
+    pu = VlaProcess(variation=False)
+    readings, firsts, cooking_gas = [], [], None
+    for i in range(12):
+        pu.start_batch(RECIPE, batch_id=f"SELFTEST-U-{i}")
+        hot_first = None
+        t = 0
+        while pu.state != COMPLETE and t < MAX_TICKS:
+            st, gas0, peak0 = pu.state, pu.heat_kwh_total, pu.cook_temp_C
+            pu.tick(DT)
+            t += 1
+            if i == 0 and st == COOKING:
+                cooking_gas = (cooking_gas or 0.0) + (pu.heat_kwh_total - gas0)
+            if i == 0 and st == DOSING and pu.state == COOKING:
+                cook_start_C = pu.cook_temp_C
+            if pu.past_flow_kg_s > 0 and hot_first is None:
+                hot_first = (pu.past_hot_in_C, pu.past_cold_in_C, pu.past_regen_out_C,
+                             pu.past_hold_C)
+            readings.append((pu.heat_kwh_total, pu.electricity_kwh_total, pu.water_L_total))
+        firsts.append(hot_first)
+        if i == 0:
+            mass = sum(pu.dose_actual_kg.values())
+            expect = (mass * P.CP_PRODUCT_KJ_KG_K * (pu.peak_cook_temp_C - cook_start_C)
+                      + P.COOK_HOLD_LOSS_KW * pu.hold_elapsed_sec) / 3600.0 / P.BOILER_EFF
+    all_ok &= check("cook energy = m x cp x dT (+ hold loss) / boiler eff, within 5%",
+                    abs(cooking_gas - expect) <= 0.05 * expect,
+                    f"{cooking_gas:.1f} vs {expect:.1f} kWh")
+    hot_in, cold, regen, hold = firsts[0]
+    eff = (regen - cold) / (hold - cold)
+    all_ok &= check("heat recovery between 80 and 95 %", 0.80 <= eff <= 0.95, f"{eff * 100:.1f} %")
+    all_ok &= check("fouling: hot water runs hotter after 12 batches",
+                    firsts[-1][0] > firsts[0][0] + 1.0,
+                    f"{firsts[0][0]:.1f} -> {firsts[-1][0]:.1f} C")
+    rf12 = pu._past_rf()
+    all_ok &= check("fouling reaches the CIP limit around 12 batches", 0.05 <= rf12 <= 0.07,
+                    f"Rf {rf12:.4f} m2K/kW")
+    all_ok &= check("pasteuriser has no flow outside dosing", pu.past_flow_kg_s == 0.0, "")
+
+    pu.start_batch(RECIPE, batch_id="SELFTEST-U-BUSY")
+    all_ok &= check("CIP refused while a batch runs", pu.start_cip() == 1, "")
+    while pu.state != COMPLETE:
+        pu.tick(DT)
+    water0 = pu.water_L_total
+    all_ok &= check("CIP starts from COMPLETE", pu.start_cip() == 0, pu.state)
+    t = 0
+    while pu.state == P.CIP and t < MAX_TICKS:
+        pu.tick(DT)
+        t += 1
+        readings.append((pu.heat_kwh_total, pu.electricity_kwh_total, pu.water_L_total))
+    last = pu.cip_last
+    all_ok &= check("CIP takes 60 process minutes and returns to IDLE",
+                    abs(last["duration_s"] - 3600.0) < 1.0 and pu.state == IDLE,
+                    f"{last['duration_s']:.0f} s, {pu.state}")
+    all_ok &= check("CIP uses 9 m3 water, 15 kg caustic, 8 kg acid",
+                    abs(pu.water_L_total - water0 - 9000) < 1 and last["caustic_kg"] == 15.0
+                    and last["acid_kg"] == 8.0, f"{last}")
+    all_ok &= check("CIP removes the fouling", pu._past_rf() == 0.0 and pu.cip_count == 1, "")
+    mono = all(b[j] >= a[j] for a, b in zip(readings, readings[1:]) for j in range(3))
+    all_ok &= check("meter totals never go down", mono, f"{len(readings)} readings")
+    pu.start_batch(RECIPE, batch_id="SELFTEST-U-CLEAN")
+    while pu.past_flow_kg_s == 0.0:
+        pu.tick(DT)
+    # U from the PUBLISHED signals, the way the engine computes it (KPI-PAC-101)
+    duty = pu.past_flow_kg_s * P.CP_PRODUCT_KJ_KG_K * (pu.past_hold_C - pu.past_regen_out_C)
+    u = duty / (P.PAST_AREA_M2 * P.lmtd(pu.past_hot_in_C - pu.past_hold_C,
+                                        pu.past_hot_out_C - pu.past_regen_out_C))
+    all_ok &= check("after CIP the U computed from the signals is back at clean",
+                    abs(u - P.PAST_U_CLEAN) / P.PAST_U_CLEAN < 0.02,
+                    f"U {u:.2f} vs clean {P.PAST_U_CLEAN} kW/m2/K")
+
     # ---- verdict ------------------------------------------------------------
     print()
     if all_ok:

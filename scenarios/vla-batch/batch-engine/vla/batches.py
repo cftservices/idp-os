@@ -94,6 +94,10 @@ class BatchRunner:
         planned_L = float(planned_L) if planned_L else recipe.basis_L
         if planned_L <= 0:
             raise ValueError("planned_L must be > 0")
+        # A started batch on a busy line used to be refused only in start_batch,
+        # AFTER the batch document existed, leaving an orphan IDLE batch behind.
+        if auto_start and self.factory_busy():
+            raise ValueError("factory line is busy with another batch")
 
         # Release-gate: check recipe status is "released"
         rec_doc = self.db.dw_recipes.find_one({"recipe_id": recipe_id})
@@ -280,6 +284,14 @@ class BatchRunner:
     START_TIMEOUT_S = 30.0
     FOLLOW_TIMEOUT_S = 900.0
 
+    def factory_busy(self) -> bool:
+        """True when the factory of this line reports a running batch over the UNS.
+        Without a connected bus (offline, selftest) nothing can be known: False."""
+        if self.bus is None or not getattr(self.bus, "connected", False):
+            return False
+        return self._bus_str("Batch", "state") in (M.DOSING, M.COOKING, M.COOLING,
+                                                   M.FILLING)
+
     def start_batch(self, batch_id: str,
                     telemetry: Optional[dict[str, Any]] = None) -> dict:
         """Send StartBatch and drive the batch to COMPLETE.
@@ -298,19 +310,21 @@ class BatchRunner:
         batch = self._raw_batch(batch_id)
         if batch is None:
             raise ValueError(f"unknown batch {batch_id!r}")
-        if batch["state"] in (M.COMPLETE,):
+        if batch["state"] in M.FINISHED_STATES:
             return self.get_batch(batch_id)
 
         recipe = M.get_recipe(batch["recipe_id"])
         live = (telemetry is None and self.bus is not None
                 and getattr(self.bus, "connected", False))
-        if live:
-            fstate = self._bus_str("Batch", "state")
-            if fstate in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
-                raise ValueError("factory line is busy with another batch")
+        if live and self.factory_busy():
+            raise ValueError("factory line is busy with another batch")
 
+        # started_at is provisional here: the moment of the command. In live mode the follow
+        # thread moves it to the moment the factory is seen running, so the batch duration is
+        # the equipment's run and not the engine's own latency (commanded_at keeps the first).
         started = _now()
-        self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started)})
+        self._update(batch_id, {"state": M.DOSING, "started_at": _iso(started),
+                                "commanded_at": _iso(started)})
         self._event(batch_id, "batch_started",
                     {"mode": "live" if live else "instant"})
         if self.orders is not None and batch.get("order_id"):
@@ -367,38 +381,52 @@ class BatchRunner:
             saw_running = False
             t0 = time.monotonic()
 
+            ended_at: Optional[datetime] = None
+            foreign_seen = False
             while time.monotonic() - t0 < self.FOLLOW_TIMEOUT_S:
                 st = self._bus_str("Batch", "state")
+                seen_at = _now()  # equipment time: when this state was read, before any write
 
-                tv = self._bus_float(self.line.eq("cook"), "temp_C")
-                if tv is not None:
-                    peak = tv if peak is None else max(peak, tv)
-                hv = self._bus_float(self.line.eq("cook"), "hold_elapsed_sec")
-                if hv is not None:
-                    hold = max(hold, hv)
+                if not saw_running and st in (M.COOKING, M.COOLING, M.FILLING):
+                    # Our batch starts in DOSING. A factory already further along runs a batch
+                    # of its own (self-chained, or one this engine lost at a restart, when the
+                    # busy check had an empty tag cache): never adopt it (B-20261118-8521C2).
+                    if not foreign_seen:
+                        foreign_seen = True
+                        self._event(batch_id, "factory_busy_foreign_batch", {"state": st})
+                    st = None
+
+                if saw_running or st == M.DOSING:  # only our own run, never a foreign batch
+                    tv = self._bus_float(self.line.eq("cook"), "temp_C")
+                    if tv is not None:
+                        peak = tv if peak is None else max(peak, tv)
+                    hv = self._bus_float(self.line.eq("cook"), "hold_elapsed_sec")
+                    if hv is not None:
+                        hold = max(hold, hv)
 
                 if st in (M.DOSING, M.COOKING, M.COOLING, M.FILLING):
+                    if not saw_running:
+                        self._update(batch_id, {"started_at": _iso(seen_at)})
                     saw_running = True
                     if st != mirrored:
                         mirrored = st
                         self._update(batch_id, {"state": st})
                         self._event(batch_id, "phase_mirrored", {"state": st})
                 elif st == M.COMPLETE and saw_running:
+                    ended_at = seen_at
                     break
                 elif st == M.IDLE and saw_running:
                     # factory aborted/stopped mid-batch — finalize with what we saw
+                    ended_at = seen_at
                     self._event(batch_id, "factory_stopped_early", {})
                     break
                 elif not saw_running and time.monotonic() - t0 > self.START_TIMEOUT_S:
-                    log.warning("factory never left IDLE for %s — "
-                                "falling back to instant simulation", batch_id)
+                    # The factory never took this batch (busy, restarting, or deaf). Do not
+                    # fill it in with simulated values: that books production, samples and a
+                    # verdict for a batch that was never made (B-20261118-7E4392).
+                    log.warning("factory never left IDLE for %s — aborting the batch", batch_id)
                     self._event(batch_id, "factory_start_timeout", {})
-                    batch = self._raw_batch(batch_id)
-                    self._book_doses(batch_id, None)
-                    p, h, fault, _m = self._read_cook(recipe, None)
-                    packs, rejects = self._read_packs(batch, None)
-                    self._finalize(batch_id, recipe, p, h, fault,
-                                   end_visc=None, packs=packs, rejects=rejects)
+                    self._abort(batch_id, "factory_start_timeout")
                     return
                 time.sleep(self.POLL_S)
 
@@ -418,7 +446,8 @@ class BatchRunner:
             else:
                 packs, rejects = int(packs_f), int(rejects_f or 0)
             self._finalize(batch_id, recipe, round(peak, 2), round(hold, 2),
-                           fault, end_visc=end_visc, packs=packs, rejects=rejects)
+                           fault, end_visc=end_visc, packs=packs, rejects=rejects,
+                           completed_at=ended_at)
         except Exception as e:  # pragma: no cover - defensive: thread must not die silent
             log.exception("live follow failed for %s", batch_id)
             try:
@@ -426,14 +455,24 @@ class BatchRunner:
             except Exception:
                 pass
 
+    def _abort(self, batch_id: str, reason: str) -> None:
+        """End a batch the factory never ran. Books nothing: no doses (the materials never
+        left), no production, no samples, no verdict. The line is idle again."""
+        self._update(batch_id, {"state": M.ABORTED, "aborted_at": _iso(),
+                                "abort_reason": reason})
+        self._event(batch_id, "batch_aborted", {"reason": reason})
+
     # ---------------------------------------------------------------- finalize
 
     def _finalize(self, batch_id: str, recipe: M.Recipe, peak_temp: float,
                   hold_elapsed: float, fault: Optional[str],
                   end_visc: Optional[float], packs: int, rejects: int,
-                  telemetry: Optional[dict] = None) -> None:
+                  telemetry: Optional[dict] = None,
+                  completed_at: Optional[datetime] = None) -> None:
         """Shared tail of the lifecycle: cook capture -> viscosity/Solve ->
-        filling -> COMPLETE -> verdict. `end_visc` None = compute via physics."""
+        filling -> COMPLETE -> verdict. `end_visc` None = compute via physics.
+        `completed_at` is the moment the factory was seen COMPLETE (live mode); the
+        bookkeeping below can take seconds on a busy host and must not count as run time."""
         self._update(batch_id, {
             "peak_cook_temp_C": peak_temp,
             "hold_elapsed_sec": hold_elapsed,
@@ -482,7 +521,9 @@ class BatchRunner:
                     {"packs_total": packs, "reject_count": rejects})
 
         # --- COMPLETE ---
-        self._update(batch_id, {"state": M.COMPLETE, "completed_at": _iso(_now())})
+        self._update(batch_id, {"state": M.COMPLETE,
+                                "completed_at": _iso(completed_at or _now()),
+                                "booked_at": _iso()})
         self._event(batch_id, "batch_complete", {})
 
         # --- CBM fouling (PR-18): capture heat-up + trend it on the monitor.
@@ -509,6 +550,14 @@ class BatchRunner:
             "critical_alarm_during_batch": crit,
         })
         self._event(batch_id, "verdict_set", {"verdict": verdict})
+        if verdict in (M.HOLD, M.REJECTED):
+            # Booked as finished goods at fill time; a blocked batch never ships.
+            raw = self._raw_batch(batch_id) or {}
+            packs = int(raw.get("packs_total") or 0)
+            if packs > 0:
+                inventory.block(self.db, self._event, M.fg_of_recipe(raw.get("recipe_id")),
+                                packs, batch_id,
+                                "scrap" if verdict == M.REJECTED else "quarantine")
 
     # ------------------------------------------------------------------- doses
 
@@ -811,6 +860,10 @@ class BatchRunner:
                 "completed_at": b.get("completed_at"),
                 "end_viscosity_cP": b.get("end_viscosity_cP"),
                 "verdict_ack": b.get("verdict_ack"),
+                # who started it ("autopilot" or an operator) and when: the scenario
+                # counts only autopilot batches, a demo pause hands the line to a person
+                "created_by": b.get("created_by"),
+                "created_at": b.get("created_at"),
             })
         return out
 
@@ -870,6 +923,31 @@ class BatchRunner:
         self._event(alarm["batch_id"], "alarm_acknowledged",
                     {"alarm_id": alarm_id, "operator_id": operator_id})
         return self.db.dw_alarms.find_one({"alarm_id": alarm_id})
+
+    def ack_all_open(self, operator_id: Optional[str], line: Optional[str] = None,
+                     priority: Optional[str] = None,
+                     equipment_id: Optional[str] = None) -> dict:
+        """Bevestig alle OPEN alarmen in een selectie, de knop "alles bevestigen".
+
+        Geparkeerde alarmen blijven geparkeerd: bevestigen zou hun reden en
+        einddatum stil overschrijven. Elk alarm krijgt zijn eigen
+        alarm_acknowledged-event, zodat het spoor per alarm gelijk is aan een
+        losse bevestiging. Een alarm zonder procesdeel (batchniveau) hoort bij
+        elke lijn, net als in het alarmscherm.
+        """
+        from . import alarms as A
+
+        ids = []
+        for a in A.list_alarms(self.db, state="open", priority=priority, limit=100_000):
+            eq = a.get("equipment_id")
+            if equipment_id and eq != equipment_id:
+                continue
+            if line and eq and (a.get("line") or M.line_of_equipment(eq)) != line:
+                continue
+            ids.append(a["alarm_id"])
+        for alarm_id in ids:
+            self.ack_alarm(alarm_id, operator_id=operator_id)
+        return {"acknowledged": len(ids), "alarm_ids": ids}
 
     def ack_verdict(self, batch_id: str, operator_id: str) -> dict:
         """Acknowledge a batch verdict (idempotent). Batch must be COMPLETE with verdict.

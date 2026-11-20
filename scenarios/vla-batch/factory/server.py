@@ -18,7 +18,9 @@ Contract (vla-build-contract.md §OPC-UA, §ISA-95):
 Env:
     OPCUA_ENDPOINT   default opc.tcp://0.0.0.0:4840/DairyWorks
     WRITE_INTERVAL   status write cadence in seconds (default 0.5)
-    TICK_INTERVAL    physics tick cadence in seconds (default 0.2)
+    TICK_INTERVAL    physics tick cadence in seconds (default 0.2); simulated time follows
+                     the wall clock, a slow loop catches up in TICK_INTERVAL steps
+    MAX_CATCHUP_S    most simulated seconds replayed after a stall (default 10)
     AUTOSTART_RECIPE if set (e.g. chocolate-vla-1L) auto-start a batch at boot
     AUTOSTART_DELAY_S seconds a COMPLETE batch waits before the factory chains
                      its own next batch (default 0). Gives the batch-engine
@@ -31,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 
 from asyncua import Server, ua
 from asyncua.common.methods import uamethod
@@ -50,6 +53,8 @@ LINE = "Vla"
 ENDPOINT = os.environ.get("OPCUA_ENDPOINT", "opc.tcp://0.0.0.0:4840/DairyWorks")
 WRITE_INTERVAL = float(os.environ.get("WRITE_INTERVAL", "0.5"))
 TICK_INTERVAL = float(os.environ.get("TICK_INTERVAL", "0.2"))
+# Most simulated time the tick loop replays after a stall; more is dropped with a warning.
+MAX_CATCHUP_S = float(os.environ.get("MAX_CATCHUP_S", "10"))
 AUTOSTART_RECIPE = os.environ.get("AUTOSTART_RECIPE") or None
 AUTOSTART_DELAY_S = float(os.environ.get("AUTOSTART_DELAY_S", "0"))
 
@@ -84,6 +89,26 @@ AREA_TAGS: dict[tuple[str, str], list[tuple[str, ua.VariantType, bool]]] = {
         ("packs_total", ua.VariantType.Int64, False),
         ("reject_count", ua.VariantType.Int64, False),
         ("pack_size_L", ua.VariantType.Double, False),
+    ],
+    # fase 3 (2026-11-19): intake-pasteur, meters en CIP-station
+    ("Receiving", "pasteurizer-01"): [
+        (t, ua.VariantType.Double, False) for t in (
+            "product_flow_kg_s", "cold_t_in_C", "regen_t_out_C", "hold_t_C",
+            "hot_t_in_C", "hot_t_out_C", "dp_bar", "run_h_since_cip")
+    ],
+    ("Utilities", "energy-meter-01"): [
+        (t, ua.VariantType.Double, False) for t in (
+            "heat_kwh_total", "electricity_kwh_total", "steam_kg_total")
+    ],
+    ("Utilities", "water-meter-01"): [
+        ("water_L_total", ua.VariantType.Double, False),
+    ],
+    ("Utilities", "cip-station-01"): [
+        ("step", ua.VariantType.String, False),
+        ("cip_count", ua.VariantType.Int64, False),
+        *[(f"last_{t}", ua.VariantType.Double, False) for t in (
+            "water_L", "caustic_kg", "acid_kg", "heat_kwh", "electricity_kwh",
+            "duration_s", "past_run_h")],
     ],
 }
 
@@ -143,6 +168,8 @@ class VlaServer:
         # last value the SERVER wrote into each writable setpoint node; used to tell a
         # genuine client write apart from the server's own readback echo.
         self._last_setpoint_echo: dict[tuple[str, str, str], float] = {}
+        # self-chaining after COMPLETE (AUTOSTART_RECIPE); SetAutostart can hold it off
+        self.autostart = True
 
     async def init(self) -> None:
         await self.server.init()
@@ -241,6 +268,28 @@ class VlaServer:
         await batch_obj.add_method(ua.NodeId(base + ".ClearFault", idx, ua.NodeIdType.String),
                                    ua.QualifiedName("ClearFault", idx), clear_fault, [], [I])
 
+        @uamethod
+        def start_cip(parent) -> ua.Int32:
+            return ua.Int32(p.start_cip())
+
+        await batch_obj.add_method(ua.NodeId(base + ".StartCip", idx, ua.NodeIdType.String),
+                                   ua.QualifiedName("StartCip", idx), start_cip, [], [I])
+
+        # Demo pause: the engine turns self-chaining off while a presenter has the line,
+        # so no batch starts outside the MES. Back on at every restart (env default).
+        server = self
+
+        @uamethod
+        def set_autostart(parent, enabled: bool) -> ua.Int32:
+            server.autostart = bool(enabled)
+            server._complete_since = None
+            log.info("autostart %s", "on" if server.autostart else "off")
+            return ua.Int32(0)
+
+        await batch_obj.add_method(ua.NodeId(base + ".SetAutostart", idx, ua.NodeIdType.String),
+                                   ua.QualifiedName("SetAutostart", idx), set_autostart,
+                                   [ua.VariantType.Boolean], [I])
+
     # ------------------------------------------------------------------ loops
     async def _apply_writable_setpoints(self) -> None:
         """Poll writable nodes; if a client wrote one (value differs from the value the
@@ -315,26 +364,48 @@ class VlaServer:
                 rc = self.p.start_batch(AUTOSTART_RECIPE)
                 log.info("autostart recipe %s -> rc=%d", AUTOSTART_RECIPE, rc)
             last_write = 0.0
-            elapsed = 0.0
-            complete_since: float | None = None
+            self._elapsed = 0.0
+            self._complete_since = None
+            # Simulated time follows the wall clock. Before 2026-11-18 every loop advanced a
+            # fixed TICK_INTERVAL, so on a CPU-starved host (steal of 50-67 % on the VPS) each
+            # loop took longer than that and a batch stretched in wall time: same packs, more
+            # clock hours, and an OEE drop that came from the host, not the plant. Now the
+            # loop measures the real time that passed and catches up in fixed TICK_INTERVAL
+            # steps, so the physics per step is unchanged (selftest results stay the same).
+            clock = time.monotonic()
+            backlog = 0.0
             while True:
-                self.p.tick(TICK_INTERVAL)
-                elapsed += TICK_INTERVAL
-                if elapsed - last_write >= WRITE_INTERVAL:
+                now = time.monotonic()
+                backlog += now - clock
+                clock = now
+                if backlog > MAX_CATCHUP_S:  # a paused container: do not replay minutes at once
+                    log.warning("tick loop %.1fs behind, dropping %.1fs of simulated time",
+                                backlog, backlog - MAX_CATCHUP_S)
+                    backlog = MAX_CATCHUP_S
+                while backlog >= TICK_INTERVAL:
+                    self._step()
+                    backlog -= TICK_INTERVAL
+                if self._elapsed - last_write >= WRITE_INTERVAL:
                     await self._apply_writable_setpoints()
                     await self._write_status()
-                    last_write = elapsed
-                # continuous demo: chain a fresh batch when one completes,
-                # after AUTOSTART_DELAY_S so an engine StartBatch can win.
-                if self.p.state == "COMPLETE":
-                    if complete_since is None:
-                        complete_since = elapsed
-                    if AUTOSTART_RECIPE and elapsed - complete_since >= AUTOSTART_DELAY_S:
-                        self.p.start_batch(AUTOSTART_RECIPE)
-                        complete_since = None
-                else:
-                    complete_since = None
+                    last_write = self._elapsed
                 await asyncio.sleep(TICK_INTERVAL)
+
+    def _step(self) -> None:
+        """One physics tick of TICK_INTERVAL, plus the autostart of the next batch."""
+        self.p.tick(TICK_INTERVAL)
+        self._elapsed += TICK_INTERVAL
+        # continuous demo: chain a fresh batch when one completes,
+        # after AUTOSTART_DELAY_S so an engine StartBatch can win.
+        if self.p.state == "COMPLETE":
+            if self._complete_since is None:
+                self._complete_since = self._elapsed
+            if AUTOSTART_RECIPE and self.autostart \
+                    and self._elapsed - self._complete_since >= AUTOSTART_DELAY_S:
+                self.p.start_batch(AUTOSTART_RECIPE)
+                self._complete_since = None
+        else:
+            self._complete_since = None
 
 
 def _vtype_for(area: str, eq: str, tag: str) -> ua.VariantType:

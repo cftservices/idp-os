@@ -39,14 +39,24 @@ gql() {
     -d "{\"query\":\"$1\"}"
 }
 
-# Idempotent: bestaat device 'vla' al, dan niets doen (config persist in Mongo).
+# Idempotent PER ADRES: bestaat device 'vla' al (config persist in Mongo), dan worden
+# alleen de adressen toegevoegd die nog ontbreken. Tot 2026-11-19 stopte het script
+# hier helemaal, waardoor een nieuwe tag in het model op een draaiende stack NOOIT
+# werd opgehaald: geen fout, alleen stilte. Gefilterd op deze device-naam, want L2
+# gebruikt dezelfde NodeIds op een andere server.
 EXISTS=$(gql "{opcUaDevices{name}}")
+HAVE=""
 case "$EXISTS" in
   *'"vla"'*)
-    echo "[vla-opcua-init] device 'vla' bestaat al — skip registratie."
-    exit 0 ;;
+    HAVE=$(gql "{opcUaDevices(name:\\\"vla\\\"){config{addresses{address}}}}")
+    case "$HAVE" in
+      *'"addresses"'*) : ;;
+      *) echo "[vla-opcua-init] FOUT: adressen van 'vla' niet op te vragen: $HAVE"; exit 1 ;;
+    esac
+    echo "[vla-opcua-init] device 'vla' bestaat al — alleen ontbrekende adressen toevoegen." ;;
 esac
 
+if [ -z "$HAVE" ]; then
 # 1) Device (config ZONDER addresses — die gaan per stuk via addAddress)
 ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\"vla\\\",namespace:\\\"DairyWorks/Vla\\\",nodeId:\\\"local\\\",enabled:true,config:{endpointUrl:\\\"opc.tcp://vla-factory:4840/DairyWorks\\\",securityPolicy:None,subscriptionSamplingInterval:1000.0,writeConfig:{enabled:true,requestResponseEnabled:true}}}){success errors}}}")
 echo "[vla-opcua-init] add: $ADD"
@@ -54,6 +64,7 @@ case "$ADD" in
   *'"success":true'*) : ;;
   *) echo "[vla-opcua-init] WARN: opcUaDevice.add failed — check schema/logs; overweeg --profile fallback (vla-connector)."; exit 1 ;;
 esac
+fi
 
 # 2) Addresses — NodeId scheme: $NS;s=DairyWorks.Vla.{Area}.{Equipment}.{tag}
 #    Topic scheme:  {Area}/{Equipment}/Status/{tag}  (Batch -> Batch/Status/{tag})
@@ -62,6 +73,14 @@ TAGS="
 Receiving.receiving-tank-01.level_L|Receiving/receiving-tank-01/Status/level_L
 Receiving.receiving-tank-01.temp_C|Receiving/receiving-tank-01/Status/temp_C
 Receiving.receiving-tank-01.fat_setpoint_pct|Receiving/receiving-tank-01/Status/fat_setpoint_pct
+Receiving.pasteurizer-01.product_flow_kg_s|Receiving/pasteurizer-01/Status/product_flow_kg_s
+Receiving.pasteurizer-01.cold_t_in_C|Receiving/pasteurizer-01/Status/cold_t_in_C
+Receiving.pasteurizer-01.regen_t_out_C|Receiving/pasteurizer-01/Status/regen_t_out_C
+Receiving.pasteurizer-01.hold_t_C|Receiving/pasteurizer-01/Status/hold_t_C
+Receiving.pasteurizer-01.hot_t_in_C|Receiving/pasteurizer-01/Status/hot_t_in_C
+Receiving.pasteurizer-01.hot_t_out_C|Receiving/pasteurizer-01/Status/hot_t_out_C
+Receiving.pasteurizer-01.dp_bar|Receiving/pasteurizer-01/Status/dp_bar
+Receiving.pasteurizer-01.run_h_since_cip|Receiving/pasteurizer-01/Status/run_h_since_cip
 Mixing.process-tank-01.level_L|Mixing/process-tank-01/Status/level_L
 Mixing.process-tank-01.temp_C|Mixing/process-tank-01/Status/temp_C
 Mixing.process-tank-01.agitator_rpm|Mixing/process-tank-01/Status/agitator_rpm
@@ -84,16 +103,31 @@ Cooling.cooler-01.target_C|Cooling/cooler-01/Status/target_C
 Filling.filler-01.packs_total|Filling/filler-01/Status/packs_total
 Filling.filler-01.reject_count|Filling/filler-01/Status/reject_count
 Filling.filler-01.pack_size_L|Filling/filler-01/Status/pack_size_L
+Utilities.energy-meter-01.heat_kwh_total|Utilities/energy-meter-01/Status/heat_kwh_total
+Utilities.energy-meter-01.electricity_kwh_total|Utilities/energy-meter-01/Status/electricity_kwh_total
+Utilities.energy-meter-01.steam_kg_total|Utilities/energy-meter-01/Status/steam_kg_total
+Utilities.water-meter-01.water_L_total|Utilities/water-meter-01/Status/water_L_total
+Utilities.cip-station-01.step|Utilities/cip-station-01/Status/step
+Utilities.cip-station-01.cip_count|Utilities/cip-station-01/Status/cip_count
+Utilities.cip-station-01.last_water_L|Utilities/cip-station-01/Status/last_water_L
+Utilities.cip-station-01.last_caustic_kg|Utilities/cip-station-01/Status/last_caustic_kg
+Utilities.cip-station-01.last_acid_kg|Utilities/cip-station-01/Status/last_acid_kg
+Utilities.cip-station-01.last_heat_kwh|Utilities/cip-station-01/Status/last_heat_kwh
+Utilities.cip-station-01.last_electricity_kwh|Utilities/cip-station-01/Status/last_electricity_kwh
+Utilities.cip-station-01.last_duration_s|Utilities/cip-station-01/Status/last_duration_s
+Utilities.cip-station-01.last_past_run_h|Utilities/cip-station-01/Status/last_past_run_h
 Batch.state|Batch/Status/state
 Batch.batch_id|Batch/Status/batch_id
 Batch.active_recipe|Batch/Status/active_recipe
 "
 # END GENERATED
 
-OK=0; FAIL=0
+OK=0; FAIL=0; SKIP=0
 for LINE in $TAGS; do
   NODE=${LINE%%|*}
   TOPIC=${LINE##*|}
+  # het afsluitende aanhalingsteken voorkomt dat temp_C matcht op temp_C_iets
+  case "$HAVE" in *"s=DairyWorks.Vla.${NODE}\""*) SKIP=$((SKIP+1)); continue ;; esac
   RES=$(gql "mutation{opcUaDevice{addAddress(deviceName:\\\"vla\\\",input:{address:\\\"NodeId://$NS;s=DairyWorks.Vla.$NODE\\\",topic:\\\"$TOPIC\\\",publishMode:SEPARATE}){success errors}}}")
   case "$RES" in
     *'"success":true'*) OK=$((OK+1)) ;;
@@ -101,6 +135,6 @@ for LINE in $TAGS; do
   esac
 done
 
-echo "[vla-opcua-init] vla device registered: $OK addresses OK, $FAIL failed."
+echo "[vla-opcua-init] vla device: $OK adressen toegevoegd, $SKIP al aanwezig, $FAIL mislukt."
 [ "$FAIL" -gt 0 ] && exit 1
 echo "[vla-opcua-init] Done. MonsterMQ ingests vla-factory natively via OPC-UA -> DairyWorks/Vla/#"

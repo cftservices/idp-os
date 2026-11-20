@@ -29,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vla import alarms as A, inventory, kpi as K, line as L, model as M
+from vla import alarms as A, bvip, bvip_map, demo_pause, inventory, kpi as K, kpi_history, \
+    line as L, meters, model as M
 from vla.autopilot import OPERATOR as AUTOPILOT_OPERATOR, Autopilot
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
@@ -147,6 +148,14 @@ class ShelveRequest(BaseModel):
 
 class AckRequest(BaseModel):
     operator_id: str | None = None
+
+
+class AckAllRequest(BaseModel):
+    # Dezelfde selectie als het alarmscherm: leeg betekent "alles".
+    operator_id: str | None = None
+    line: str | None = None
+    priority: str | None = None
+    equipment_id: str | None = None
 
 
 class ScanWeigh(BaseModel):
@@ -339,6 +348,16 @@ def _startup() -> None:
             STATE["autopilot"] = pilots[M.DEFAULT_LINE]
         except ValueError as e:
             log.error("autopilot not started: %s", e)
+    # Meters, pasteuriser and CIP cycles from the bus into Mongo (METERS=1, fase 3).
+    try:
+        STATE["meters"] = meters.start_if_enabled(db, buses, equipment, K.load_factory_model())
+    except Exception as e:  # noqa: BLE001
+        log.error("meters niet gestart: %s", e)
+    # KPI history into TDengine (KPI_WRITER=1); never blocks the start, retries on its own.
+    try:
+        STATE["kpi_writer"] = kpi_history.start_if_enabled(db)
+    except Exception as e:  # noqa: BLE001
+        log.error("KPI-historie niet gestart: %s", e)
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
              db.backend, bus.connected, control.url)
 
@@ -351,6 +370,10 @@ def _shutdown() -> None:
         pilot.stop()
     if STATE.get("autopilot") is not None:
         STATE["autopilot"].stop()
+    if STATE.get("kpi_writer") is not None:
+        STATE["kpi_writer"].stop_event.set()
+    if STATE.get("meters") is not None:
+        STATE["meters"].stop_event.set()
     for b in (STATE.get("buses") or {}).values() or [STATE.get("bus")]:
         if b is not None:
             b.stop()
@@ -375,6 +398,42 @@ def autopilot_status():
     return out
 
 
+class DemoPauseRequest(BaseModel):
+    line: str
+    minutes: float = demo_pause.DEFAULT_MINUTES
+    operator_id: str | None = None
+
+
+@app.get(f"{API}/demo/pause")
+def demo_pause_status():
+    """Per line: paused for a presenter or not (vla/demo_pause.py)."""
+    return demo_pause.status(STATE["db"])
+
+
+@app.post(f"{API}/demo/pause")
+def demo_pause_line(body: DemoPauseRequest):
+    """Hand a line to a presenter: no autopilot batch, CIP, scenario fault or random
+    breakdown on it, and no factory self-chaining, until resume or the time is up."""
+    try:
+        out = demo_pause.pause(STATE["db"], body.line, body.minutes, body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _runner(body.line)._event(None, "demo_paused", {
+        "line": body.line, "until": out["until"], "operator_id": body.operator_id})
+    return out
+
+
+@app.post(f"{API}/demo/resume")
+def demo_resume_line(body: DemoPauseRequest):
+    try:
+        out = demo_pause.resume(STATE["db"], body.line, body.operator_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _runner(body.line)._event(None, "demo_resumed", {
+        "line": body.line, "operator_id": body.operator_id})
+    return out
+
+
 @app.get(f"{API}/lines")
 def list_lines():
     """De productielijnen: hal, recepten, equipment en wat de autopilot doet."""
@@ -393,7 +452,8 @@ def list_lines():
                     "equipment": dict(ln.equipment),
                     "autopilot": {"recipe_id": st.get("recipe_id"),
                                   "last_action": st.get("last_action"),
-                                  "changeover_cips": st.get("changeover_cips")}
+                                  "changeover_cips": st.get("changeover_cips"),
+                                  "paused_until": st.get("paused_until")}
                     if st else None})
     return out
 
@@ -575,13 +635,19 @@ def cmms_work_orders(line: str | None = Query(default=None),
                      status: str | None = Query(default=None),
                      equipment_id: str | None = Query(default=None),
                      open_only: bool = Query(default=False),
-                     limit: int = Query(default=100, ge=1, le=1000)):
+                     limit: int = Query(default=100, ge=1, le=10000),
+                     since: str | None = Query(default=None),
+                     until: str | None = Query(default=None)):
+    """Werkorders, nieuwste eerst. since/until begrenzen op het meldtijdstip (ISO met
+    tijdzone); het Grafana-paneel geeft daarmee het gekozen dashboardvenster mee."""
     c = _cmms()
+    try:
+        rows = c.list(line=_check_line(line), status=status, equipment_id=equipment_id,
+                      open_only=open_only, limit=limit, since=since, until=until)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"adapter": c.adapter.name, "status": c.status,
-            "technicians": TECHNICIANS,
-            "work_orders": c.list(line=_check_line(line), status=status,
-                                  equipment_id=equipment_id, open_only=open_only,
-                                  limit=limit)}
+            "technicians": TECHNICIANS, "work_orders": rows}
 
 
 class BreakdownRequest(BaseModel):
@@ -988,6 +1054,17 @@ def ack_alarm(alarm_id: str, body: AckRequest):
     return alarm
 
 
+@app.post(f"{API}/alarms/ack-all")
+def ack_all_alarms(body: AckAllRequest):
+    """Bevestig alle open alarmen in de selectie. Geparkeerde alarmen blijven
+    geparkeerd; elk alarm krijgt een eigen bevestigingsevent."""
+    if body.priority and body.priority not in ("high", "medium", "low"):
+        raise HTTPException(400, f"unknown priority {body.priority!r}")
+    return _runner().ack_all_open(body.operator_id, line=body.line or None,
+                                  priority=body.priority or None,
+                                  equipment_id=body.equipment_id or None)
+
+
 @app.get(f"{API}/alarms")
 def list_alarms(since: str | None = Query(default=None),
                 priority: str | None = Query(default=None),
@@ -1043,6 +1120,36 @@ def get_kpi_summary(window: str = Query(default="week"),
         return JSONResponse(K.summary(db, window=window, compare=compare))
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.get(f"{API}/kpi/bvip")
+def get_kpi_bvip(line: str = Query(default="PLANT"), hours: float = Query(default=8.0)):
+    """De 29 industriële BVIP-KPI's over de laatste `hours`, plus de status van de
+    KPI-historie. Definities uit bvip_catalogue.json, bronnen uit bvip_map.py. Een KPI
+    zonder bron heeft status NIET_AANTOONBAAR en value null, nooit 0."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    if line not in ("L1", "L2", "PLANT"):
+        raise HTTPException(400, "line moet L1, L2 of PLANT zijn")
+    if not 0 < hours <= 24:
+        raise HTTPException(400, "hours moet tussen 0 en 24 liggen")
+    catalogue = bvip.load_catalogue()
+    snap = bvip.take_snapshot(db)
+    start, end = bvip.window(snap.now, hours)
+    vals = bvip.kpi_values(snap, line, start, end, bvip.config_from_env(), catalogue)
+    kpis = []
+    for k in catalogue:
+        spec = bvip_map.BVIP_MAP[k["id"]]
+        kpis.append({"kpi_id": k["id"], "naam": k["naam_nl"] or k["naam"], "domein": k["domein"],
+                     "eenheid": k["eenheid"], "formule": k["formule"], "richting": k["richting"],
+                     "doel": k["doel"], "waarsch": k["waarsch"], "krit": k["krit"],
+                     "drempels": spec.get("drempels"), "bron": spec.get("bron"),
+                     "let_op": spec.get("let_op"), "ontbreekt": spec.get("ontbreekt") or [],
+                     "fase": spec.get("fase"), **vals[k["id"]]})
+    return {"line": line, "from": start.isoformat(), "to": end.isoformat(), "hours": hours,
+            "writer": kpi_history.writer_status(), "meters": meters.sampler_status(),
+            "kpis": kpis}
 
 
 @app.get(f"{API}/report/period")
@@ -1135,10 +1242,19 @@ def admin_command(body: AdminCommand):
         raise HTTPException(503, "engine not initialized")
 
     if cmd == "start":
+        # Start goes through the MES, never straight to the factory: a raw
+        # StartBatch made a run the MES did not know (no batch, no CIP gate,
+        # no verdict, no EBR). The runner pushes the setpoints and sends
+        # StartBatch over OPC-UA itself.
         recipe_id = str(p.get("recipe_id") or M.get_line(line).recipes[0])
-        result = control.start_batch(recipe_id)
-        if bus is not None:
-            bus.start_batch(recipe_id)
+        try:
+            batch = _runner(line).create_batch(
+                recipe_id, p.get("planned_L"), auto_start=True,
+                operator_id=p.get("operator_id"))
+        except ValueError as e:
+            raise _refused(e)
+        result = {"batch_id": batch["batch_id"], "state": batch["state"],
+                  "order_id": batch.get("order_id"), "recipe_id": recipe_id}
     elif cmd == "stop":
         runner = _runner(line)
         active = next((b for b in runner.list_batches(line=line)

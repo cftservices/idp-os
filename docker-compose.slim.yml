@@ -75,6 +75,15 @@ services:
       - mongo-data:/data/db
     networks:
       - idp-network
+    # Alleen een TCP-check (bash is in de image, sh is dash). Bewust geen mongosh:
+    # dat start elke keer een Node-proces, en onder CPU-steal stapelen zulke
+    # checks zich op (zo ging aios-gateway op 18-11-2026 naar 3595 zombies).
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # ── MONSTERMQ (MQTT bus + archive → Mongo) ───────────────────────────────
   # Internal MQTT on 1883 (units connect to monstermq:1883). Host 1883 free
@@ -89,8 +98,22 @@ services:
     volumes:
       - ./monstermq/config.yaml:/app/config.yaml:ro
       - monstermq-data:/app/data
+    # Twee lagen, want depends_on alleen is niet genoeg. Na een herstart van de VPS
+    # start de Docker-daemon de containers zelf en negeert hij depends_on; op
+    # 18-11-2026 startte MonsterMQ zo 1 s vóór Mongo en bleef hij zonder één
+    # logregel hangen (poort 1883/4000 dicht, de engine op wait_bus).
+    #  1. depends_on service_healthy: geldt bij `docker compose up`;
+    #  2. de wachtlus in entrypoint: geldt ook bij een herstart door de daemon.
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until (exec 3<>/dev/tcp/mongo/27017) 2>/dev/null;
+        do echo "monstermq: waiting for mongo:27017"; sleep 2; done;
+        exec /app/entrypoint.sh
     networks:
       - idp-network
     healthcheck:

@@ -46,24 +46,57 @@ services:
   # ook in de MES-laag landt (record, doseringen, verdict, EBR). Zonder dit
   # ketent alleen de fabriek, en blijven de schermen op de laatste handmatige
   # batch staan (op 06-10-2026: nog steeds die van 4 augustus).
-  # De fabriek wacht 30 s na COMPLETE voor hij zelf ketent, zodat de autopilot
+  # De fabriek wacht 180 s na COMPLETE voor hij zelf ketent, zodat de autopilot
   # (10 s pauze) wint; ligt de engine eruit, dan blijft de fabriek produceren.
+  # Was 30 s. Op 18-11-2026 (CPU-steal ~70%) haalde de engine dat niet meer: de
+  # fabriek ketende elke keer zelf, de MES boekte niets en elke start bleef IDLE.
   # Lokaal staat dit bewust uit: handmatig testen botst anders met de autopilot.
   vla-factory:
     environment:
-      AUTOSTART_DELAY_S: "30"
+      AUTOSTART_DELAY_S: "180"
 
   vla-factory-l2:
     environment:
-      AUTOSTART_DELAY_S: "30"
+      AUTOSTART_DELAY_S: "180"
 
+  # 256m (uit docker-compose.vla.yml) liep op 18-11-2026 vol: swappen, API-timeouts.
   vla-batch-engine:
+    mem_limit: 512m
     environment:
       DEMO_AUTOPILOT: "1"
       DEMO_AUTOPILOT_RECIPE: chocolate-vla-1L
       DEMO_AUTOPILOT_GAP_S: "10"
       DEMO_AUTOPILOT_KEEP_HOURS: "24"
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+
+  # Terugkerend kwaliteitsprobleem: hangende stoomklep (cook_undertemp), in een lus
+  # afwisselend op L1 en L2. Per cyclus 52 batches (stabiel, drift, 2x REJECTED,
+  # gerepareerd), ~2 u, dus per lijn ongeveer elke 4 u een probleem dat wordt
+  # opgelost. De antwoordsleutel (steam-valve-loop.jsonl) staat buiten de data
+  # die een onderzoeker ziet. Stoppen wist de fout op beide lijnen (30 s marge).
+  # Alleen op de VPS: lokaal zou het handmatig testen verstoren.
+  vla-scenario:
+    image: techflow/vla-factory:latest
+    container_name: vla-scenario
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "5m", max-file: "2" } }
+    command: ["python", "-u", "/s/scenario_steam_valve.py", "--loop"]
+    environment:
+      BATCH_ENGINE_URL: "http://vla-batch-engine:8000/api/v1"
+      SCENARIO_LINES: "L1,L2"
+      SCENARIO_OPCUA_L1: "opc.tcp://vla-factory:4840/DairyWorks"
+      SCENARIO_OPCUA_L2: "opc.tcp://vla-factory-l2:4840/DairyWorks"
+      SCENARIO_LOOP_LOG: /logs/steam-valve-loop.jsonl
+    volumes:
+      - ./scenarios/vla-batch/scripts:/s:ro
+      - ${VLA_SCENARIO_LOGS:-/root/vla-scenario-logs}:/logs
+    stop_grace_period: 30s
+    mem_limit: 96m
+    depends_on:
+      vla-batch-engine:
+        condition: service_started
+    networks:
+      - idp-network
 
   # Ollama deelt de VPS met twee andere stacks (aios, emcp): een klein model,
   # één tegelijk geladen, en een harde grens. qwen2.5:3b (~2,3 GB) paste niet

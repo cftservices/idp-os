@@ -1,0 +1,1732 @@
+{
+  "uid": "vps-health",
+  "title": "VPS — gezondheid",
+  "description": "De machine onder alle stacks: load, CPU-steal, geheugen, schijf, containers, OOM-kills, back-up en certificaten. Elke minuut gemeten op de host.",
+  "tags": [
+    "vps"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": []
+  },
+  "links": [],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Gemeten op de host zelf (`scripts/hoststats.py`, elke minuut), dus ook zichtbaar als de demo-engine plat ligt. **CPU-steal** is rekentijd die de hostingprovider aan andere klanten geeft: hoog steal betekent traag zonder dat er bij ons iets mis is. Machine: 2 vCPU, 8 GB RAM, 100 GB schijf."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Nu",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Laatste meting",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select cast((cast(now() as bigint) - cast(last(ts) as bigint)) / 1000 as bigint) as sec_geleden from idp.vps_host where ts > now-1d"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 180
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Hoe oud de laatste host-meting is. Rood: de cron-meting staat stil."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Load (1 min)",
+      "gridPos": {
+        "x": 4,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(load1) as load from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 6
+              }
+            ]
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "2 vCPU: boven 2 staat er werk in de wachtrij."
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "CPU-steal (5 min)",
+      "gridPos": {
+        "x": 8,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select avg(cpu_steal) as steal from idp.vps_host where ts > now-5m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 40
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Rekentijd die de hostingprovider aan andere klanten geeft. Niet ons probleem, wel onze vertraging."
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "CPU vrij (5 min)",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select avg(cpu_idle) as vrij from idp.vps_host where ts > now-5m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "green",
+                "value": 35
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Geheugen beschikbaar",
+      "gridPos": {
+        "x": 16,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(mem_avail_mb) as beschikbaar from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 700
+              },
+              {
+                "color": "green",
+                "value": 1500
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Swap in gebruik",
+      "gridPos": {
+        "x": 20,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(swap_used_mb) as swap from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1500
+              },
+              {
+                "color": "red",
+                "value": 3000
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Schijf gebruikt",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(disk_used_pct) as schijf from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Containers draaiend",
+      "gridPos": {
+        "x": 4,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(containers_running) as draaiend from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Unhealthy",
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(containers_unhealthy) as unhealthy from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Onverwacht gestopt",
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(containers_stopped_unexpected) as gestopt from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Gestopte containers, zonder de bewust uitgezette (buzzws, emcp-embeddings, init-jobs)."
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "OOM-kills (24 u)",
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(oom_24h) as oom from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Uit de kernel-log, elke 10 minuten geteld."
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Laatste back-up",
+      "gridPos": {
+        "x": 20,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(backup_age_h) as uur_geleden from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 26
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Leeftijd van de nachtelijke back-up van idp-os (02:00)."
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Verloop",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "CPU",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(cpu_user) as gebruiker, avg(cpu_system) as systeem, avg(cpu_iowait) as io_wacht, avg(cpu_steal) as steal from idp.vps_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 40,
+            "spanNulls": true,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "steal"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Gestapeld: wat er boven ligt is vrij. Rood is steal."
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Load",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(load1) as `1_min`, avg(load5) as `5_min`, avg(load15) as `15_min` from idp.vps_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never"
+          },
+          "decimals": 2,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Geheugen en swap",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(mem_avail_mb) as beschikbaar, avg(swap_used_mb) as swap from idp.vps_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never"
+          },
+          "unit": "decmbytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Schijf en containers",
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(disk_used_pct) as schijf_pct from idp.vps_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(containers_running) as draaiend, last(containers_unhealthy) as unhealthy, last(containers_stopped_unexpected) as gestopt from idp.vps_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "schijf_pct"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Containers",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "CPU per container",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, container_name, avg(cpu_pct) as cpu from idp.vps_container where ts >= $from and ts <= $to and running = 1 partition by container_name interval(2m)",
+          "colNameToGroup": "container_name",
+          "colNameFormatStr": "{{container_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never"
+          },
+          "unit": "percent",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "100% is één volledige vCPU."
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Geheugen per container",
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, container_name, avg(mem_mb) as geheugen from idp.vps_container where ts >= $from and ts <= $to and running = 1 partition by container_name interval(2m)",
+          "colNameToGroup": "container_name",
+          "colNameFormatStr": "{{container_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never"
+          },
+          "unit": "decmbytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Containers nu",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as gemeten, container_name as container, last(running) as draait, last(healthy) as health, last(cpu_pct) as cpu, last(mem_mb) as geheugen, last(mem_limit_mb) as limiet, last(mem_mb) / last(mem_limit_mb) * 100 as van_limiet, last(restarts) as herstarts from idp.vps_container where ts > now-10m partition\nby container_name"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gemeten"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cpu"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "geheugen"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "limiet"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "van_limiet"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "draait"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "ja",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "0": {
+                        "text": "gestopt",
+                        "color": "text",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "health"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "healthy",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "0": {
+                        "text": "unhealthy",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "-",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "herstarts"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "van_limiet",
+            "desc": true
+          }
+        ]
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Geheugen tegen de eigen limiet: boven 90% dreigt een OOM-kill van die container. Herstarts tellen sinds de container is aangemaakt."
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "Certificaten",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "Dagen tot verlopen",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as gemeten, cert_host as hostnaam, last(days_left) as dagen from idp.vps_cert where ts > now-2h partition\nby cert_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gemeten"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "dagen"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 14
+                    },
+                    {
+                      "color": "green",
+                      "value": 30
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "dagen",
+            "desc": false
+          }
+        ]
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Elk uur gemeten. Let's Encrypt vernieuwt zelf vanaf 30 dagen; onder 14 is er iets mis."
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Uptime",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(uptime_h) as uptime from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 27,
+      "type": "stat",
+      "title": "Schijf vrij",
+      "gridPos": {
+        "x": 18,
+        "y": 51,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(disk_free_gb) as vrij from idp.vps_host"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 20
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    }
+  ]
+}

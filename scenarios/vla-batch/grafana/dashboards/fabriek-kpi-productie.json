@@ -1,0 +1,1477 @@
+{
+  "uid": "fabriek-kpi-productie",
+  "title": "Fabriek — KPI productie",
+  "description": "KPI's productie uit de BVIP-catalogus: verloop (rollend 8 uur), de exacte waarde over de gekozen periode en de inputs.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "lijn",
+        "label": "Lijn",
+        "type": "custom",
+        "hide": 0,
+        "query": "Fabriek : PLANT,L1 : L1,L2 : L2",
+        "current": {
+          "text": "Fabriek",
+          "value": "PLANT"
+        },
+        "options": [
+          {
+            "text": "Fabriek",
+            "value": "PLANT",
+            "selected": true
+          },
+          {
+            "text": "L1",
+            "value": "L1",
+            "selected": false
+          },
+          {
+            "text": "L2",
+            "value": "L2",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Links het verloop van de rollende waarde (8 uur). Midden de waarde over de **gekozen periode**: de inputs opgeteld en dan de catalogusformule, dus exact, ook over een week. Rechts die inputs. Uren zijn procesuren."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Overall Equipment Effectiveness (PRD-001)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-001' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-001 · OEE\nFormule (catalogus): (run_hours / planned_hours) * (units_produced / ideal_units_at_run) * (units_good / units_produced) * 100\nBron in de demo: Batches per lijn: looptijd (unie van batchspans), geplande tijd (lijn 24/7 gepland), gevulde en goedgekeurde pakken; ideaal tempo per lijn uit KPI_IDEAL_PACKS_PER_H. Uren in procestijd.\nDoel 80, waarschuwing 70, kritiek 60 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select (sum(case when `input`='run_hours' then `value` else 0.0 end) / sum(case when `input`='planned_hours' then `value` else 0.0 end)) * (sum(case when `input`='units_produced' then `value` else 0.0 end) / sum(case when `input`='ideal_units_at_run' then `value` else 0.0 end)) * (sum(case when `input`='units_good' then `value` else 0.0 end) / sum(case when `input`='units_produced' then `value` else 0.0 end)) * 100 as v from idp.kpi_input where kpi_id='KPI-PRD-001' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-001 · OEE\nFormule (catalogus): (run_hours / planned_hours) * (units_produced / ideal_units_at_run) * (units_good / units_produced) * 100\nBron in de demo: Batches per lijn: looptijd (unie van batchspans), geplande tijd (lijn 24/7 gepland), gevulde en goedgekeurde pakken; ideaal tempo per lijn uit KPI_IDEAL_PACKS_PER_H. Uren in procestijd.\nDoel 80, waarschuwing 70, kritiek 60 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 3,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-001' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Stilstandpercentage (PRD-002)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-002' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 8
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 18
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-002 · Downtime Percentage\nFormule (catalogus): downtime_hours / planned_hours * 100\nBron in de demo: Unie van Down/Error-intervallen van de machines van de lijn, gedeeld door de geplande tijd. Procesuren.\nDoel 8, waarschuwing 12, kritiek 18 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='downtime_hours' then `value` else 0.0 end) / sum(case when `input`='planned_hours' then `value` else 0.0 end) * 100 as v from idp.kpi_input where kpi_id='KPI-PRD-002' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 8
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 18
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-002 · Downtime Percentage\nFormule (catalogus): downtime_hours / planned_hours * 100\nBron in de demo: Unie van Down/Error-intervallen van de machines van de lijn, gedeeld door de geplande tijd. Procesuren.\nDoel 8, waarschuwing 12, kritiek 18 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 11,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-002' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Doorzet (PRD-003)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-003' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4400
+              },
+              {
+                "color": "yellow",
+                "value": 4800
+              },
+              {
+                "color": "green",
+                "value": 5200
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-003 · Throughput\nFormule (catalogus): units_produced / run_hours\nBron in de demo: Gevulde pakken / looptijd. De catalogusnorm (6/u) is generiek; de kleur volgt de lijnnorm uit het fabrieksmodel.\nKleur volgt de lijnnorm uit het fabrieksmodel (5200 packs/h), niet de generieke catalogusnorm (6 unit/h).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='units_produced' then `value` else 0.0 end) / sum(case when `input`='run_hours' then `value` else 0.0 end) as v from idp.kpi_input where kpi_id='KPI-PRD-003' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4400
+              },
+              {
+                "color": "yellow",
+                "value": 4800
+              },
+              {
+                "color": "green",
+                "value": 5200
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-003 · Throughput\nFormule (catalogus): units_produced / run_hours\nBron in de demo: Gevulde pakken / looptijd. De catalogusnorm (6/u) is generiek; de kleur volgt de lijnnorm uit het fabrieksmodel.\nKleur volgt de lijnnorm uit het fabrieksmodel (5200 packs/h), niet de generieke catalogusnorm (6 unit/h).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 19,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-003' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Capaciteitsbenutting (PRD-004)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-004' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-004 · Capacity Utilization\nFormule (catalogus): units_produced / ideal_units * 100\nBron in de demo: Gevulde pakken / (geplande uren x ideaal tempo).\nDoel 80, waarschuwing 70, kritiek 60 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='units_produced' then `value` else 0.0 end) / sum(case when `input`='ideal_units' then `value` else 0.0 end) * 100 as v from idp.kpi_input where kpi_id='KPI-PRD-004' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-004 · Capacity Utilization\nFormule (catalogus): units_produced / ideal_units * 100\nBron in de demo: Gevulde pakken / (geplande uren x ideaal tempo).\nDoel 80, waarschuwing 70, kritiek 60 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 27,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-004' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "First Pass Yield (PRD-005)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-005' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "yellow",
+                "value": 94
+              },
+              {
+                "color": "green",
+                "value": 96
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-005 · First Pass Yield\nFormule (catalogus): units_first_pass / units_produced * 100\nBron in de demo: Goede pakken van APPROVED batches / gevulde pakken.\nLet op: Er bestaat geen herbewerking in de demo, dus 'goed zonder herbewerking' is 'goed in een goedgekeurde batch'.\nDoel 96, waarschuwing 94, kritiek 90 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='units_first_pass' then `value` else 0.0 end) / sum(case when `input`='units_produced' then `value` else 0.0 end) * 100 as v from idp.kpi_input where kpi_id='KPI-PRD-005' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "yellow",
+                "value": 94
+              },
+              {
+                "color": "green",
+                "value": 96
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-005 · First Pass Yield\nFormule (catalogus): units_first_pass / units_produced * 100\nBron in de demo: Goede pakken van APPROVED batches / gevulde pakken.\nLet op: Er bestaat geen herbewerking in de demo, dus 'goed zonder herbewerking' is 'goed in een goedgekeurde batch'.\nDoel 96, waarschuwing 94, kritiek 90 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 35,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-005' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Herbewerkingsgraad (PRD-006)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 23,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Herbewerkingsgraad** · `KPI-PRD-006`\n\n**Niet aantoonbaar** · ontbreekt: `units_reworked`\n\nEr wordt geen herbewerking geboekt: HOLD en REJECTED gaan niet terug het proces in. niet in de demo."
+      }
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "Omsteltijd (PRD-007)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-007' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-007 · Changeover Time\nFormule (catalogus): changeover_hours\nBron in de demo: Tijd tussen het einde van een batch en de start van de volgende batch met een ander recept op dezelfde lijn (inclusief reiniging), geteld bij de start van de nieuwe batch. Procesuren.\nLet op: L1 maakt één product en heeft dus geen omstellingen; de catalogusdrempels (500 h) gelden per jaar.\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 47,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='changeover_hours' then `value` else 0.0 end) as v from idp.kpi_input where kpi_id='KPI-PRD-007' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-007 · Changeover Time\nFormule (catalogus): changeover_hours\nBron in de demo: Tijd tussen het einde van een batch en de start van de volgende batch met een ander recept op dezelfde lijn (inclusief reiniging), geteld bij de start van de nieuwe batch. Procesuren.\nLet op: L1 maakt één product en heeft dus geen omstellingen; de catalogusdrempels (500 h) gelden per jaar.\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 27,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 47,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-007' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "Planningsbetrouwbaarheid (PRD-008)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-PRD-008' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "yellow",
+                "value": 88
+              },
+              {
+                "color": "green",
+                "value": 92
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-PRD-008 · Schedule Adherence\nFormule (catalogus): orders_on_time / orders_planned * 100\nBron in de demo: Orders van de lijn met een leverdatum in de periode die al verstreken is: op tijd = afgerond voor de leverdatum. Een order die nog kan halen telt nog niet mee.\nDoel 92, waarschuwing 88, kritiek 80 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 55,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='orders_on_time' then `value` else 0.0 end) / sum(case when `input`='orders_planned' then `value` else 0.0 end) * 100 as v from idp.kpi_input where kpi_id='KPI-PRD-008' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "yellow",
+                "value": 88
+              },
+              {
+                "color": "green",
+                "value": 92
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-PRD-008 · Schedule Adherence\nFormule (catalogus): orders_on_time / orders_planned * 100\nBron in de demo: Orders van de lijn met een leverdatum in de periode die al verstreken is: op tijd = afgerond voor de leverdatum. Een order die nog kan halen telt nog niet mee.\nDoel 92, waarschuwing 88, kritiek 80 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 31,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 55,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-PRD-008' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    }
+  ]
+}

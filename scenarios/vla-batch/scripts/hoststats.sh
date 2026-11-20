@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Host-meting voor het DataOps-tabblad van de datalaag-lens.
-# Draait op de host via cron, zodat de engine nooit docker.sock nodig heeft:
-#   * * * * * /opt/idp/scenarios/vla-batch/scripts/hoststats.sh
-# Schrijft atomair (tmp + mv), want de engine leest het bestand op elk moment.
+# Host-meting van de VPS, elke minuut via cron:
+#   * * * * * /root/idp-os/scenarios/vla-batch/scripts/hoststats.sh
+# Het werk zit in hoststats.py: stats.json voor de engine (nooit docker.sock) en
+# de historie in TDengine voor het Grafana-dashboard vps-health.
+# flock: een trage minuut (CPU-steal) mag niet stapelen met de volgende.
 set -euo pipefail
 OUT_DIR=/opt/hoststats
 mkdir -p "$OUT_DIR"
-TMP="$OUT_DIR/.stats.json.tmp"
-docker stats --no-stream --format '{{json .}}' > "$TMP"
-mv -f "$TMP" "$OUT_DIR/stats.json"
+exec flock -n "$OUT_DIR/.lock" timeout 55 python3 "$(dirname "$0")/hoststats.py" \
+    2>>/var/log/hoststats.log

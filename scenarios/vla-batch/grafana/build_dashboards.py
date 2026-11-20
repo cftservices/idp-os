@@ -12,7 +12,12 @@ Wording rule: dashboards speak of "de datalaag", "topics" and "ISA-95-context".
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import kpi_boards  # noqa: E402  (KPI dashboards from the BVIP catalogue snapshot)
+import vps_board  # noqa: E402  (VPS health, from the host measurement)
 
 OUT = Path(__file__).parent / "dashboards"
 TD = {"type": "tdengine-datasource", "uid": "vla-tdengine"}
@@ -531,9 +536,18 @@ def onderhoud_cbm() -> Board:
         ("$.work_orders[*].wo_id", "Werkorder", "string"), ("$.work_orders[*].equipment_id", "Machine", "string"),
         ("$.work_orders[*].line", "Lijn", "string"), ("$.work_orders[*].kind", "Soort", "string"),
         ("$.work_orders[*].priority", "Prio", "string"), ("$.work_orders[*].cause", "Oorzaak", "string"),
-        ("$.work_orders[*].status", "Status", "string"), ("$.work_orders[*].technician.name", "Monteur", "string"),
-        ("$.work_orders[*].reported_at", "Gemeld", "time"), ("$.work_orders[*].done_at", "Gereed", "time")])],
-          options={**TABLE_OPTS, "sortBy": [{"displayName": "Gemeld", "desc": True}]})
+        # Monteur via jsonata: een gemelde werkorder heeft nog geen monteur, en een JSONPath op
+        # technician.name geeft dan een kortere kolom, waarna de plugin het hele paneel weigert.
+        ("$.work_orders[*].status", "Status", "string"),
+        ('$map(work_orders, function($a){ $a.technician ? $a.technician.name : "-" })', "Monteur", "string",
+         "jsonata"),
+        ("$.work_orders[*].reported_at", "Gemeld", "time"), ("$.work_orders[*].done_at", "Gereed", "time")],
+        # het gekozen dashboardvenster, niet de laatste 100 (dan zag je maar twee dagen)
+        "since=${__from:date:iso}&until=${__to:date:iso}&limit=10000")],
+          desc="Alle werkorders die in het gekozen tijdvenster zijn gemeld, nieuwste eerst. "
+               "Mongo bewaart ze vanaf 22 oktober 2026.",
+          options={**TABLE_OPTS, "sortBy": [{"displayName": "Gemeld", "desc": True}],
+                   "footer": {"show": True, "reducer": ["count"], "fields": ["Werkorder"]}})
     return b
 
 
@@ -598,9 +612,28 @@ def historian_dataops() -> Board:
 
 
 BOARDS = [fabriek_overzicht, lijn_live, voorbereiding, oee_verliezen, logistiek_trace, onderhoud_cbm,
-          historian_dataops]
+          historian_dataops] + kpi_boards.boards(Board, td, stat_opts) + [
+    lambda: vps_board.board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, TABLE_OPTS)]
+
+
+def render(board: Board) -> str:
+    return json.dumps(board.d, indent=2, ensure_ascii=False) + "\n"
+
 
 if __name__ == "__main__":
+    import sys
+    if "--check" in sys.argv:   # tools/check-generated.sh: the JSON must match this script
+        stale = []
+        for fn in BOARDS:
+            b = fn()
+            f = OUT / f"{b.d['uid']}.json"
+            if not f.is_file() or f.read_text(encoding="utf-8") != render(b):
+                stale.append(f.name)
+        if stale:
+            print("verouderd, draai grafana/build_dashboards.py: " + ", ".join(stale))
+            sys.exit(1)
+        print(f"{len(BOARDS)} dashboards actueel")
+        sys.exit(0)
     for fn in BOARDS:
         f = fn().write()
         print(f"{f.name}: {len(json.loads(f.read_text(encoding='utf-8'))['panels'])} panelen")

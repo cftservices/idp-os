@@ -6,6 +6,7 @@ EXPECTED = [
     "dw_samples", "dw_batch_events", "dw_alarms", "dw_orders", "dw_equipment_state",
     "dw_handling_units", "dw_equipment_meta", "dw_cbm_alerts",
     "dw_autopilot", "dw_shipments", "dw_prep_orders", "dw_work_orders",
+    "dw_meter_readings", "dw_pasteur_samples", "dw_cip_cycles",
 ]
 
 

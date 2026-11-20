@@ -83,3 +83,68 @@ def test_stop_refused_when_active_batch_has_no_production():
             assert "no production booked" in r2.json()["detail"]
         finally:
             os.environ["AUTO_START"] = original_auto_start
+
+
+def test_ack_all_route_acks_open_alarms_and_rejects_unknown_priority():
+    with client() as c:
+        assert c.post("/api/v1/alarms/ack-all",
+                      json={"priority": "urgent"}).status_code == 400
+        r = c.post("/api/v1/alarms/ack-all", json={"operator_id": "OP-7"})
+        assert r.status_code == 200
+        body = r.json()
+        assert set(body) == {"acknowledged", "alarm_ids"}
+        assert body["acknowledged"] == len(body["alarm_ids"])
+        assert c.get("/api/v1/alarms", params={"state": "open"}).json() == []
+
+
+def test_admin_start_creates_a_mes_batch_not_a_raw_factory_run():
+    """The SCADA Start button: the run must exist in the MES, with an order,
+    and pass the CIP gate like any other batch."""
+    with client() as c:
+        assert c.post("/api/v1/equipment/cook-unit-01/cip",
+                      json={"operator_id": "OP-7"}).status_code == 200
+        r = c.post("/api/v1/admin/command", json={
+            "equipment_id": "Batch", "cmd": "start",
+            "params": {"line": "L1", "operator_id": "OP-7"}})
+        assert r.status_code == 200, r.text
+        started = r.json()["opcua"]
+        bid = started["batch_id"]
+        batch = c.get(f"/api/v1/batches/{bid}").json()
+        assert batch["line"] == "L1" and batch["order_id"] == started["order_id"]
+        assert batch["created_by"] == "OP-7"
+
+        # the CIP gate applies to Start as well
+        mon = appmod.STATE["equipment"]
+        mon.db.dw_equipment_meta.update_one(
+            {"equipment_id": "cook-unit-01"}, {"$set": {"dirty": True}})
+        r2 = c.post("/api/v1/admin/command", json={
+            "equipment_id": "Batch", "cmd": "start", "params": {"line": "L1"}})
+        assert r2.status_code == 400
+        assert r2.json()["detail"]["reason"] == "cip_required"
+        c.post("/api/v1/equipment/cook-unit-01/cip", json={"operator_id": "OP-7"})
+
+
+def test_demo_pause_endpoints_pause_status_resume_and_refuse_bad_input():
+    with client() as c:
+        assert c.post("/api/v1/demo/pause", json={"line": "L9"}).status_code == 400
+        assert c.post("/api/v1/demo/pause",
+                      json={"line": "L1", "minutes": 500}).status_code == 400
+        r = c.post("/api/v1/demo/pause",
+                   json={"line": "L2", "minutes": 20, "operator_id": "op-01"})
+        assert r.status_code == 200 and r.json()["paused"] and r.json()["by"] == "op-01"
+        st = c.get("/api/v1/demo/pause").json()
+        assert st["L2"]["paused"] and not st["L1"]["paused"]
+        assert c.post("/api/v1/demo/resume", json={"line": "L2"}).json()["paused"] is False
+        assert c.get("/api/v1/demo/pause").json()["L2"]["paused"] is False
+
+
+def test_batch_list_says_who_started_a_batch_and_when():
+    """The scenario counts only autopilot batches; the list must carry created_by."""
+    with client() as c:
+        appmod.STATE["runner"].db.dw_batches.insert_one({
+            "batch_id": "B-TEST-WHO", "recipe_id": "chocolate-vla-1L", "line": "L1",
+            "state": "COMPLETE", "created_by": "autopilot",
+            "created_at": "2026-11-20T14:00:00+00:00"})
+        row = next(r for r in c.get("/api/v1/batches").json() if r["batch_id"] == "B-TEST-WHO")
+        assert row["created_by"] == "autopilot"
+        assert row["created_at"] == "2026-11-20T14:00:00+00:00"

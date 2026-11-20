@@ -418,6 +418,14 @@ html, body { max-width: 100%; overflow-x: hidden; }
   font-family: var(--font-ui);
 }
 .twin-root[data-presenting] { height: 100vh; min-height: 0; }
+/* Livestream (?broadcast=1): geen GPU op de VPS. Een blur over een canvas dat
+   twintig keer per seconde verandert, rekent de CPU elke frame opnieuw uit;
+   een dichter glas leest even goed en kost niets. */
+.twin-root[data-broadcast] .wt-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--wt-glass-strong);
+}
 .twin-stage { position: absolute; inset: 0; }
 .twin-holder {
   display: grid;

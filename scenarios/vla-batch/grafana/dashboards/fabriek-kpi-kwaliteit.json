@@ -1,0 +1,558 @@
+{
+  "uid": "fabriek-kpi-kwaliteit",
+  "title": "Fabriek — KPI kwaliteit",
+  "description": "KPI's kwaliteit uit de BVIP-catalogus: verloop (rollend 8 uur), de exacte waarde over de gekozen periode en de inputs.",
+  "tags": [
+    "fabriek"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "lijn",
+        "label": "Lijn",
+        "type": "custom",
+        "hide": 0,
+        "query": "Fabriek : PLANT,L1 : L1,L2 : L2",
+        "current": {
+          "text": "Fabriek",
+          "value": "PLANT"
+        },
+        "options": [
+          {
+            "text": "Fabriek",
+            "value": "PLANT",
+            "selected": true
+          },
+          {
+            "text": "L1",
+            "value": "L1",
+            "selected": false
+          },
+          {
+            "text": "L2",
+            "value": "L2",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "fabriek"
+      ],
+      "asDropdown": true,
+      "title": "Fabrieksdashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Links het verloop van de rollende waarde (8 uur). Midden de waarde over de **gekozen periode**: de inputs opgeteld en dan de catalogusformule, dus exact, ook over een week. Rechts die inputs. Uren zijn procesuren."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Defectpercentage (QUA-001)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-QUA-001' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-QUA-001 · Defect Rate\nFormule (catalogus): units_defective / units_inspected * 100\nBron in de demo: Afgekeurde pakken (vuller) / gevulde pakken.\nDoel 2, waarschuwing 3, kritiek 5 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='units_defective' then `value` else 0.0 end) / sum(case when `input`='units_inspected' then `value` else 0.0 end) * 100 as v from idp.kpi_input where kpi_id='KPI-QUA-001' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-QUA-001 · Defect Rate\nFormule (catalogus): units_defective / units_inspected * 100\nBron in de demo: Afgekeurde pakken (vuller) / gevulde pakken.\nDoel 2, waarschuwing 3, kritiek 5 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 3,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-QUA-001' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Kosten van slechte kwaliteit (QUA-002)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Verloop (rollend 8 uur)",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select ts, `value` as v from idp.kpi where kpi_id='KPI-QUA-002' and `line`='$lijn' and ts >= $from and ts <= $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "KPI-QUA-002 · Cost of Poor Quality\nFormule (catalogus): scrap_cost + rework_cost + other_quality_cost\nBron in de demo: Afkeur x waarde per pak + HOLD/REJECTED-batches x herwerkkosten, uit het kostenmodel van de fabriek (demo-aanname).\nLet op: Overige kwaliteitskosten (klachten, audits) bestaan niet in de demo; de catalogusdrempels zijn per jaar.\nOntbreekt (telt als 0): other_quality_cost\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Over de gekozen periode",
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 5,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select sum(case when `input`='scrap_cost' then `value` else 0.0 end) + sum(case when `input`='rework_cost' then `value` else 0.0 end) + 0.0 as v from idp.kpi_input where kpi_id='KPI-QUA-002' and `line`='$lijn' and ts >= $from and ts < $to"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "geen data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "description": "Som van de inputs over de periode, dan de catalogusformule.\nKPI-QUA-002 · Cost of Poor Quality\nFormule (catalogus): scrap_cost + rework_cost + other_quality_cost\nBron in de demo: Afkeur x waarde per pak + HOLD/REJECTED-batches x herwerkkosten, uit het kostenmodel van de fabriek (demo-aanname).\nLet op: Overige kwaliteitskosten (klachten, audits) bestaan niet in de demo; de catalogusdrempels zijn per jaar.\nOntbreekt (telt als 0): other_quality_cost\nGeen kleur: de catalogusdrempels gelden per jaar en zijn niet te vergelijken.\nUren zijn procesuren (demo draait 15x versneld)."
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Inputs over de periode",
+      "gridPos": {
+        "x": 17,
+        "y": 11,
+        "w": 7,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(ts) as tot, `input` as invoer, sum(`value`) as totaal from idp.kpi_input where kpi_id='KPI-QUA-002' and `line`='$lijn' and ts >= $from and ts < $to partition\nby `input`"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Defecten per leverancier (QUA-003)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Defecten per leverancier** · `KPI-QUA-003`\n\n**Niet aantoonbaar** · ontbreekt: `components_defective`, `components_received`\n\nGeen ingangskeuring: goederenontvangst boekt alleen hoeveelheden. niet in de demo."
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Auditbevindingen (QUA-004)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 13,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Auditbevindingen** · `KPI-QUA-004`\n\n**Niet aantoonbaar** · ontbreekt: `audit_findings`\n\nEr is geen kwaliteitssysteem met audits in de demo. niet in de demo."
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Afsluiting corrigerende acties (QUA-005)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 15,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 3
+      },
+      "targets": [],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Afsluiting corrigerende acties** · `KPI-QUA-005`\n\n**Niet aantoonbaar** · ontbreekt: `corrective_actions_closed`, `corrective_actions_total`\n\nCorrectieve acties (8D) leven in de CI-module van aios; er is geen koppeling terug. niet in de demo."
+      }
+    }
+  ]
+}
