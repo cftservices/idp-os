@@ -121,7 +121,9 @@ run() {
   if [ -s "$ronde" ]; then
     for _ in $(seq 1 200); do cat "$ronde"; done > "$lijst"
     audio=(-f concat -safe 0 -i "$lijst")
-    afilter=(-af "volume=${MUZIEK_VOLUME:-0.35}")
+    # Ambient uit de Audio Library is zacht en ongelijk (gemeten −22 en −32 dB gemiddeld). loudnorm
+    # brengt elk nummer op hetzelfde rustige niveau (−24 LUFS gaf −24,5 en −24,1 dB), ~9% van één kern.
+    afilter=(-af "loudnorm=I=${MUZIEK_LUFS:--24}:TP=-2:LRA=11,aresample=44100,aformat=channel_layouts=stereo")
     log "muziek: $(wc -l < "$ronde") nummer(s) uit ~/music"
   fi
   rm -f "$ronde"

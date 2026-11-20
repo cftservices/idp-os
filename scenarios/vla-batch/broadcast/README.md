@@ -308,14 +308,16 @@ Het wachtwoord van `stream-pi` staat op de VPS in `/root/.gf-stream-pi` en op de
 `~/.broadcast.env` (`GRAFANA_USER`, `GRAFANA_PASS`), beide chmod 600, niet in git. De Viewer kan alle
 dashboards lezen; alleen de Pi heeft het wachtwoord.
 
-**Muziek.** Alle mp3's in `~/music` op de Pi gaan onder het beeld; zonder mp3's een stil spoor.
-Volume via `MUZIEK_VOLUME` in `~/.broadcast.env` (standaard 0,35, bedoeld voor normaal gemasterde
-muziek). Alleen mp3: de concat-demuxer breekt bij gemengde codecs. Geen `-stream_loop` maar de
-lijst 200 keer achter elkaar, want `-stream_loop` met concat was op de Pi niet betrouwbaar. Nieuwe
-muziek geldt na `stop` en `start`.
+**Muziek.** Alle mp3's in `~/music` op de Pi gaan onder het beeld; zonder mp3's een stil spoor. Nu
+staan er zeven nummers uit de YouTube Audio Library (Jesse Gallagher, Unicorn Heads; "geen
+naamsvermelding nodig"), samen ongeveer een uur. `loudnorm` brengt elk nummer op −24 LUFS
+(`MUZIEK_LUFS` in `~/.broadcast.env`): de nummers zelf liepen van −22 tot −32 dB gemiddeld uiteen.
+Alleen mp3: de concat-demuxer breekt bij gemengde codecs. Geen `-stream_loop` maar de lijst 200 keer
+achter elkaar, want `-stream_loop` met concat was op de Pi niet betrouwbaar. Nieuwe muziek of een
+ander niveau geldt na `stop` en `start`.
 
-Een zelf gegenereerd ambient-nummer (sinussen via ffmpeg `aevalsrc`) is geprobeerd en weer weggehaald:
-het klonk als één toon. `~/music` is leeg, de stream is stil. Gebruik muziek uit de YouTube Audio Library.
+Een zelf gegenereerd ambient-nummer (sinussen via ffmpeg `aevalsrc`) is geprobeerd en weer
+weggehaald: het klonk als één toon.
 
 **Sleutels op de VPS** (`/root/.ssh/authorized_keys`, elke wijziging met een `.bak-*` ernaast):
 
