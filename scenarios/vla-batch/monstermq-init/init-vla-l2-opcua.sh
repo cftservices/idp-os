@@ -112,5 +112,25 @@ for LINE in $TAGS; do
   esac
 done
 echo "[vla-l2-init] $OK adressen toegevoegd, $SKIP al aanwezig, $FAIL mislukt."
+
+# Lijn 2 hoort in het Mongo-archief, net als L1 (sinds 2026-11-20). MonsterMQ
+# bewaart zijn archiefgroepen in Mongo en leest config.yaml alleen bij een lege
+# installatie, dus een bestaande broker krijgt het filter alleen via GraphQL.
+# Een groep moet uit voordat hij gewijzigd kan worden: dat geeft een gat van
+# ~0,1 s in het archief. Alle instellingen gaan expliciet mee, zodat update niets
+# leegmaakt. Bestaat de groep niet, dan heeft config.yaml hem al met beide lijnen.
+AG=$(gql "{archiveGroups{name topicFilter}}")
+case "$AG" in
+  *'"dw_uns_archive","topicFilter":['*'DairyWorks/Vla-L2/#'*)
+    echo "[vla-l2-init] archief: L2 staat al in dw_uns_archive" ;;
+  *'"dw_uns_archive"'*)
+    gql "mutation{archiveGroup{disable(name:\\\"dw_uns_archive\\\"){success}}}" > /dev/null
+    UPD=$(gql "mutation{archiveGroup{update(input:{name:\\\"dw_uns_archive\\\",topicFilter:[\\\"DairyWorks/Vla/#\\\",\\\"DairyWorks/Vla-L2/#\\\"],retainedOnly:false,lastValType:NONE,archiveType:MONGODB,payloadFormat:DEFAULT,queueType:\\\"NONE\\\",queueSize:100000,bulkSize:4000,bulkTimeoutMs:250,queueDiskPath:\\\"data/queue\\\",lastValReadOnly:false,archiveReadOnly:false}){success message}}}")
+    EN=$(gql "mutation{archiveGroup{enable(name:\\\"dw_uns_archive\\\"){success message}}}")
+    echo "[vla-l2-init] archief: update $UPD, enable $EN"
+    case "$EN" in *'"success":true'*) ;; *) FAIL=$((FAIL+1)) ;; esac ;;
+  *) echo "[vla-l2-init] archief: groep dw_uns_archive niet gevonden, overgeslagen" ;;
+esac
+
 [ "$FAIL" -gt 0 ] && exit 1
 echo "[vla-l2-init] Done -> DairyWorks/Vla-L2/#"

@@ -77,6 +77,7 @@ Archive:
     - Name: dw_uns_archive
       Topics:
         - "DairyWorks/Vla/#"
+        - "DairyWorks/Vla-L2/#"   # lijn 2, sinds 2026-11-20 (init-vla-l2-opcua.sh zet hem op een draaiende broker)
       Enabled: true
       RetentionDays: 30
     # Lijn Vla-B, het machinepark. NIET de hele UNS: alleen wat een batchrapport

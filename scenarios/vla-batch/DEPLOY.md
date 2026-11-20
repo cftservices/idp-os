@@ -97,6 +97,12 @@ externe snapshots. `admin/admin` en TDengine `root/taosdata` worden geweigerd.
   na een verse installatie of een terugzet zonder deze collectie staat het weer op een jaar.
   Opnieuw zetten met dezelfde `collMod`; de termijn controleren met
   `db.getCollectionInfos({name: "dw_uns_archivearchive"})[0].options.expireAfterSeconds`.
+- **Lijn 2 staat in het Mongo-archief (sinds 2026-11-20).** De groep `dw_uns_archive` had
+  alleen `DairyWorks/Vla/#`; nu ook `DairyWorks/Vla-L2/#`. Gemeten rond de wijziging: L1
+  650 tot 800 en L2 ~700 berichten per minuut, dus het archief verdubbelt ruwweg. Met de
+  bewaartermijn van 30 dagen komt dat op ~0,9 GB (was 0,44 GB na de compact). Een bestaande broker krijgt het filter via
+  `init-vla-l2-opcua.sh` (GraphQL: uitzetten, `update`, aanzetten; gat ~0,1 s), een verse via
+  `monstermq/config.yaml`. De bewaartermijn bleef bij de wijziging op 30 dagen staan.
   De testback-up `/root/backups/idp-os/test-2026-10-22` is gecontroleerd met `gzip -t`,
   `mongorestore --dryRun` en `tar -tzf`.
 - Na `online` duurt het ~1 min voor de site antwoordt; de autopilot vult het magazijn
