@@ -425,7 +425,13 @@ closed order is refused. A batch that is not running yet is refused (`line_busy`
 while another batch runs on its line. The report scan (commit) checks every
 weighed material against stock first and refuses the whole booking on a shortage
 (`insufficient_stock`), so nothing is half-booked and stock never goes negative
-through the shop floor.
+through the shop floor. An aborted batch (the factory never ran it) is refused
+(`aborted`), an order scan skips it, and nothing can be booked on it.
+
+On **Storingen** (`/storingen`, machine park Vla-B) the engine listens on
+`raw/vla-park/#` and knows per machine whether data arrived in the last 30 s. A
+fault on a machine without data is refused (`machine_offline`) instead of going
+out over MQTT and showing as active; the screen says the park is not running.
 
 ---
 

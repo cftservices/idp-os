@@ -798,12 +798,13 @@ class BatchRunner:
     # ---------------------------------------------------------- guard: order-lifecycle
 
     def _guard_bookable(self, batch_id: str) -> dict:
-        """FDS order-lifecycle rule: on a COMPLETE batch nothing may be booked."""
+        """FDS order-lifecycle rule: on a finished batch (COMPLETE or ABORTED)
+        nothing may be booked."""
         batch = self._raw_batch(batch_id)
         if batch is None:
             raise ValueError(f"unknown batch {batch_id!r}")
-        if batch["state"] == M.COMPLETE:
-            raise ValueError(f"batch {batch_id} is COMPLETE — no bookings allowed")
+        if batch["state"] in M.FINISHED_STATES:
+            raise ValueError(f"batch {batch_id} is {batch['state']} — no bookings allowed")
         return batch
 
     # ------------------------------------------------------------ persistence

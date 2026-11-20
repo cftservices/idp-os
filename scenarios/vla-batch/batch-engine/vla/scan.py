@@ -59,6 +59,9 @@ class ScanFlow:
             batch = self.db.dw_batches.find_one({"batch_id": code})
             if batch is None:
                 self._reject(None, code, "unknown", operator_id)
+            if batch["state"] == M.ABORTED:
+                # the factory never ran it: nothing to dose, nothing to ship
+                self._reject(batch["batch_id"], code, "aborted", operator_id)
             if batch.get("order_id") and self.orders:
                 order = self.orders.get_order(batch["order_id"])
         else:
@@ -89,7 +92,8 @@ class ScanFlow:
                      and M.line_of_doc(b) == line), None)
 
     def _batch_of_order(self, order_id: str) -> Optional[dict]:
-        rows = sorted(self.db.dw_batches.find({"order_id": order_id}),
+        rows = sorted((b for b in self.db.dw_batches.find({"order_id": order_id})
+                       if b["state"] != M.ABORTED),
                       key=lambda b: b.get("created_at") or "")
         open_ = [b for b in rows if b["state"] != M.COMPLETE]
         return (open_ or rows or [None])[-1]

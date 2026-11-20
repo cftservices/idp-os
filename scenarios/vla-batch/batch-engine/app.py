@@ -38,7 +38,7 @@ from vla.db import get_db, seed_recipes
 from vla.equipment import CipRequired, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
-from vla.park_control import ParkControl
+from vla.park_control import ParkControl, ParkPresence
 from vla.orders import OrderManager
 from vla.period_reports import (assemble_equipment_report,
                                 assemble_period_report, render_equipment_pdf,
@@ -279,10 +279,17 @@ def _startup() -> None:
     control = controls[M.DEFAULT_LINE]
     # Lijn Vla-B. Offline-veilig: zonder park-model blijft de catalogus leeg en
     # geven de routes een nette 503 in plaats van een stacktrace.
+    # Does a park machine deliver data at all? Without this a fault on a machine
+    # that is not running looks active (MQTT is fire-and-forget).
+    presence = ParkPresence()
+    if getattr(bus, "client", None):
+        presence.start(os.environ.get("MQTT_HOST", "monstermq"),
+                       int(os.environ.get("MQTT_PORT", "1883")))
     park = ParkControl(
         model_dir=os.environ.get("PARK_MODEL_DIR", "/model"),
         mqtt_publish=(lambda t, p: bus.client.publish(t, p, qos=0))
-        if getattr(bus, "client", None) else None)
+        if getattr(bus, "client", None) else None,
+        presence=presence)
     seed_recipes(db)
     # Track & trace reads dw_batch_events by batch, order, pallet and truck;
     # without indexes each trace is a full scan over ~50k events.
@@ -1378,7 +1385,10 @@ def park_inject(equipment_id: str, body: dict = Body(...)):
             "reason": "bad_magnitude"})
     res = _park().inject(equipment_id, fault_id, magnitude)
     if not res.get("ok") and res.get("error"):
-        raise HTTPException(status_code=400, detail=res)
+        # Same shape as every other refusal: the screen reads detail.message.
+        raise HTTPException(status_code=400, detail={
+            **res, "message": res["error"],
+            "reason": res.get("reason") or "fault_refused"})
     return res
 
 

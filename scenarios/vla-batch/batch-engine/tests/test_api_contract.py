@@ -148,3 +148,13 @@ def test_batch_list_says_who_started_a_batch_and_when():
         row = next(r for r in c.get("/api/v1/batches").json() if r["batch_id"] == "B-TEST-WHO")
         assert row["created_by"] == "autopilot"
         assert row["created_at"] == "2026-11-20T14:00:00+00:00"
+
+
+def test_park_fault_refusal_carries_a_readable_message():
+    # The screen reads detail.message. Before 2026-11-20 the reason sat only in
+    # detail.error and the operator saw a bare "geweigerd".
+    with client() as c:
+        r = c.post("/api/v1/park/no-such-machine/fault", json={"fault": "f1"})
+        assert r.status_code == 400
+        d = r.json()["detail"]
+        assert "no-such-machine" in d["message"] and d["reason"] == "fault_refused"

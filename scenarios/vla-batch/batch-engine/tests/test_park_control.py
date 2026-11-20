@@ -132,3 +132,80 @@ def test_clear_all_ruimt_alles_op(park_mqtt):
     assert res["cleared"] == 12
     for m in park_mqtt.catalogue()["machines"]:
         assert m["active_faults"] == {}, m["equipment_id"]
+
+
+# --- fout 4: een machine die geen data levert, krijgt geen spookstoring ---
+
+from vla.park_control import ParkPresence  # noqa: E402
+
+
+class Clock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def _with_presence(clock):
+    sent = []
+    pres = ParkPresence(stale_s=30.0, clock=clock)
+    pres.listening = True                       # as if the subscriber is connected
+    p = ParkControl(model_dir=MODEL, mqtt_publish=lambda t, b: sent.append((t, b)),
+                    connect_timeout_s=0.2, retries=0, presence=pres)
+    p.sent = sent
+    return p, pres
+
+
+def test_presence_reads_the_machine_from_the_raw_topic():
+    clock = Clock()
+    pres = ParkPresence(stale_s=30.0, clock=clock)
+    assert pres.online("separator-01") is None          # not listening: unknown
+    pres.listening = True
+    assert pres.online("separator-01") is False         # listening, nothing seen
+    pres.on_topic("raw/vla-park/separator-01/Ch1.Dev2.FT_101_PV")
+    assert pres.online("separator-01") is True and pres.age("separator-01") == 0.0
+    clock.t += 31
+    assert pres.online("separator-01") is False         # stale after 30 s
+    pres.on_topic("DairyWorks/Vla-B/Receiving/separator-01/Status/x")  # not raw: ignored
+    assert pres.online("separator-01") is False
+
+
+def test_catalogue_says_which_machines_deliver_data():
+    clock = Clock()
+    p, pres = _with_presence(clock)
+    pres.on_topic("raw/vla-park/separator-01/X")
+    cat = p.catalogue()
+    m = {x["equipment_id"]: x for x in cat["machines"]}
+    assert m["separator-01"]["online"] is True and m["separator-01"]["last_seen_s"] == 0.0
+    assert m["filler-01"]["online"] is False and m["filler-01"]["last_seen_s"] is None
+    assert cat["park_live"] is True
+
+
+def test_no_data_anywhere_means_the_park_is_not_live():
+    p, _ = _with_presence(Clock())
+    assert p.catalogue()["park_live"] is False
+
+
+def test_fault_on_a_machine_without_data_is_refused_and_not_sent():
+    p, _ = _with_presence(Clock())
+    r = p.inject("separator-01", "f1", 0.5)
+    assert r["ok"] is False and r["reason"] == "machine_offline"
+    assert "separator-01" in r["error"] and "geen data" in r["error"]
+    assert p.sent == []
+    m = {x["equipment_id"]: x for x in p.catalogue()["machines"]}
+    assert m["separator-01"]["active_faults"] == {}
+
+
+def test_fault_on_a_live_machine_goes_through():
+    clock = Clock()
+    p, pres = _with_presence(clock)
+    pres.on_topic("raw/vla-park/blend-tank-01/X")          # an MQTT machine
+    assert p.inject("blend-tank-01", "f8", 0.5)["ok"] is True
+    assert len(p.sent) == 1
+
+
+def test_without_presence_nothing_is_refused_for_lack_of_data(park_mqtt):
+    # no subscriber (offline engine, tests): unknown is not the same as offline
+    assert park_mqtt.inject("blend-tank-01", "f8", 0.5)["ok"] is True
+    assert park_mqtt.catalogue()["park_live"] is None

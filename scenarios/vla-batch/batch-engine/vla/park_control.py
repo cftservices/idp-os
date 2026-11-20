@@ -37,12 +37,87 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Optional
+import time
+from typing import Any, Callable, Optional
 
 log = logging.getLogger("vla.park_control")
 
 MODEL_DIR = os.environ.get("PARK_MODEL_DIR", "/model")
 CANONICAL_ROOT = os.environ.get("CANONICAL_ROOT", "DairyWorks/Vla-B")
+RAW_ROOT = os.environ.get("PARK_RAW_ROOT", "raw/vla-park")
+PRESENCE_STALE_S = float(os.environ.get("PARK_PRESENCE_STALE_S", "30") or 30)
+
+
+class ParkPresence:
+    """Levert een parkmachine data? Gemeten op de raw-topics.
+
+    Zonder dit lijkt een storing op een machine die niet draait gewoon actief:
+    MQTT is fire-and-forget, dus het bericht gaat weg en niemand zegt dat er
+    niemand luistert. Raw (`raw/vla-park/{machine}/...`) en niet de canonieke
+    boom, want die valt ook stil als alleen de modellaag uit staat.
+
+    Drie standen per machine: True (data binnen `stale_s`), False (we luisteren
+    en er kwam niets) en None (we luisteren niet, dus we weten het niet). Alleen
+    False weigert; onbekend is niet hetzelfde als uit.
+    """
+
+    def __init__(self, stale_s: float = PRESENCE_STALE_S,
+                 clock: Callable[[], float] = time.monotonic):
+        self.stale_s = stale_s
+        self.clock = clock
+        self.listening = False
+        self._seen: dict[str, float] = {}
+        self._lock = threading.Lock()
+        self._client = None
+
+    def on_topic(self, topic: str) -> None:
+        parts = topic.split("/")
+        root = RAW_ROOT.split("/")
+        if len(parts) <= len(root) or parts[:len(root)] != root:
+            return
+        with self._lock:
+            self._seen[parts[len(root)]] = self.clock()
+
+    def age(self, equipment_id: str) -> Optional[float]:
+        with self._lock:
+            t = self._seen.get(equipment_id)
+        return None if t is None else round(self.clock() - t, 1)
+
+    def online(self, equipment_id: str) -> Optional[bool]:
+        if not self.listening:
+            return None
+        age = self.age(equipment_id)
+        return age is not None and age <= self.stale_s
+
+    def start(self, host: str, port: int = 1883) -> bool:
+        """Luisteren op RAW_ROOT/#. Offline-veilig: zonder broker blijft het None."""
+        try:
+            import paho.mqtt.client as mqtt
+        except ImportError:  # pragma: no cover
+            return False
+
+        def on_connect(client, _u, _f, rc, _p=None):
+            if rc == 0:
+                client.subscribe(RAW_ROOT + "/#", qos=0)
+                self.listening = True
+
+        def on_disconnect(*_a, **_k):
+            self.listening = False
+
+        try:
+            c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                            client_id="vla-batch-engine-park-presence")
+            c.on_connect = on_connect
+            c.on_disconnect = on_disconnect
+            c.on_message = lambda _c, _u, msg: self.on_topic(msg.topic)
+            c.reconnect_delay_set(min_delay=1, max_delay=30)
+            c.connect_async(host, port, keepalive=30)
+            c.loop_start()
+            self._client = c
+            return True
+        except Exception as e:  # noqa: BLE001
+            log.warning("park-presence niet gestart (%s); aanwezigheid onbekend", e)
+            return False
 
 try:
     from asyncua import Client
@@ -56,9 +131,11 @@ class ParkControl:
     """Storingscatalogus plus de route naar elke machine."""
 
     def __init__(self, model_dir: Optional[str] = None, mqtt_publish=None,
-                 connect_timeout_s: float = 3.0, retries: int = 1):
+                 connect_timeout_s: float = 3.0, retries: int = 1,
+                 presence: Optional[ParkPresence] = None):
         self.model_dir = model_dir or MODEL_DIR
         self.mqtt_publish = mqtt_publish
+        self.presence = presence
         self.connect_timeout_s = connect_timeout_s
         self.retries = retries
         self._lock = threading.Lock()
@@ -123,18 +200,28 @@ class ParkControl:
 
     # -------------------------------------------------------------- catalogus
 
+    def _online(self, equipment_id: str) -> Optional[bool]:
+        return self.presence.online(equipment_id) if self.presence else None
+
     def catalogue(self) -> dict:
         with self._lock:
-            return {
-                "machines": [
-                    {k: v for k, v in m.items() if k != "active"} | {
-                        "active_faults": dict(m["active"])}
-                    for m in sorted(self.machines.values(),
-                                    key=lambda x: x["equipment_id"])
-                ],
-                "total_faults": sum(len(m["faults"]) for m in self.machines.values()),
-                "load_error": self.load_error,
-            }
+            machines = [
+                {k: v for k, v in m.items() if k != "active"} | {
+                    "active_faults": dict(m["active"]),
+                    "online": self._online(m["equipment_id"]),
+                    "last_seen_s": (self.presence.age(m["equipment_id"])
+                                    if self.presence else None)}
+                for m in sorted(self.machines.values(),
+                                key=lambda x: x["equipment_id"])
+            ]
+        states = [m["online"] for m in machines]
+        return {
+            "machines": machines,
+            "total_faults": sum(len(m["faults"]) for m in machines),
+            "load_error": self.load_error,
+            # None = we don't listen, so we don't know; False = nothing arrives
+            "park_live": None if not states or None in states else any(states),
+        }
 
     # ---------------------------------------------------------------- verzenden
 
@@ -207,6 +294,13 @@ class ParkControl:
             return {"ok": False, "error": "machine %s kent storing %r niet"
                                           % (equipment_id, fault_id),
                     "known": m["faults"]}
+        if self._online(equipment_id) is False:
+            # Weigeren, niet versturen: over MQTT zou het bericht gewoon weggaan en
+            # stond de knop daarna op actief, terwijl er geen machine is die luistert.
+            return {"ok": False, "reason": "machine_offline",
+                    "equipment_id": equipment_id, "fault": fault_id,
+                    "error": "machine %s levert geen data (draait het park?)"
+                             % equipment_id}
         magnitude = max(0.0, min(float(magnitude), 1.0))
         res = self._send(m, "InjectFault",
                          {"fault": fault_id, "magnitude": magnitude},
