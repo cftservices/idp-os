@@ -910,6 +910,31 @@ class BatchRunner:
                     {"alarm_id": alarm_id, "operator_id": operator_id})
         return self.db.dw_alarms.find_one({"alarm_id": alarm_id})
 
+    def ack_all_open(self, operator_id: Optional[str], line: Optional[str] = None,
+                     priority: Optional[str] = None,
+                     equipment_id: Optional[str] = None) -> dict:
+        """Bevestig alle OPEN alarmen in een selectie, de knop "alles bevestigen".
+
+        Geparkeerde alarmen blijven geparkeerd: bevestigen zou hun reden en
+        einddatum stil overschrijven. Elk alarm krijgt zijn eigen
+        alarm_acknowledged-event, zodat het spoor per alarm gelijk is aan een
+        losse bevestiging. Een alarm zonder procesdeel (batchniveau) hoort bij
+        elke lijn, net als in het alarmscherm.
+        """
+        from . import alarms as A
+
+        ids = []
+        for a in A.list_alarms(self.db, state="open", priority=priority, limit=100_000):
+            eq = a.get("equipment_id")
+            if equipment_id and eq != equipment_id:
+                continue
+            if line and eq and (a.get("line") or M.line_of_equipment(eq)) != line:
+                continue
+            ids.append(a["alarm_id"])
+        for alarm_id in ids:
+            self.ack_alarm(alarm_id, operator_id=operator_id)
+        return {"acknowledged": len(ids), "alarm_ids": ids}
+
     def ack_verdict(self, batch_id: str, operator_id: str) -> dict:
         """Acknowledge a batch verdict (idempotent). Batch must be COMPLETE with verdict.
         Returns the batch with verdict_ack set."""

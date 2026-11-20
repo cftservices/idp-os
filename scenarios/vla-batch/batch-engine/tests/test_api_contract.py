@@ -83,3 +83,15 @@ def test_stop_refused_when_active_batch_has_no_production():
             assert "no production booked" in r2.json()["detail"]
         finally:
             os.environ["AUTO_START"] = original_auto_start
+
+
+def test_ack_all_route_acks_open_alarms_and_rejects_unknown_priority():
+    with client() as c:
+        assert c.post("/api/v1/alarms/ack-all",
+                      json={"priority": "urgent"}).status_code == 400
+        r = c.post("/api/v1/alarms/ack-all", json={"operator_id": "OP-7"})
+        assert r.status_code == 200
+        body = r.json()
+        assert set(body) == {"acknowledged", "alarm_ids"}
+        assert body["acknowledged"] == len(body["alarm_ids"])
+        assert c.get("/api/v1/alarms", params={"state": "open"}).json() == []

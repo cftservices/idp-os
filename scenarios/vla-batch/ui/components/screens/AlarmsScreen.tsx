@@ -208,6 +208,34 @@ export function AlarmsScreen() {
       // Een alarm zonder procesdeel (batchniveau) blijft bij elke lijn zichtbaar.
       (!lineFilter || !a.equipment_id || lineOfEquipment(a.equipment_id) === lineFilter),
   );
+  const openCount = rows.filter((a) => a.state === "open").length;
+
+  // Alles bevestigen in één keer, met een bevestigingsstap: een bulkactie die
+  // met één verkeerde klik tientallen alarmen wegzet, hoort te zeggen hoeveel.
+  // Geparkeerde alarmen blijven geparkeerd; de engine slaat ze over.
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [ackAllBusy, setAckAllBusy] = useState(false);
+  const [ackAllMsg, setAckAllMsg] = useState<string | null>(null);
+
+  async function ackAll() {
+    setAckAllBusy(true);
+    setAckAllMsg(null);
+    try {
+      const out = await post<{ acknowledged: number }>("/alarms/ack-all", {
+        operator_id: "op-01",
+        line: lineFilter || null,
+        priority: filter || null,
+        equipment_id: equipmentFilter || null,
+      });
+      setAckAllMsg(`${out.acknowledged} alarmen bevestigd.`);
+      await alarms.refetch();
+    } catch (err) {
+      setAckAllMsg((err as { message?: string })?.message ?? "bevestigen mislukt");
+    } finally {
+      setAckAllBusy(false);
+      setConfirmAll(false);
+    }
+  }
 
   return (
     <main className="mx-auto flex max-w-[1500px] flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
@@ -242,7 +270,49 @@ export function AlarmsScreen() {
         </div>
       </ScreenHeader>
 
-      <LineSwitch allowAll />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <LineSwitch allowAll />
+        <div className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
+          {ackAllMsg && (
+            <span role="status" className="text-ink-muted">
+              {ackAllMsg}
+            </span>
+          )}
+          {confirmAll ? (
+            <>
+              <span>Alle open alarmen in deze selectie bevestigen?</span>
+              <button
+                type="button"
+                onClick={ackAll}
+                disabled={ackAllBusy}
+                className="border border-ink bg-ink px-3 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase text-canvas disabled:opacity-40"
+              >
+                Ja, bevestig
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmAll(false)}
+                className="px-2 py-1 text-ink-muted hover:text-ink"
+              >
+                Annuleer
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setAckAllMsg(null);
+                setConfirmAll(true);
+              }}
+              disabled={openCount === 0}
+              title="Bevestig alle open alarmen in de huidige selectie. Geparkeerde alarmen blijven geparkeerd."
+              className="border border-line-strong bg-surface px-3 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase text-ink-muted hover:border-ink-muted hover:text-ink disabled:opacity-40"
+            >
+              Alles bevestigen{openCount ? ` (${openCount})` : ""}
+            </button>
+          )}
+        </div>
+      </div>
 
       {equipmentFilter && (
         <p className="flex flex-wrap items-center gap-2 text-[0.8125rem]">

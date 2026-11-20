@@ -150,6 +150,14 @@ class AckRequest(BaseModel):
     operator_id: str | None = None
 
 
+class AckAllRequest(BaseModel):
+    # Dezelfde selectie als het alarmscherm: leeg betekent "alles".
+    operator_id: str | None = None
+    line: str | None = None
+    priority: str | None = None
+    equipment_id: str | None = None
+
+
 class ScanWeigh(BaseModel):
     batch_id: str
     material_id: str
@@ -1001,6 +1009,17 @@ def ack_alarm(alarm_id: str, body: AckRequest):
         code = 404 if "unknown" in str(e) else 409
         raise HTTPException(code, str(e))
     return alarm
+
+
+@app.post(f"{API}/alarms/ack-all")
+def ack_all_alarms(body: AckAllRequest):
+    """Bevestig alle open alarmen in de selectie. Geparkeerde alarmen blijven
+    geparkeerd; elk alarm krijgt een eigen bevestigingsevent."""
+    if body.priority and body.priority not in ("high", "medium", "low"):
+        raise HTTPException(400, f"unknown priority {body.priority!r}")
+    return _runner().ack_all_open(body.operator_id, line=body.line or None,
+                                  priority=body.priority or None,
+                                  equipment_id=body.equipment_id or None)
 
 
 @app.get(f"{API}/alarms")
