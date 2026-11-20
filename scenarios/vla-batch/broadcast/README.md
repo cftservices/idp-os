@@ -161,8 +161,12 @@ SwiftShader; zonder GPU stopt hij, want dan meet je wat op de VPS al no-go was.
 
 **Opzet op de Pi.**
 
-1. Raspberry Pi OS Bookworm 64-bit met desktop, actieve koeling, en een HDMI-monitor of
-   HDMI-dummy. Zonder scherm draait er geen GPU-sessie.
+1. Raspberry Pi OS Bookworm 64-bit met desktop en actieve koeling, plus een scherm voor de
+   GPU-sessie. **Zonder scherm of micro-HDMI-verloop** kan de kernel de HDMI-uitgang als
+   aangesloten laten gelden: zet aan het eind van de ene regel in `/boot/firmware/cmdline.txt`
+   (spatie ervoor) `video=HDMI-A-1:1280x720@60D`, en laat de desktop automatisch inloggen met
+   `sudo raspi-config nonint do_boot_behaviour B4`. Daarna draait er na een herstart een
+   desktop op `:0`, ook met niets in de poort. Op de Pi zelf nog niet geprobeerd.
 2. De desktop op X11, want onder Wayland neemt `x11grab` een zwart scherm op:
    `sudo raspi-config nonint do_wayland W1 && sudo reboot`.
 3. `sudo apt install chromium ffmpeg x11-xserver-utils x11-utils procps curl`
@@ -206,8 +210,49 @@ Bij go is de volgende stap dan ook een uur naar YouTube unlisted vanaf de Pi, me
 meetpunten, en pas daarna 24 uur.
 
 De telling zelf is lokaal nagerekend met een testbron van 8 echte beelden per seconde, opgenomen
-op 15 fps: het script meet 8,0 fps, ook per minuut en over de laatste 2 minuten. Op een Pi is
-hij nog niet gedraaid.
+op 15 fps: het script meet 8,0 fps, ook per minuut en over de laatste 2 minuten.
+
+### Bankproef 1, 20-11-2026: no-go, maar om een andere reden dan op de VPS
+
+Pi 5 8 GB, Raspberry Pi OS Bookworm met **32-bit userland** (armhf) op een 64-bit kernel,
+Chromium 136, zonder scherm via `video=HDMI-A-1:1280x720@60D`. 5 minuten op `/site?broadcast=1`.
+
+| Meetpunt | Uitkomst | |
+|---|---|---|
+| Chromium op de GPU | ANGLE, Broadcom V3D 7.1, WebGL2 | go |
+| ffmpeg `speed` | 1x | go |
+| **Echte beeldsnelheid** | **5,6 fps** (slechtste minuut 5,4) | **no-go** |
+| CPU-idle | gemiddeld 37%, minimum 33% | go |
+| Temperatuur, throttling | maximaal 66 °C, `0x0` | go |
+
+Diagnose, 15 s zonder encoder en met `embed=1`: **6,9 fps**, en één Chromium-thread op **100%**.
+De GPU en de encoder zijn dus niet de grens, de **hoofdthread van Chromium** is het: JavaScript
+plus de zwevende HTML-labels die elk frame opnieuw worden geplaatst. Het gemiddelde van 37% idle
+verbergt dat, want het is verdeeld over vier kernen. Twee wegen, in deze volgorde:
+
+1. In `broadcast=1` de HTML-labels uit en minder `useFrame`-werk. Goedkoop en per stap te meten.
+2. Raspberry Pi OS 64-bit (arm64): V8 is daar duidelijk sneller dan op armhf. Dat is een
+   herinstallatie, en op deze Pi draaien ook Docker-diensten.
+
+Vóór de proef ook: de URL zonder `embed=1` liet de navigatie in beeld; de stream gebruikt wél
+`embed=1`.
+
+### Bankproef 2, 20-11-2026: go met de lichte twin
+
+Weg 1 uitgevoerd: met `broadcast=1` staat er geen enkele `<Html>` meer in de 3D-scène
+(`labelBudget` 0, plus het dockbord, de koelcelteller, de hal- en voorbereidingsborden en de
+premix-chips; veld `broadcast` in `TwinCtx`). De KPI-kaarten en de batchvoortgang blijven, want
+die staan buiten de scène. Zonder `broadcast=1` verandert er niets.
+
+| Meetpunt | Bankproef 1 | Bankproef 2 | |
+|---|---|---|---|
+| Echte beeldsnelheid | 5,6 fps | **15,0 fps** (slechtste minuut 14,9) | go |
+| ffmpeg `speed` | 1x | 1x | go |
+| CPU-idle | 37% | gemiddeld 37%, minimum 29% | go |
+| Temperatuur, throttling | 66 °C, `0x0` | 69 °C, `0x0` | go |
+
+15 fps is het plafond van de opname zelf. Volgende stap: een uur naar YouTube unlisted vanaf de
+Pi, met de twin in de carrousel.
 
 ## Meetproef 1, 20-11-2026: no-go voor de 3D-twin op deze VPS
 

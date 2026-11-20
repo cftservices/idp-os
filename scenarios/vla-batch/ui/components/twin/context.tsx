@@ -15,6 +15,12 @@ export type TwinCtx = {
   labelled: Set<string>;
   /** Procesregel per object-id, bv. "92,4 °C". */
   meta: Record<string, string>;
+  /**
+   * Livestream (?broadcast=1): geen HTML in de 3D-scène. Elk drei-<Html> wordt
+   * elk frame opnieuw in de DOM geplaatst, en op een Pi 5 zat de hoofdthread
+   * van Chromium daardoor op 100% (bankproef 20-11-2026: 5,6 fps).
+   */
+  broadcast: boolean;
 };
 
 export const TwinContext = createContext<TwinCtx | null>(null);

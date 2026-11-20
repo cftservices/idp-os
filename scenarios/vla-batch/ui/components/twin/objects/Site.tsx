@@ -79,7 +79,7 @@ function HallProps({ x0, x1, z0, z1 }: { x0: number; x1: number; z0: number; z1:
  * stations zelf (klikbaar, met status) staan in Prep.tsx.
  */
 function PrepRoomShell() {
-  const { palette } = useTwin();
+  const { palette, broadcast } = useTwin();
   const [x0, z0] = PREP_ROOM.min;
   const [x1, z1] = PREP_ROOM.max;
   const floor = usePbr("beton", [(x1 - x0) / 4, (z1 - z0) / 4]);
@@ -113,9 +113,11 @@ function PrepRoomShell() {
         <planeGeometry args={[x1 - x0 - 0.6, 0.08]} />
         <meshBasicMaterial color={palette.accent} />
       </mesh>
-      <Html position={[(x0 + x1) / 2, PREP_ROOM.wall + 1.6, z0]} center transform distanceFactor={18} style={{ pointerEvents: "none" }}>
-        <div className="twin-sign">Voorbereiding · afwegen + premix</div>
-      </Html>
+      {!broadcast && (
+        <Html position={[(x0 + x1) / 2, PREP_ROOM.wall + 1.6, z0]} center transform distanceFactor={18} style={{ pointerEvents: "none" }}>
+          <div className="twin-sign">Voorbereiding · afwegen + premix</div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -126,7 +128,7 @@ function PrepRoomShell() {
  * hal 2, zodat beide hallen exact dezelfde opbouw hebben.
  */
 function Hall({ dz = 0, sign }: { dz?: number; sign: string }) {
-  const { palette } = useTwin();
+  const { palette, broadcast } = useTwin();
   const [x0, z0] = HALL.min;
   const [x1, z1] = HALL.max;
   const floor = usePbr("beton", [(x1 - x0) / 4, (z1 - z0) / 4]);
@@ -192,9 +194,11 @@ function Hall({ dz = 0, sign }: { dz?: number; sign: string }) {
         <meshBasicMaterial color={palette["road-mark"]} />
       </mesh>
 
-      <Html position={[-6, HALL.wall * 2.4, z0]} center transform distanceFactor={18} style={{ pointerEvents: "none" }}>
-        <div className="twin-sign">{sign}</div>
-      </Html>
+      {!broadcast && (
+        <Html position={[-6, HALL.wall * 2.4, z0]} center transform distanceFactor={18} style={{ pointerEvents: "none" }}>
+          <div className="twin-sign">{sign}</div>
+        </Html>
+      )}
     </group>
   );
 }

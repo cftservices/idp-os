@@ -126,6 +126,8 @@ const PREP_BOARD: Vec3 = [
 
 /** Chipje voor een station met een set: state · product · lijn. */
 function PrepChip({ st, offset, row }: { st: TwinPrepStation; offset: Vec3; row: number }) {
+  const { broadcast } = useTwin();
+  if (broadcast) return null;
   const set = st.view.set;
   const text = set
     ? `${PREP_STATE_WORD[st.view.state]} · ${st.view.flavour ? FLAVOUR_WORD[st.view.flavour] : set.recipe_id} · ${set.line}`
