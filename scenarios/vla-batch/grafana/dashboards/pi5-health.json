@@ -1,7 +1,7 @@
 {
   "uid": "pi5-health",
-  "title": "Pi 5 — gezondheid",
-  "description": "De Raspberry Pi 5 achter de livestream: temperatuur, throttling, voeding, ventilator, CPU, geheugen en de stream zelf. Elke minuut gemeten op de Pi.",
+  "title": "Pi 5 — health",
+  "description": "The Raspberry Pi 5 behind the livestream: temperature, throttling, power, fan, CPU, memory and the stream itself. Measured on the Pi every minute.",
   "tags": [
     "pi5"
   ],
@@ -40,13 +40,13 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Gemeten op de Pi zelf (`broadcast/pi5/pi-health.sh`, elke minuut). **Warmte:** boven 80 °C begint de Pi zachtjes terug te schakelen, bij 85 °C echt; dan zakt de CPU-klok onder 2400 MHz en haalt de twin geen 15 fps meer. **Onderspanning** betekent een te zwakke voeding (de Pi 5 wil 5 V / 5 A). Pi 5, 8 GB, actieve koeler."
+        "content": "This Raspberry Pi 5 renders the 3D twin and encodes the stream, measured on the Pi every minute. **Heat:** above 80 °C the Pi starts to slow its clock down, at 85 °C for real; the clock then drops below 2400 MHz and the picture stutters. **Undervoltage** means the power supply is too weak (a Pi 5 wants 5 V / 5 A). Pi 5, 8 GB, active cooler."
       }
     },
     {
       "id": 2,
       "type": "row",
-      "title": "Nu",
+      "title": "Now",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -59,7 +59,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Laatste meting",
+      "title": "Last reading",
       "gridPos": {
         "x": 0,
         "y": 3,
@@ -75,7 +75,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select cast((cast(now() as bigint) - cast(last(ts) as bigint)) / 1000 as bigint) as sec_geleden from idp.pi_host where ts > now-1d"
+          "sql": "select cast((cast(now() as bigint) - cast(last(ts) as bigint)) / 1000 as bigint) as `seconds_ago` from idp.pi_host where ts > now-1d"
         }
       ],
       "fieldConfig": {
@@ -122,12 +122,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Hoe oud de laatste meting van de Pi is. Rood: de Pi is uit, offline, of de cron staat stil."
+      "description": "Age of the last reading from the Pi. Red: the Pi is off, offline, or its cron job stopped."
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Temperatuur",
+      "title": "Temperature",
       "gridPos": {
         "x": 4,
         "y": 3,
@@ -143,7 +143,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(temp_c) as temp from idp.pi_host"
+          "sql": "select last(temp_c) as `temp` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -191,12 +191,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "SoC-temperatuur. Vanaf 80 °C schakelt de Pi zachtjes terug, bij 85 °C hard."
+      "description": "SoC temperature. From 80 °C the Pi slows down softly, at 85 °C hard."
     },
     {
       "id": 5,
       "type": "stat",
-      "title": "Max. temperatuur (1 u)",
+      "title": "Max temperature (1 h)",
       "gridPos": {
         "x": 8,
         "y": 3,
@@ -212,7 +212,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select max(temp_c) as max_temp from idp.pi_host where ts > now-1h"
+          "sql": "select max(temp_c) as `max_temp` from idp.pi_host where ts > now-1h"
         }
       ],
       "fieldConfig": {
@@ -264,7 +264,7 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Throttling nu",
+      "title": "Throttling now",
       "gridPos": {
         "x": 12,
         "y": 3,
@@ -280,7 +280,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(throttled_now) + last(soft_temp_now) + last(freq_capped_now) as throttle from idp.pi_host"
+          "sql": "select last(throttled_now) + last(soft_temp_now) + last(freq_capped_now) as `throttle` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -307,7 +307,7 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "nee",
+                  "text": "no",
                   "index": 0
                 }
               }
@@ -318,7 +318,7 @@
                 "from": 1,
                 "to": 10,
                 "result": {
-                  "text": "JA",
+                  "text": "YES",
                   "index": 1
                 }
               }
@@ -345,12 +345,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Klok teruggeschakeld door warmte of door de voeding, op dit moment."
+      "description": "Clock slowed down by heat or by the power supply, right now."
     },
     {
       "id": 7,
       "type": "stat",
-      "title": "Ooit gethrottled",
+      "title": "Throttled since boot",
       "gridPos": {
         "x": 16,
         "y": 3,
@@ -366,7 +366,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(throttled_ever) + last(soft_temp_ever) + last(freq_capped_ever) as sinds_boot from idp.pi_host"
+          "sql": "select last(throttled_ever) + last(soft_temp_ever) + last(freq_capped_ever) as `since_boot` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -393,7 +393,7 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "nee",
+                  "text": "no",
                   "index": 0
                 }
               }
@@ -404,7 +404,7 @@
                 "from": 1,
                 "to": 10,
                 "result": {
-                  "text": "ja",
+                  "text": "yes",
                   "index": 1
                 }
               }
@@ -431,12 +431,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Sinds de laatste herstart van de Pi. Wordt pas weer 'nee' na een reboot."
+      "description": "Since the last restart of the Pi. Only returns to 'no' after a reboot."
     },
     {
       "id": 8,
       "type": "stat",
-      "title": "Onderspanning",
+      "title": "Undervoltage",
       "gridPos": {
         "x": 20,
         "y": 3,
@@ -452,7 +452,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(undervolt_now) + last(undervolt_ever) as voeding from idp.pi_host"
+          "sql": "select last(undervolt_now) + last(undervolt_ever) as `supply` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -479,7 +479,7 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "nee",
+                  "text": "no",
                   "index": 0
                 }
               }
@@ -490,7 +490,7 @@
                 "from": 1,
                 "to": 2,
                 "result": {
-                  "text": "JA",
+                  "text": "YES",
                   "index": 1
                 }
               }
@@ -517,12 +517,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Te lage spanning, nu of sinds de boot. Oorzaak: voeding of kabel."
+      "description": "Voltage too low, now or since boot. Cause: power supply or cable."
     },
     {
       "id": 9,
       "type": "stat",
-      "title": "Ventilator",
+      "title": "Fan",
       "gridPos": {
         "x": 0,
         "y": 7,
@@ -538,7 +538,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(fan_rpm) as rpm from idp.pi_host"
+          "sql": "select last(fan_rpm) as `rpm` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -569,12 +569,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Actieve koeler. 0 rpm bij een koele Pi is normaal; 0 rpm boven 70 °C niet."
+      "description": "Active cooler. 0 rpm on a cool Pi is normal; 0 rpm above 70 °C is not."
     },
     {
       "id": 10,
       "type": "stat",
-      "title": "CPU-klok",
+      "title": "CPU clock",
       "gridPos": {
         "x": 4,
         "y": 7,
@@ -590,7 +590,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(arm_mhz) as klok from idp.pi_host"
+          "sql": "select last(arm_mhz) as `clock` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -638,12 +638,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "2400 MHz is vol vermogen. Lager terwijl de CPU bezig is: throttling."
+      "description": "2400 MHz is full speed. Lower while the CPU is busy: throttling."
     },
     {
       "id": 11,
       "type": "stat",
-      "title": "CPU vrij (5 min)",
+      "title": "CPU idle (5 min)",
       "gridPos": {
         "x": 8,
         "y": 7,
@@ -659,7 +659,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select avg(cpu_idle) as vrij from idp.pi_host where ts > now-5m"
+          "sql": "select avg(cpu_idle) as `idle` from idp.pi_host where ts > now-5m"
         }
       ],
       "fieldConfig": {
@@ -711,7 +711,7 @@
     {
       "id": 12,
       "type": "stat",
-      "title": "Geheugen beschikbaar",
+      "title": "Memory available",
       "gridPos": {
         "x": 12,
         "y": 7,
@@ -727,7 +727,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(mem_avail_mb) as beschikbaar from idp.pi_host"
+          "sql": "select last(mem_avail_mb) as `available` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -779,7 +779,7 @@
     {
       "id": 13,
       "type": "stat",
-      "title": "Schijf gebruikt",
+      "title": "Disk used",
       "gridPos": {
         "x": 16,
         "y": 7,
@@ -795,7 +795,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(disk_used_pct) as schijf from idp.pi_host"
+          "sql": "select last(disk_used_pct) as `disk` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -890,7 +890,7 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "uit",
+                  "text": "off",
                   "index": 0
                 },
                 "1": {
@@ -921,7 +921,7 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "systemd-unit vla-stream op de Pi."
+      "description": "The systemd unit vla-stream on the Pi."
     },
     {
       "id": 15,
@@ -942,7 +942,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(stream_speed) as speed from idp.pi_host where ts > now-5m"
+          "sql": "select last(stream_speed) as `speed` from idp.pi_host where ts > now-5m"
         }
       ],
       "fieldConfig": {
@@ -990,12 +990,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "ffmpeg houdt realtime bij bij 1x. Leeg: de stream staat uit."
+      "description": "ffmpeg keeps up with real time at 1x. Empty: the stream is off."
     },
     {
       "id": 16,
       "type": "stat",
-      "title": "Stream-fps",
+      "title": "Stream fps",
       "gridPos": {
         "x": 4,
         "y": 11,
@@ -1011,7 +1011,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(stream_fps) as fps from idp.pi_host where ts > now-5m"
+          "sql": "select last(stream_fps) as `fps` from idp.pi_host where ts > now-5m"
         }
       ],
       "fieldConfig": {
@@ -1029,11 +1029,11 @@
               },
               {
                 "color": "orange",
-                "value": 13.5
+                "value": 27
               },
               {
                 "color": "green",
-                "value": 14.5
+                "value": 29
               }
             ]
           },
@@ -1058,12 +1058,13 @@
       "datasource": {
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
-      }
+      },
+      "description": "Frames per second the encoder sends. The stream runs at 30 fps."
     },
     {
       "id": 17,
       "type": "stat",
-      "title": "Herstarts stream",
+      "title": "Stream restarts",
       "gridPos": {
         "x": 8,
         "y": 11,
@@ -1079,7 +1080,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(stream_restarts) as herstarts from idp.pi_host where ts > now-5m"
+          "sql": "select last(stream_restarts) as `restarts` from idp.pi_host where ts > now-5m"
         }
       ],
       "fieldConfig": {
@@ -1126,7 +1127,7 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Hoe vaak systemd de stream sinds de start opnieuw heeft opgestart."
+      "description": "How often systemd has restarted the stream since it was started."
     },
     {
       "id": 18,
@@ -1147,7 +1148,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(uptime_h) as uptime from idp.pi_host"
+          "sql": "select last(uptime_h) as `uptime` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -1199,7 +1200,7 @@
           },
           "queryType": "SQL",
           "formatType": "Table",
-          "sql": "select last(containers_running) as draaiend from idp.pi_host"
+          "sql": "select last(containers_running) as `running` from idp.pi_host"
         }
       ],
       "fieldConfig": {
@@ -1230,12 +1231,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Docker-containers op de Pi (n8n, dokploy en zo); die tellen mee in de belasting."
+      "description": "Docker containers on the Pi; they add to the load."
     },
     {
       "id": 20,
       "type": "row",
-      "title": "Warmte",
+      "title": "Heat",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -1248,7 +1249,7 @@
     {
       "id": 21,
       "type": "timeseries",
-      "title": "Temperatuur en ventilator",
+      "title": "Temperature and fan",
       "gridPos": {
         "x": 0,
         "y": 16,
@@ -1264,7 +1265,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, max(temp_c) as temperatuur from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, max(temp_c) as `temperature` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         },
         {
           "refId": "B",
@@ -1274,7 +1275,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, avg(fan_rpm) as ventilator from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, avg(fan_rpm) as `fan` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         }
       ],
       "fieldConfig": {
@@ -1313,7 +1314,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "temperatuur"
+              "options": "temperature"
             },
             "properties": [
               {
@@ -1328,7 +1329,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "ventilator"
+              "options": "fan"
             },
             "properties": [
               {
@@ -1379,12 +1380,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Oranje vlak vanaf 80 °C (zacht terugschakelen), rood vanaf 85 °C (hard)."
+      "description": "Orange band from 80 °C (soft slowdown), red from 85 °C (hard)."
     },
     {
       "id": 22,
       "type": "timeseries",
-      "title": "CPU-klok en throttling",
+      "title": "CPU clock and throttling",
       "gridPos": {
         "x": 12,
         "y": 16,
@@ -1400,7 +1401,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, min(arm_mhz) as klok from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, min(arm_mhz) as `clock` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         },
         {
           "refId": "B",
@@ -1410,7 +1411,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, max(throttled_now + soft_temp_now + freq_capped_now) as throttling, max(undervolt_now) as onderspanning from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, max(throttled_now + soft_temp_now + freq_capped_now) as `throttling`, max(undervolt_now) as `undervoltage` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         }
       ],
       "fieldConfig": {
@@ -1428,7 +1429,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "klok"
+              "options": "clock"
             },
             "properties": [
               {
@@ -1443,7 +1444,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "throttling|onderspanning"
+              "options": "throttling|undervoltage"
             },
             "properties": [
               {
@@ -1496,12 +1497,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Rode staven: er was die minuut throttling of onderspanning."
+      "description": "Red bars: throttling or undervoltage in that minute."
     },
     {
       "id": 23,
       "type": "row",
-      "title": "Belasting en stream",
+      "title": "Load and stream",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -1530,7 +1531,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, avg(cpu_user) as gebruiker, avg(cpu_system) as systeem, avg(cpu_iowait) as io_wacht from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, avg(cpu_user) as `user_pct`, avg(cpu_system) as `system_pct`, avg(cpu_iowait) as `io_wait_pct` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         }
       ],
       "fieldConfig": {
@@ -1565,12 +1566,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "Gestapeld over vier kernen: wat erboven ligt is vrij."
+      "description": "Stacked over four cores: everything above is idle."
     },
     {
       "id": 25,
       "type": "timeseries",
-      "title": "Stream: encoder en beeld",
+      "title": "Stream: encoder and picture",
       "gridPos": {
         "x": 12,
         "y": 26,
@@ -1586,7 +1587,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, avg(stream_fps) as fps, avg(stream_speed) * 15 as `speed_x15` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, avg(stream_fps) as `fps`, avg(stream_speed) * 30 as `speed_x30` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         },
         {
           "refId": "B",
@@ -1596,7 +1597,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, avg(stream_kbps) as kbit_s from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, avg(stream_kbps) as `kbit_s` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         }
       ],
       "fieldConfig": {
@@ -1643,7 +1644,7 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "fps en speed×15 horen samen op 15 te liggen. kbit/s is wat er naar YouTube gaat."
+      "description": "fps and speed×30 should both sit at 30. kbit/s is what goes to YouTube."
     },
     {
       "id": 26,
@@ -1695,12 +1696,12 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "4 kernen."
+      "description": "4 cores."
     },
     {
       "id": 27,
       "type": "timeseries",
-      "title": "Geheugen en schijf",
+      "title": "Memory and disk",
       "gridPos": {
         "x": 12,
         "y": 34,
@@ -1716,7 +1717,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, avg(mem_avail_mb) as beschikbaar, avg(swap_used_mb) as swap from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, avg(mem_avail_mb) as `available`, avg(swap_used_mb) as `swap` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         },
         {
           "refId": "B",
@@ -1726,7 +1727,7 @@
           },
           "queryType": "SQL",
           "formatType": "Time series",
-          "sql": "select _wstart as ts, avg(disk_used_pct) as schijf_pct from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
+          "sql": "select _wstart as ts, avg(disk_used_pct) as `disk_pct` from idp.pi_host where ts >= $from and ts <= $to interval(1m) fill(null)"
         }
       ],
       "fieldConfig": {
@@ -1744,7 +1745,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "schijf_pct"
+              "options": "disk_pct"
             },
             "properties": [
               {

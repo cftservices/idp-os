@@ -50,7 +50,7 @@
           "unit": "none",
           "color": {
             "mode": "fixed",
-            "fixedColor": "blue"
+            "fixedColor": "text"
           },
           "mappings": [
             {
@@ -58,27 +58,38 @@
               "options": {
                 "IDLE": {
                   "text": "idle",
+                  "color": "text",
                   "index": 0
                 },
                 "DOSING": {
                   "text": "dosing",
+                  "color": "purple",
                   "index": 1
                 },
                 "COOKING": {
                   "text": "cooking",
+                  "color": "orange",
                   "index": 2
                 },
                 "COOLING": {
                   "text": "cooling",
+                  "color": "light-blue",
                   "index": 3
                 },
                 "FILLING": {
                   "text": "filling",
+                  "color": "green",
                   "index": 4
                 },
                 "COMPLETE": {
                   "text": "complete",
+                  "color": "dark-green",
                   "index": 5
+                },
+                "CIP": {
+                  "text": "cleaning (CIP)",
+                  "color": "yellow",
+                  "index": 6
                 }
               }
             }
@@ -96,7 +107,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/.*/",
           "values": false
         }
       },
@@ -132,7 +143,7 @@
           "unit": "none",
           "color": {
             "mode": "fixed",
-            "fixedColor": "blue"
+            "fixedColor": "text"
           },
           "mappings": [
             {
@@ -140,27 +151,38 @@
               "options": {
                 "IDLE": {
                   "text": "idle",
+                  "color": "text",
                   "index": 0
                 },
                 "DOSING": {
                   "text": "dosing",
+                  "color": "purple",
                   "index": 1
                 },
                 "COOKING": {
                   "text": "cooking",
+                  "color": "orange",
                   "index": 2
                 },
                 "COOLING": {
                   "text": "cooling",
+                  "color": "light-blue",
                   "index": 3
                 },
                 "FILLING": {
                   "text": "filling",
+                  "color": "green",
                   "index": 4
                 },
                 "COMPLETE": {
                   "text": "complete",
+                  "color": "dark-green",
                   "index": 5
+                },
+                "CIP": {
+                  "text": "cleaning (CIP)",
+                  "color": "yellow",
+                  "index": 6
                 }
               }
             }
@@ -178,7 +200,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/.*/",
           "values": false
         }
       },

@@ -30,12 +30,18 @@ def board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, last_str, series,
     b.d["tags"] = [TAG]
     b.d["links"] = []
 
+    # Batch states as the engine publishes them (checked 20-11-2026: these seven, CIP included).
     state_map = [{"type": "value", "options": {
-        "IDLE": {"text": "idle", "index": 0}, "DOSING": {"text": "dosing", "index": 1},
-        "COOKING": {"text": "cooking", "index": 2}, "COOLING": {"text": "cooling", "index": 3},
-        "FILLING": {"text": "filling", "index": 4}, "COMPLETE": {"text": "complete", "index": 5}}}]
+        "IDLE": {"text": "idle", "color": "text", "index": 0},
+        "DOSING": {"text": "dosing", "color": "purple", "index": 1},
+        "COOKING": {"text": "cooking", "color": "orange", "index": 2},
+        "COOLING": {"text": "cooling", "color": "light-blue", "index": 3},
+        "FILLING": {"text": "filling", "color": "green", "index": 4},
+        "COMPLETE": {"text": "complete", "color": "dark-green", "index": 5},
+        "CIP": {"text": "cleaning (CIP)", "color": "yellow", "index": 6}}}]
 
-    def stat(title, sql, unit="none", decimals=None, th=None, color="blue", mappings=None, desc=""):
+    def stat(title, sql, unit="none", decimals=None, th=None, color="blue", mappings=None, desc="",
+             fields=""):
         field = {"unit": unit, "color": {"mode": "thresholds"} if th else {"mode": "fixed", "fixedColor": color}}
         if th:
             field["thresholds"] = th
@@ -43,10 +49,12 @@ def board(Board, td, stat_opts, thresholds, TS_OPTS, TS_FIELD, last_str, series,
             field["decimals"] = decimals
         if mappings:
             field["mappings"] = mappings
-        b.add("stat", title, 4, 4, [td(sql)], options=stat_opts(), field=field, desc=desc)
+        b.add("stat", title, 4, 4, [td(sql)], options=stat_opts(fields=fields), field=field, desc=desc)
 
-    stat("Line 1 · batch step", last_str(f"{L1}/Batch/Status/state", "step"), mappings=state_map)
-    stat("Line 2 · batch step", last_str(f"{L2}/Batch/Status/state", "step"), mappings=state_map)
+    stat("Line 1 · batch step", last_str(f"{L1}/Batch/Status/state", "step"), mappings=state_map,
+         color="text", fields="/.*/")  # a text value: the default numeric-only filter drops it
+    stat("Line 2 · batch step", last_str(f"{L2}/Batch/Status/state", "step"), mappings=state_map,
+         color="text", fields="/.*/")  # a text value: the default numeric-only filter drops it
     stat("Line 1 · cook temperature",
          f"select last(`value`) as temp from idp.telemetry where `topic`='{L1}/Cook/cook-unit-01/Status/temp_C'",
          unit="celsius", decimals=1, color="orange")
