@@ -30,6 +30,7 @@ from typing import Optional, Protocol
 
 from . import demo_pause
 from . import model as M
+from .kpi import _time_scale
 
 log = logging.getLogger("vla.cmms")
 
@@ -42,21 +43,68 @@ TECHNICIANS = [
     {"id": "MT-03", "name": "Monteur C", "skill": "proces"},
 ]
 
-# Storingsmodi per rol: (oorzaak, vakgebied, reparatietijd in seconden min-max)
+# Storingsmodi per rol: (oorzaak, vakgebied, reparatietijd in seconden min-max, gewicht).
+# Simulatie, geen meting. Acht per rol, meest voorkomende eerst, gewicht 1/sqrt(rang): een
+# milde Pareto-verdeling, want in een echte fabriek domineren een paar oorzaken. Met twee
+# modi per rol kwam vrijwel elke storing binnen het herhaalvenster terug (KPI-MNT-003).
+_W = [round((i + 1) ** -0.5, 3) for i in range(8)]
 FAILURE_MODES = {
-    "receiving": [("Niveaumeting geeft geen signaal", "elektrisch", (150, 300)),
-                  ("Toevoerklep sluit niet", "mechanisch", (180, 360))],
-    "process": [("Roerwerkmotor thermisch beveiligd", "elektrisch", (180, 420)),
-                ("Doseerklep lekt", "mechanisch", (150, 300))],
+    "receiving": list(zip(
+        ["Toevoerklep sluit niet", "Niveaumeting geeft geen signaal",
+         "Pakking melkpomp lekt", "Filter in de toevoer verstopt",
+         "Frequentieregelaar melkpomp in storing", "Luchtdruk naar de kleppen te laag",
+         "Klepterugmelding ontbreekt", "Monsterkraan lekt"],
+        ["mechanisch", "elektrisch", "mechanisch", "proces",
+         "elektrisch", "mechanisch", "elektrisch", "mechanisch"],
+        [(180, 360), (150, 300), (180, 360), (150, 270),
+         (150, 330), (150, 300), (150, 270), (150, 240)], _W)),
+    "process": list(zip(
+        ["Doseerklep lekt", "Roerwerkmotor thermisch beveiligd",
+         "Weegcel mengtank geeft drift", "Poedertrechter brugt",
+         "Asafdichting roerwerk lekt", "Vacuümpomp mengkop valt uit",
+         "Niveaumeting mengtank ongeldig", "Inline menger trilt"],
+        ["mechanisch", "elektrisch", "elektrisch", "proces",
+         "mechanisch", "mechanisch", "elektrisch", "mechanisch"],
+        [(150, 300), (180, 420), (150, 300), (150, 270),
+         (240, 480), (180, 360), (150, 270), (180, 360)], _W)),
     # Niet "Stoomregelklep hangt": dat is de oorzaak die scripts/scenario_steam_valve.py
     # naspeelt als kwaliteitsprobleem. Dezelfde tekst als storing vertroebelt de 8D.
-    "cook": [("Condenspot stoomtoevoer verstopt", "mechanisch", (240, 480)),
-             ("Temperatuurvoeler defect", "elektrisch", (150, 300))],
-    "cooler": [("Koelwaterpomp uitgevallen", "mechanisch", (210, 420)),
-               ("Flowmeter koelwater wijkt af", "proces", (150, 270))],
-    "filler": [("Vulkop lekt", "mechanisch", (180, 360)),
-               ("Sealer haalt temperatuur niet", "elektrisch", (150, 330))],
+    "cook": list(zip(
+        ["Condenspot stoomtoevoer verstopt", "Temperatuurvoeler defect",
+         "Product brandt aan op het verwarmingsvlak", "Circulatiepomp kookdeel caviteert",
+         "Pakking warmtewisselaar lekt", "Druktransmitter kookdeel wijkt af",
+         "Veiligheidsklep kookketel blaast af", "I/O-kaart kookdeel uitgevallen"],
+        ["mechanisch", "elektrisch", "proces", "mechanisch",
+         "mechanisch", "elektrisch", "proces", "elektrisch"],
+        [(240, 480), (150, 300), (240, 480), (180, 360),
+         (210, 420), (150, 270), (150, 300), (150, 300)], _W)),
+    "cooler": list(zip(
+        ["Koelwaterpomp uitgevallen", "Flowmeter koelwater wijkt af",
+         "IJswaterventiel hangt", "Platenkoeler vervuild",
+         "Temperatuurregelaar koeler in storing", "Pakking platenkoeler lekt",
+         "Productpomp koeler caviteert", "Motorbeveiliging koeltorenventilator"],
+        ["mechanisch", "proces", "mechanisch", "proces",
+         "elektrisch", "mechanisch", "mechanisch", "elektrisch"],
+        [(210, 420), (150, 270), (180, 360), (240, 480),
+         (150, 300), (210, 420), (180, 360), (150, 270)], _W)),
+    "filler": list(zip(
+        ["Vulkop lekt", "Sealer haalt temperatuur niet",
+         "Kartonaanvoer loopt vast", "Datumcoder print niet",
+         "Doppenapplicator mist doppen", "Vulniveausensor wijkt af",
+         "Dosering sterilisatiemiddel te laag", "Transportband na de vuller stuwt"],
+        ["mechanisch", "elektrisch", "mechanisch", "elektrisch",
+         "mechanisch", "elektrisch", "proces", "mechanisch"],
+        [(180, 360), (150, 330), (150, 300), (150, 240),
+         (150, 300), (150, 270), (180, 360), (150, 240)], _W)),
 }
+
+# Reparatiekwaliteit (simulatie). Een afgeronde storing krijgt `fix`: "root_cause" als de
+# oorzaak echt is weggenomen, "workaround" als de machine weer draait maar de oorzaak er nog
+# zit. Na een echte reparatie komt die oorzaak op die machine FIX_HOLDS_H procesuren niet
+# terug; na een noodoplossing wel. Zo ontstaat een herhaalstoring zoals in een echte
+# fabriek: door een noodoplossing, niet door toeval. Kans en duur zijn demo-aannames.
+WORKAROUND_P = 0.4
+FIX_HOLDS_H = 336.0   # 14 procesdagen, los van het herhaalvenster van KPI-MNT-003 (7 dagen)
 
 ASSIGN_AFTER_S = 20.0
 START_AFTER_S = 25.0
@@ -127,7 +175,8 @@ class CmmsConnector:
                  rng: Optional[random.Random] = None,
                  auto_breakdowns: bool = False,
                  mean_breakdown_interval_s: float = 2700.0,
-                 events=None):
+                 events=None,
+                 workaround_p: float = WORKAROUND_P):
         self.db = db
         self.equipment = equipment
         self.buses = dict(buses or {})
@@ -135,6 +184,7 @@ class CmmsConnector:
         self.rng = rng or random.Random()
         self.auto_breakdowns = auto_breakdowns
         self.mean_breakdown_interval_s = float(mean_breakdown_interval_s)
+        self.workaround_p = min(1.0, max(0.0, float(workaround_p)))
         self.events = events
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -251,7 +301,7 @@ class CmmsConnector:
         if existing:
             return existing[0]
         role = role_of(equipment_id) or "process"
-        mode = self.rng.choice(FAILURE_MODES.get(role, FAILURE_MODES["process"]))
+        mode = self._pick_mode(equipment_id, FAILURE_MODES.get(role, FAILURE_MODES["process"]))
         cause = cause or mode[0]
         if repair_s is None:
             lo, hi = mode[2]
@@ -261,6 +311,18 @@ class CmmsConnector:
                          skill=mode[1], repair_s=repair_s)
         self.equipment.attach_work_order(equipment_id, wo["wo_id"])
         return wo
+
+    def _pick_mode(self, equipment_id: str, modes: list) -> tuple:
+        """Gewogen keuze, zonder de oorzaken die op deze machine kort geleden echt zijn
+        opgelost (fix "root_cause", binnen FIX_HOLDS_H procesuren). Zijn ze dat allemaal,
+        dan kiest hij uit alle modi: liever een herhaling dan geen storing."""
+        since = _now() - timedelta(hours=FIX_HOLDS_H / _time_scale())
+        held = {w.get("cause") for w in self.adapter.all()
+                if w.get("equipment_id") == equipment_id and w.get("kind") == "breakdown"
+                and w.get("status") == "done" and w.get("fix") == "root_cause"
+                and (_parse(w.get("done_at")) or since) > since}
+        pool = [m for m in modes if m[0] not in held] or list(modes)
+        return self.rng.choices(pool, weights=[m[3] for m in pool])[0]
 
     # ------------------------------------------------------------ read
 
@@ -364,8 +426,9 @@ class CmmsConnector:
             elif wo["status"] == "in_progress":
                 started = _parse(wo.get("started_at")) or now
                 if (now - started).total_seconds() >= float(wo.get("repair_s") or 300):
+                    fix = "workaround" if self.rng.random() < self.workaround_p else "root_cause"
                     self._transition(wo, "done", completed_by=(
-                        wo.get("technician") or {}).get("name"))
+                        wo.get("technician") or {}).get("name"), fix=fix)
                     self.equipment.clear_down(wo["equipment_id"])
                     self.status["completed"] += 1
                     actions.append(f"done {wo['wo_id']}")

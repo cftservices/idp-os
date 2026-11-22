@@ -51,7 +51,7 @@ from vla.trace import order_trace
 from vla import forklift_trace
 from vla.preparation import PrepManager
 from vla import datalayer as DL, dataops as DO, mcp as MCP, rca as RCA
-from vla.cmms import TECHNICIANS, CmmsConnector, reliability as cmms_reliability
+from vla.cmms import TECHNICIANS, WORKAROUND_P, CmmsConnector, reliability as cmms_reliability
 from vla.losses import losses_per_equipment
 
 logging.basicConfig(
@@ -318,7 +318,9 @@ def _startup() -> None:
         db, equipment, buses=buses, events=runner._event,
         auto_breakdowns=breakdowns,
         mean_breakdown_interval_s=float(os.environ.get(
-            "DEMO_BREAKDOWN_INTERVAL_S", "2700")))
+            "DEMO_BREAKDOWN_INTERVAL_S", "2700")),
+        # kans dat een reparatie een noodoplossing is (bron van KPI-MNT-003)
+        workaround_p=float(os.environ.get("DEMO_WORKAROUND_P", str(WORKAROUND_P))))
     if os.environ.get("CMMS_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on"):
         cmms.start(poll_s=float(os.environ.get("CMMS_POLL_S", "3")))
         STATE["cmms"] = cmms

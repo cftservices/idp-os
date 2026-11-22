@@ -89,8 +89,9 @@ BVIP_MAP: dict[str, dict] = {
     "KPI-MNT-003": {"status": OK, "drempels": "catalogus", "additief": True,
                     "bron": "Een storing is een herhaling als dezelfde machine binnen 7 "
                             "procesdagen eerder met dezelfde oorzaak uitviel.",
-                    "let_op": "De demo kent twee storingsmodi per machinerol en storingen komen "
-                              "vaak voor (DEMO_BREAKDOWNS), dus het aandeel herhalingen is hoog."},
+                    "let_op": "Gesimuleerd: acht storingsmodi per machinerol, en een herhaling "
+                              "ontstaat alleen na een noodoplossing (werkorderveld fix, kans "
+                              "DEMO_WORKAROUND_P, standaard 40%). Verwacht rond 17%."},
     "KPI-MNT-004": {"status": DEELS, "drempels": "catalogus", "additief": True,
                     "bron": "Kosten per storingswerkorder (zie MNT-002) / gevulde pakken.",
                     "let_op": "Demo-aannames uit cost_model; alleen storingswerkorders."},
