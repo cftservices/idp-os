@@ -33,6 +33,12 @@ Environment: BATCH_ENGINE_URL, AIOS_URL, AIOS_WORKSPACE_ID, AIOS_PAT, SYNC_LINES
 SYNC_INTERVAL_S (900), SYNC_FROM (ISO time; batches completed earlier are left out, for
 example the deterministic batches from before SIM_VARIATION was switched on). Run once with --once; --dry-run prints and writes nothing.
 Standard library only.
+
+Value chain (chain.py): every run also pushes hourly KPI measurements from the historian into the
+value chain of the same workspace and runs detection there. It needs TD_USER and TD_PASS of its
+own TDengine user (chain_sync) in ci-sync/.env; without them that step is off and says so once.
+That user is a separate credential, not a privilege boundary: see the docstring of chain.py.
+SYNC_CHAIN=0 switches it off.
 """
 from __future__ import annotations
 
@@ -47,6 +53,8 @@ import urllib.request
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+import chain
 
 log = logging.getLogger("ci-sync")
 
@@ -404,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run, since=env.get("SYNC_FROM", ""),
                 scale=float(env.get("SYNC_TIME_SCALE", "1")),
                 ideal=parse_ideal(env.get("SYNC_IDEAL_PACKS_PER_H", "")))
+    value_chain = make_chain(env, args.dry_run)
     interval = float(env.get("SYNC_INTERVAL_S", "900"))
     while True:
         try:
@@ -417,9 +426,33 @@ def main(argv: list[str] | None = None) -> int:
             log.error("sync failed: %s", e)
             if args.once:
                 return 1
+        if value_chain is not None:
+            try:  # apart from the CI sync: one failing never stops the other
+                for name, outcome in value_chain.run_once().items():
+                    if outcome != "no new closed hours":
+                        log.info("chain %s: %s", name, outcome)
+            except Exception as e:
+                log.error("chain sync failed: %s", e)
+                if args.once:
+                    return 1
         if args.once:
             return 0
         time.sleep(interval)
+
+
+def make_chain(env, dry_run: bool) -> "chain.ChainSync | None":
+    if env.get("SYNC_CHAIN", "1") != "1":
+        return None
+    if not (env.get("TD_USER") and env.get("TD_PASS")):
+        log.warning("chain step off: TD_USER and TD_PASS (TDengine user chain_sync) missing in ci-sync/.env")
+        return None
+    since = env.get("SYNC_CHAIN_FROM") or env.get("SYNC_FROM") or "2026-11-17T00:00:00+00:00"
+    return chain.ChainSync(
+        chain.Td(env.get("TD_URL", "http://vla-tdengine:6041"), env["TD_USER"], env["TD_PASS"]),
+        Http(env["AIOS_URL"].rstrip("/"), env["AIOS_PAT"]), env["AIOS_WORKSPACE_ID"],
+        [x.strip() for x in env.get("SYNC_LINES", "L1,L2").split(",") if x.strip()],
+        db=env.get("TD_DB", "idp"), cost=chain.load_cost(env.get("FACTORY_MODEL", "/model/isa95-vla.json")),
+        since=datetime.fromisoformat(since), dry_run=dry_run)
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ $S remove                 # containers + netwerk weg, volumes blijven
 | `vla-factory`, `vla-factory-l2` | gesimuleerde lijnen L1/L2 (OPC-UA) | geen | — |
 | `vla-opcua-init`, `vla-l2-opcua-init` | eenmalig: koppelt de lijnen aan de datalaag (exit 0 is goed) | — | — |
 | `vla-batch-engine` | MES, autopilot, CMMS-werkorders, KPI-schrijver, datalaag-API, oorzaakanalyse | geen | — |
-| `vla-ci-sync` | batchhistorie en KPI-inputs naar aios (Continuous Improvement) | geen | — |
+| `vla-ci-sync` | batchhistorie en KPI-inputs naar aios (Continuous Improvement), plus uurmetingen KPI-PRD-002 en KPI-ENE-001 uit `idp.kpi_input` naar de waardeketen (`chain.py`; TDengine-gebruiker `chain_sync` in `ci-sync/.env`, geen rechtengrens) | geen | — |
 | `vla-tdengine-bridge` | schrijft topics naar de historian | geen | — |
 | `vla-scenario` | terugkerend stoomklepprobleem, afwisselend L1/L2 | geen | logs in `/root/vla-scenario-logs` |
 | `vla-ollama` | lokaal taalmodel `qwen2.5:1.5b`, `mem_limit 2g` | geen | `idp-os_vla-ollama-data` (model, wordt bij `online` opnieuw gehaald als hij ontbreekt) |
