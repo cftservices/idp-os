@@ -39,6 +39,10 @@ value chain of the same workspace and runs detection there. It needs TD_USER and
 own TDengine user (chain_sync) in ci-sync/.env; without them that step is off and says so once.
 That user is a separate credential, not a privilege boundary: see the docstring of chain.py.
 SYNC_CHAIN=0 switches it off.
+
+Fouling (fouling_sync.py): with the same TDengine user, the cleaning cycles of each pasteuriser
+(idp.fouling, idp.cip_cycle) go to the fouling KPIs of that workspace, followed by detection and
+the schedule analysis. SYNC_FOULING=0 switches it off.
 """
 from __future__ import annotations
 
@@ -55,6 +59,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import chain
+import fouling_sync
 
 log = logging.getLogger("ci-sync")
 
@@ -413,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
                 scale=float(env.get("SYNC_TIME_SCALE", "1")),
                 ideal=parse_ideal(env.get("SYNC_IDEAL_PACKS_PER_H", "")))
     value_chain = make_chain(env, args.dry_run)
+    fouling = make_fouling(env, args.dry_run)
     interval = float(env.get("SYNC_INTERVAL_S", "900"))
     while True:
         try:
@@ -435,9 +441,30 @@ def main(argv: list[str] | None = None) -> int:
                 log.error("chain sync failed: %s", e)
                 if args.once:
                     return 1
+        if fouling is not None:
+            try:  # its own step: a fouling failure never stops the CI or value-chain sync
+                for name, outcome in fouling.run_once().items():
+                    if not outcome.startswith("nothing new"):
+                        log.info("fouling %s: %s", name, outcome)
+            except Exception as e:
+                log.error("fouling sync failed: %s", e)
+                if args.once:
+                    return 1
         if args.once:
             return 0
         time.sleep(interval)
+
+
+def make_fouling(env, dry_run: bool) -> "fouling_sync.FoulingSync | None":
+    if env.get("SYNC_FOULING", "1") != "1" or not (env.get("TD_USER") and env.get("TD_PASS")):
+        return None
+    since = env.get("SYNC_CHAIN_FROM") or env.get("SYNC_FROM") or "2026-11-17T00:00:00+00:00"
+    return fouling_sync.FoulingSync(
+        chain.Td(env.get("TD_URL", "http://vla-tdengine:6041"), env["TD_USER"], env["TD_PASS"]),
+        Http(env["AIOS_URL"].rstrip("/"), env["AIOS_PAT"]), env["AIOS_WORKSPACE_ID"],
+        [x.strip() for x in env.get("SYNC_LINES", "L1,L2").split(",") if x.strip()],
+        db=env.get("TD_DB", "idp"), model=fouling_sync.load_model(env.get("FACTORY_MODEL", "/model/isa95-vla.json")),
+        scale=float(env.get("SYNC_TIME_SCALE", "1")), since=datetime.fromisoformat(since), dry_run=dry_run)
 
 
 def make_chain(env, dry_run: bool) -> "chain.ChainSync | None":

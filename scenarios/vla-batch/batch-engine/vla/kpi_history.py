@@ -29,7 +29,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
-from . import bvip
+from . import bvip, fouling_history
 from .bvip_map import BVIP_MAP
 from .tdengine import TdClient, number, quote
 
@@ -42,6 +42,8 @@ SCHEMA = (
     "TAGS (kpi_id VARCHAR(16), `input` VARCHAR(40), `line` VARCHAR(8), unit VARCHAR(16))",
 )
 LINES = ("L1", "L2", bvip.PLANT)
+FOULING_LINES = ("L1", "L2")     # one pasteuriser per line; PLANT is not an exchanger
+FOULING_RECENT_H = 1.0           # each tick rewrites the fouling rows of the last hour
 MAX_SQL_BYTES = 700_000
 
 
@@ -145,24 +147,31 @@ class KpiWriter(threading.Thread):
         self.step = int(_env_float("KPI_WRITER_INTERVAL_S", 300))
         self.backfill_h = min(24.0, _env_float("KPI_WRITER_BACKFILL_H", 24))
         self.window_h = _env_float("KPI_WINDOW_H", 8)
+        self.fouling = os.environ.get("FOULING_WRITER", "1").strip().lower() in ("1", "true", "yes", "on")
         self.catalogue = bvip.load_catalogue()
         self.stop_event = threading.Event()
         self.status: dict = {"enabled": True, "interval_s": self.step, "schema": False,
                              "last_tick": None, "last_duration_s": None, "last_rows": None,
-                             "last_error": None, "backfilled": False}
+                             "last_error": None, "backfilled": False, "fouling": None}
 
     # -- one tick ----------------------------------------------------------------
     def ensure_schema(self) -> None:
-        for s in SCHEMA:
+        for s in SCHEMA + (fouling_history.SCHEMA if self.fouling else ()):
             self.td.sql(s.format(db=self.td.db))
         self.status["schema"] = True
 
     def write(self, bucket_starts: list[datetime], rolling_at: list[datetime],
-              snap: Optional[bvip.Snapshot] = None) -> int:
+              snap: Optional[bvip.Snapshot] = None, fouling_since: Optional[datetime] = None,
+              fouling: bool = True) -> int:
         t0 = time.monotonic()
         snap = snap or bvip.take_snapshot(self.db, self.now())
-        rows = build_rows(snap, bucket_starts, rolling_at, self.cfg_factory(), self.catalogue,
+        cfg = self.cfg_factory()
+        rows = build_rows(snap, bucket_starts, rolling_at, cfg, self.catalogue,
                           self.step, self.window_h, self.td.db)
+        if self.fouling and fouling:
+            extra = fouling_history.parts(snap, cfg, self.td.db, FOULING_LINES, fouling_since)
+            rows.parts.extend(extra)
+            self.status["fouling"] = {"rows": len(extra), "since": fouling_since and fouling_since.isoformat()}
         for stmt in rows.statements():
             self.td.sql(stmt)
         n = len(rows.parts)
@@ -173,7 +182,8 @@ class KpiWriter(threading.Thread):
     def tick(self) -> int:
         end = bvip.floor_bucket(self.now(), self.step)
         prev = end - timedelta(seconds=self.step)
-        return self.write([prev - timedelta(seconds=self.step), prev], [end])
+        return self.write([prev - timedelta(seconds=self.step), prev], [end],
+                          fouling_since=self.now() - timedelta(hours=FOULING_RECENT_H))
 
     def backfill(self) -> int:
         end = bvip.floor_bucket(self.now(), self.step)
@@ -185,7 +195,9 @@ class KpiWriter(threading.Thread):
         # the engine responsive on a VPS with CPU steal
         for i in range(0, len(starts), 24):
             sl = starts[i:i + 24]
-            total += self.write(sl, [s + timedelta(seconds=self.step) for s in sl], snap)
+            # all fouling rows Mongo still holds, once, with the first slice
+            total += self.write(sl, [s + timedelta(seconds=self.step) for s in sl], snap,
+                                fouling=(i == 0))
             if self.stop_event.wait(0.5):
                 break
         self.status["backfilled"] = True

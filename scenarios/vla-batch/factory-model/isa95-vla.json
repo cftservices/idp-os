@@ -2645,7 +2645,12 @@
     "product_cp_kj_kg_k": 3.85,
     "pasteuriser_area_m2": 14.0,
     "pasteuriser_ref_flow_kg_s": 11.0,
+    "boiler_efficiency": 0.9,
     "_bron": "Gelijk aan de constanten in factory/physics.py (CP_PRODUCT_KJ_KG_K, PAST_AREA_M2, PAST_REF_FLOW_KG_S). De engine kent zo het ontwerp van de wisselaar, maar meet U en Rf zelf uit de signalen."
   },
-  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld. Onderhoudskosten (labour_cost_per_hour, parts_cost_per_breakdown per machinerol, asset_replacement_value per machinerol) zijn per 2026-11-19 toegevoegd voor KPI-MNT-002/004, met dezelfde status: demo-aanname, geen meting. Idem voor energie-, water- en chemieprijzen, CO2-factoren (gas 0,202 en elektriciteit 0,35 kg/kWh), CIP-arbeid en verkoopprijs per pak (fase 3), en voor process_constants."
+  "food_safety": {
+    "haccp_max_run_h": { "L1": 4.0, "L2": 4.0 },
+    "_bron": "SYNTHETISCH (2026-11-22, Fouling Intelligence): maximale looptijd in procesdraaiuren van de intakepasteur tussen twee reinigingen, de HACCP-grens die VM-CIP-INTERVAL nooit overschrijdt. Gekozen bij de versnelde vervuiling van de demo (Rf verzadigt rond 0,12 met tau 2,2 h), niet afgeleid van een echte fabriek. In een echte implementatie levert de kwaliteitsverantwoordelijke deze waarde uit het HACCP-plan."
+  },
+  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld. Onderhoudskosten (labour_cost_per_hour, parts_cost_per_breakdown per machinerol, asset_replacement_value per machinerol) zijn per 2026-11-19 toegevoegd voor KPI-MNT-002/004, met dezelfde status: demo-aanname, geen meting. Idem voor food_safety.haccp_max_run_h en process_constants.boiler_efficiency (2026-11-22, Fouling Intelligence), en voor energie-, water- en chemieprijzen, CO2-factoren (gas 0,202 en elektriciteit 0,35 kg/kWh), CIP-arbeid en verkoopprijs per pak (fase 3), en voor process_constants."
 }

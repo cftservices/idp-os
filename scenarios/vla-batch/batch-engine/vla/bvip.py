@@ -400,24 +400,55 @@ def counter_steps(readings: list[dict], start: datetime, end: datetime) -> dict:
     return out
 
 
+def cycle_numbers(rows: list) -> list:
+    """Cleaning-cycle number per pasteuriser sample: it goes up where run_h dropped (a CIP)."""
+    cycle, out = 0, []
+    for i, r in enumerate(rows):
+        if i and r["run_h_since_cip"] < rows[i - 1]["run_h_since_cip"]:
+            cycle += 1
+        out.append(cycle)
+    return out
+
+
+def clean_u(rows: list, cycles: list) -> dict:
+    """U_clean per cycle: the mean U of the first samples after the CIP (run_h <= U_CLEAN_RUN_H)."""
+    from .meters import U_CLEAN_RUN_H
+    clean: dict = {}
+    for r, cyc in zip(rows, cycles):
+        if r["run_h_since_cip"] <= U_CLEAN_RUN_H and r.get("u"):
+            clean.setdefault(cyc, []).append(r["u"])
+    return {c: sum(v) / len(v) for c, v in clean.items()}
+
+
+def cip_cost(c: dict, cfg: Config) -> Optional[tuple]:
+    """(cash, labour) in EUR for one finished CIP, or None without a complete price set.
+
+    Cash is chemicals, water and energy; labour only counts as money when the hours really
+    go away (VM-CIP-INTERVAL: cost_per_cycle_cash is without labour)."""
+    prices = (cfg.caustic_price_per_kg, cfg.acid_price_per_kg, cfg.water_price_per_m3,
+              cfg.gas_price_per_kwh, cfg.electricity_price_per_kwh, cfg.cip_labour_hours,
+              cfg.labour_cost_per_hour)
+    if any(p is None for p in prices):
+        return None
+    cash = (_f(c.get("caustic_kg")) * cfg.caustic_price_per_kg
+            + _f(c.get("acid_kg")) * cfg.acid_price_per_kg
+            + _f(c.get("water_L")) / 1000.0 * cfg.water_price_per_m3
+            + _f(c.get("heat_kwh")) * cfg.gas_price_per_kwh
+            + _f(c.get("electricity_kwh")) * cfg.electricity_price_per_kwh)
+    return cash, cfg.cip_labour_hours * cfg.labour_cost_per_hour
+
+
 def pac_values(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: Config) -> dict:
     """KPI-PAC-100..106 over [start, end): means over the pasteuriser samples in the
     window (all taken while milk flowed, so in steady operation) and over the CIP
     cycles that finished in it. None when there is no sample or cycle."""
-    from .meters import U_CLEAN_RUN_H, u_value
+    from .meters import u_value
     lines = LINES if line == PLANT else (line,)
     duty, us, rfs, dps, regen = [], [], [], [], []
     for ln in lines:
         rows = snap.pasteur.get(ln, [])
-        # U_clean per cleaning cycle: the first samples after run_h dropped back
-        cycle, clean = 0, {}
-        cycles = []
-        for i, r in enumerate(rows):
-            if i and r["run_h_since_cip"] < rows[i - 1]["run_h_since_cip"]:
-                cycle += 1
-            cycles.append(cycle)
-            if r["run_h_since_cip"] <= U_CLEAN_RUN_H and r.get("u"):
-                clean.setdefault(cycle, []).append(r["u"])
+        cycles = cycle_numbers(rows)
+        clean = clean_u(rows, cycles)
         for r, cyc in zip(rows, cycles):
             if not start <= r["_t"] < end or _f(r.get("product_flow_kg_s")) <= 1.0:
                 continue
@@ -427,26 +458,14 @@ def pac_values(snap: Snapshot, line: str, start: datetime, end: datetime, cfg: C
             if u:
                 us.append(u)
                 if clean.get(cyc):
-                    u_clean = sum(clean[cyc]) / len(clean[cyc])
-                    rfs.append(max(0.0, 1.0 / u - 1.0 / u_clean))
+                    rfs.append(max(0.0, 1.0 / u - 1.0 / clean[cyc]))
             dps.append(_f(r["dp_bar"]) * (cfg.pasteuriser_ref_flow / flow) ** 2)
             span = _f(r["hold_t_C"]) - _f(r["cold_t_in_C"])
             if span > 0:
                 regen.append((_f(r["regen_t_out_C"]) - _f(r["cold_t_in_C"])) / span * 100.0)
     cycles = [c for ln in lines for c in snap.cip_cycles.get(ln, []) if start <= c["_t"] < end]
     run_h = [_f(c.get("past_run_h")) for c in cycles if c.get("past_run_h") is not None]
-    costs = []
-    prices = (cfg.caustic_price_per_kg, cfg.acid_price_per_kg, cfg.water_price_per_m3,
-              cfg.gas_price_per_kwh, cfg.electricity_price_per_kwh, cfg.cip_labour_hours,
-              cfg.labour_cost_per_hour)
-    if all(p is not None for p in prices):
-        for c in cycles:
-            costs.append(_f(c.get("caustic_kg")) * cfg.caustic_price_per_kg
-                         + _f(c.get("acid_kg")) * cfg.acid_price_per_kg
-                         + _f(c.get("water_L")) / 1000.0 * cfg.water_price_per_m3
-                         + _f(c.get("heat_kwh")) * cfg.gas_price_per_kwh
-                         + _f(c.get("electricity_kwh")) * cfg.electricity_price_per_kwh
-                         + cfg.cip_labour_hours * cfg.labour_cost_per_hour)
+    costs = [sum(cc) for cc in (cip_cost(c, cfg) for c in cycles) if cc is not None]
 
     def mean(xs):
         return sum(xs) / len(xs) if xs else None
