@@ -26,7 +26,7 @@ Pack counts follow the factory: packs_total counts GOOD packs only, filled = pac
 reject_count. OEE times are process hours: wall-clock hours times SYNC_TIME_SCALE (the demo runs
 faster than real time, like the MES's KPI_TIME_SCALE). Planned hours assume the line is planned
 around the clock from SYNC_FROM on (the autopilot runs continuously); the ideal rate per line
-comes from SYNC_IDEAL_PACKS_PER_H ("L1:10042,L2:10080"), measured as the fault-free batch cycle
+comes from SYNC_IDEAL_PACKS_PER_H ("L1:10300,L2:10300"), measured as the fault-free batch cycle
 of the factory model. Without an ideal rate there is no OEE worksheet.
 
 Environment: BATCH_ENGINE_URL, AIOS_URL, AIOS_WORKSPACE_ID, AIOS_PAT, SYNC_LINES (L1,L2),

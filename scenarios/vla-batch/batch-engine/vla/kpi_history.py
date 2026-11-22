@@ -18,7 +18,7 @@ are written again each tick (late verdicts), and TDengine overwrites a row with 
 timestamp. At start it backfills what Mongo still holds (KPI_WRITER_BACKFILL_H, max 24).
 
 Env: KPI_WRITER=1, KPI_WRITER_INTERVAL_S (300), KPI_WRITER_BACKFILL_H (24), KPI_WINDOW_H (8),
-TD_URL / TD_DB / TD_USER / TD_PASS, KPI_IDEAL_PACKS_PER_H ("L1:10042,L2:10080").
+TD_URL / TD_DB / TD_USER / TD_PASS, KPI_IDEAL_PACKS_PER_H ("L1:10300,L2:10300").
 """
 from __future__ import annotations
 

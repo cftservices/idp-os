@@ -231,7 +231,7 @@ services:
       KPI_WRITER: "1"
       KPI_WRITER_INTERVAL_S: "300"
       KPI_WRITER_BACKFILL_H: "24"
-      KPI_IDEAL_PACKS_PER_H: "L1:10042,L2:10080"
+      KPI_IDEAL_PACKS_PER_H: "L1:10300,L2:10300"
       TD_URL: "http://vla-tdengine:6041"
       TD_DB: ${TD_DB:-idp}
       TD_USER: ${TD_USER:-root}
@@ -287,10 +287,12 @@ services:
       SYNC_FROM: "2026-11-17T14:10:00+00:00"   # SIM_VARIATION aan; eerdere batches waren deterministisch
       # OEE (KPI-PRD-001) in procesuren: zelfde factor als KPI_TIME_SCALE van de engine.
       SYNC_TIME_SCALE: "15"
-      # Ideaal tempo per lijn in gevulde packs per procesuur: de storingsvrije batchcyclus
-      # van het fabrieksmodel met deze rates (5000 packs in 1792,5 s chocolade, 1785,8 s
-      # vanille; gemeten 17-11-2026). Wijzigen de rates, meet dit dan opnieuw.
-      SYNC_IDEAL_PACKS_PER_H: "L1:10042,L2:10080"
+      # Ideaal tempo per lijn in gevulde packs per procesuur: net boven de snelste
+      # storingsvrije batch, zodat de prestatiefactor van OEE niet boven 100% komt.
+      # Gemeten 22-11-2026 over 24 u (SIM_VARIATION aan, CIP fase 3): 492 resp. 479
+      # goedgekeurde batches, p50 10105/10108, max 10296/10293. De oude 10042/10080
+      # (deterministische cyclus, 17-11) gaf 101%. Wijzigen de rates, meet dit dan opnieuw.
+      SYNC_IDEAL_PACKS_PER_H: "L1:10300,L2:10300"
       # Waardeketen (chain.py): uurmetingen uit idp.kpi_input naar /chain van dezelfde
       # workspace. TD_USER (chain_sync) en TD_PASS staan in ci-sync/.env en bewust NIET
       # hier: environment wint van env_file, dus een ${TD_USER:-root} hier zou de eigen
