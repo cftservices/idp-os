@@ -5,6 +5,7 @@ measured (live) or fabricated (instant) and trended here."""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid
@@ -25,6 +26,38 @@ CBM_ALERT_FACTOR = 1.35
 # sets CIP_AFTER_BATCHES=16; the default stays 4 for local runs and the tests.
 DIRTY_AFTER_BATCHES = int(os.environ.get("CIP_AFTER_BATCHES", "4") or 4)
 CIP_RF_LIMIT = float(os.environ.get("CIP_RF_LIMIT", "0.06") or 0.06)   # m2K/kW
+
+
+def resolve_cip_trigger(trigger: Optional[str],
+                        interval: Optional[str]) -> tuple[str, Optional[float]]:
+    """What starts a CIP (22-11-2026): ("rf", None) or ("run_h", hours).
+
+    rf     the default: the measured fouling of the intake pasteuriser reaches
+           CIP_RF_LIMIT (vla/meters.py writes it to the cook unit's meta).
+    run_h  a fixed cleaning interval: CIP_RUN_H_INTERVAL process run hours of the
+           pasteuriser since the last CIP. Meant to roll out a proposed interval
+           (BVIP ADR-030) and then measure it, so Rf does not trigger in this mode.
+    CIP_AFTER_BATCHES stays the safety net in both modes. An invalid setting falls
+    back to rf and says so in the log: a typo must not stop the line from cleaning."""
+    t = (trigger or "rf").strip().lower()
+    if t == "rf":
+        return "rf", None
+    if t != "run_h":
+        log.error("CIP_TRIGGER=%r unknown (rf|run_h); using rf", trigger)
+        return "rf", None
+    try:
+        hours = float(interval) if interval not in (None, "") else None
+    except (TypeError, ValueError):
+        hours = None
+    if hours is None or not hours > 0:
+        log.error("CIP_TRIGGER=run_h needs CIP_RUN_H_INTERVAL > 0 (got %r); using rf",
+                  interval)
+        return "rf", None
+    return "run_h", hours
+
+
+CIP_TRIGGER, CIP_RUN_H_INTERVAL = resolve_cip_trigger(
+    os.environ.get("CIP_TRIGGER"), os.environ.get("CIP_RUN_H_INTERVAL"))
 
 EQUIPMENT_IDS = list(M.ALL_EQUIPMENT_IDS)
 COOK_UNITS = {ln.eq("cook") for ln in M.LINES.values()}
@@ -315,18 +348,65 @@ class EquipmentMonitor:
         the limit it is measured against (what an operator needs to read)."""
         meta = self.ensure_meta(equipment_id)
         rf = meta.get("fouling_rf")
-        fouled = rf is not None and float(rf) >= CIP_RF_LIMIT
+        run_h = None
+        if CIP_TRIGGER == "run_h":
+            if equipment_id in COOK_UNITS:
+                run_h = self._run_h_since_cip(equipment_id, meta)
+            due, why = run_h is not None and run_h >= CIP_RUN_H_INTERVAL, "draaiuren"
+        else:
+            due, why = rf is not None and float(rf) >= CIP_RF_LIMIT, "vervuiling"
         return {
             "equipment_id": equipment_id,
-            "dirty": bool(meta.get("dirty")) or fouled,
+            "dirty": bool(meta.get("dirty")) or due,
             "batches_since_cip": meta.get("batches_since_cip", 0),
             "limit": DIRTY_AFTER_BATCHES,
             "fouling_rf": rf,
             "fouling_rf_limit": CIP_RF_LIMIT,
-            "reason": "vervuiling" if fouled else ("batches" if meta.get("dirty") else None),
+            "trigger": CIP_TRIGGER,
+            "run_h_since_cip": run_h,
+            "run_h_limit": CIP_RUN_H_INTERVAL,
+            "reason": why if due else ("batches" if meta.get("dirty") else None),
             "last_cip_at": meta.get("last_cip_at"),
             "last_recipe": meta.get("last_recipe"),
         }
+
+    def _pasteuriser_run_h(self, equipment_id: str) -> Optional[float]:
+        """Process run hours of the line's intake pasteuriser since its last CIP,
+        as the factory publishes it (Receiving/pasteurizer-NN/Status/run_h_since_cip)."""
+        from .meters import topic   # meters imports only model; no cycle
+        bus = self.bus_for(equipment_id)
+        if bus is None:
+            return None
+        line = M.line_of_equipment(equipment_id)
+        raw = bus.latest_raw(topic(line, "Receiving", "pasteurizer", "run_h_since_cip"))
+        if raw is None:
+            return None
+        try:
+            obj = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
+            return float(obj.get("value") if isinstance(obj, dict) else obj)
+        except (TypeError, ValueError):
+            return None
+
+    def _run_h_since_cip(self, equipment_id: str, meta: dict) -> Optional[float]:
+        """Run hours that count against CIP_RUN_H_INTERVAL.
+
+        The factory resets its counter only when its CIP has finished, minutes after
+        perform_cip. Until then the bus still shows the old, high value, and counting
+        it would start the next CIP straight away. perform_cip therefore stores the
+        value it saw (run_h_at_cip); as long as the reading has not dropped below it,
+        the cleaning has not landed yet and this returns 0. The first lower reading
+        (the reset, or a factory restart) clears the mark."""
+        v = self._pasteuriser_run_h(equipment_id)
+        if v is None:
+            return None
+        ref = meta.get("run_h_at_cip")
+        if ref is None:
+            return v
+        if v < ref:
+            self.db.dw_equipment_meta.update_one(
+                {"equipment_id": equipment_id}, {"$set": {"run_h_at_cip": None}})
+            return v
+        return 0.0
 
     def set_fouling(self, equipment_id: str, rf: Optional[float]) -> None:
         """Measured fouling resistance of the line's heat exchanger (m2K/kW), written by
@@ -372,11 +452,16 @@ class EquipmentMonitor:
                 f"CIP not allowed during an active batch")
         now = _iso()
         prev = self.ensure_meta(equipment_id).get("last_recipe")
+        # run_h mode: remember the counter the factory has not reset yet (see
+        # _run_h_since_cip). Near zero there is nothing to wait for.
+        seen = (self._pasteuriser_run_h(equipment_id)
+                if CIP_TRIGGER == "run_h" and equipment_id in COOK_UNITS else None)
         self.db.dw_equipment_meta.update_one(
             {"equipment_id": equipment_id},
             {"$set": {"batches_since_cip": 0, "dirty": False,
                       "last_cip_at": now, "heatup_history": [],
-                      "last_recipe": None, "fouling_rf": None}},
+                      "last_recipe": None, "fouling_rf": None,
+                      "run_h_at_cip": seen if seen is not None and seen > 0.01 else None}},
         )
         for alert in self.open_alerts(equipment_id):
             self.db.dw_cbm_alerts.update_one(

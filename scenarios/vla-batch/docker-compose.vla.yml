@@ -226,6 +226,13 @@ services:
       # volgt de gemeten vervuiling van de pasteur (Rf >= CIP_RF_LIMIT, ~12 batches);
       # CIP_AFTER_BATCHES is alleen het vangnet.
       METERS: "1"
+      # Wat een CIP start (vla/equipment.py, 22-11): rf = de gemeten vervuiling haalt
+      # CIP_RF_LIMIT (standaard); run_h = een vast reinigingsinterval van
+      # CIP_RUN_H_INTERVAL procesdraaiuren van de pasteur, om een voorgesteld interval
+      # (BVIP ADR-030) uit te rollen en te meten. Rf telt dan niet mee; de HACCP-grens
+      # (food_safety.haccp_max_run_h) bewaakt de engine niet, kies het interval eronder.
+      CIP_TRIGGER: "rf"
+      # CIP_RUN_H_INTERVAL: "1.5"
       CIP_RF_LIMIT: "0.06"
       CIP_AFTER_BATCHES: "16"
       KPI_WRITER: "1"
