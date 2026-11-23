@@ -229,8 +229,9 @@ services:
       # Wat een CIP start (vla/equipment.py, 22-11): rf = de gemeten vervuiling haalt
       # CIP_RF_LIMIT (standaard); run_h = een vast reinigingsinterval van
       # CIP_RUN_H_INTERVAL procesdraaiuren van de pasteur, om een voorgesteld interval
-      # (BVIP ADR-030) uit te rollen en te meten. Rf telt dan niet mee; de HACCP-grens
-      # (food_safety.haccp_max_run_h) bewaakt de engine niet, kies het interval eronder.
+      # (BVIP ADR-030) uit te rollen en te meten. Rf telt dan niet mee. Een interval
+      # boven food_safety.haccp_max_run_h van het fabrieksmodel (of zonder die grens)
+      # weigert de engine bij de start: dan blijft het rf, met een foutregel in het log.
       CIP_TRIGGER: "rf"
       # CIP_RUN_H_INTERVAL: "1.5"
       CIP_RF_LIMIT: "0.06"

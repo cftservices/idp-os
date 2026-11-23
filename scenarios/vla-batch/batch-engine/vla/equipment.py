@@ -28,8 +28,38 @@ DIRTY_AFTER_BATCHES = int(os.environ.get("CIP_AFTER_BATCHES", "4") or 4)
 CIP_RF_LIMIT = float(os.environ.get("CIP_RF_LIMIT", "0.06") or 0.06)   # m2K/kW
 
 
-def resolve_cip_trigger(trigger: Optional[str],
-                        interval: Optional[str]) -> tuple[str, Optional[float]]:
+def haccp_limit_h(model: Optional[dict]) -> Optional[float]:
+    """The strictest food_safety.haccp_max_run_h of the factory model, in process run
+    hours of the intake pasteuriser, or None when the model has none. The interval is
+    one setting for every line, so the smallest per-line limit is the one that binds."""
+    vals = ((model or {}).get("food_safety") or {}).get("haccp_max_run_h")
+    if isinstance(vals, (int, float)):
+        vals = {"*": vals}
+    hours = []
+    for v in (vals or {}).values():
+        try:
+            if float(v) > 0:
+                hours.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return min(hours) if hours else None
+
+
+def _model_haccp_limit_h() -> Optional[float]:
+    # Read the file here: vla/kpi.py (load_factory_model) imports this module.
+    path = os.environ.get("FACTORY_MODEL")
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return haccp_limit_h(json.load(fh))
+    except (OSError, ValueError) as e:
+        log.error("factory model unreadable for the HACCP limit (%s)", e)
+        return None
+
+
+def resolve_cip_trigger(trigger: Optional[str], interval: Optional[str],
+                        haccp_h: Optional[float] = None) -> tuple[str, Optional[float]]:
     """What starts a CIP (22-11-2026): ("rf", None) or ("run_h", hours).
 
     rf     the default: the measured fouling of the intake pasteuriser reaches
@@ -37,8 +67,11 @@ def resolve_cip_trigger(trigger: Optional[str],
     run_h  a fixed cleaning interval: CIP_RUN_H_INTERVAL process run hours of the
            pasteuriser since the last CIP. Meant to roll out a proposed interval
            (BVIP ADR-030) and then measure it, so Rf does not trigger in this mode.
-    CIP_AFTER_BATCHES stays the safety net in both modes. An invalid setting falls
-    back to rf and says so in the log: a typo must not stop the line from cleaning."""
+           Only within the HACCP limit (haccp_h, from food_safety.haccp_max_run_h):
+           an interval above it, or no known limit, is refused. ADR-030: the platform
+           never extends a HACCP limit, and without one there is no interval.
+    CIP_AFTER_BATCHES stays the safety net in both modes. An invalid or refused
+    setting falls back to rf and says so in the log: the line must keep cleaning."""
     t = (trigger or "rf").strip().lower()
     if t == "rf":
         return "rf", None
@@ -53,11 +86,21 @@ def resolve_cip_trigger(trigger: Optional[str],
         log.error("CIP_TRIGGER=run_h needs CIP_RUN_H_INTERVAL > 0 (got %r); using rf",
                   interval)
         return "rf", None
+    if haccp_h is None:
+        log.error("CIP_TRIGGER=run_h needs food_safety.haccp_max_run_h in the factory "
+                  "model; without a HACCP limit there is no interval; using rf")
+        return "rf", None
+    if hours > haccp_h:
+        log.error("CIP_RUN_H_INTERVAL=%s h exceeds the HACCP limit of %s h; an interval "
+                  "never extends a HACCP limit; using rf", hours, haccp_h)
+        return "rf", None
     return "run_h", hours
 
 
+_TRIGGER_ENV = os.environ.get("CIP_TRIGGER")
 CIP_TRIGGER, CIP_RUN_H_INTERVAL = resolve_cip_trigger(
-    os.environ.get("CIP_TRIGGER"), os.environ.get("CIP_RUN_H_INTERVAL"))
+    _TRIGGER_ENV, os.environ.get("CIP_RUN_H_INTERVAL"),
+    _model_haccp_limit_h() if (_TRIGGER_ENV or "").strip().lower() == "run_h" else None)
 
 EQUIPMENT_IDS = list(M.ALL_EQUIPMENT_IDS)
 COOK_UNITS = {ln.eq("cook") for ln in M.LINES.values()}

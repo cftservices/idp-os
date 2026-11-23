@@ -50,20 +50,36 @@ def run_h_mode(monkeypatch):
     monkeypatch.setattr(E, "CIP_RUN_H_INTERVAL", 1.5)
 
 
-def test_resolve_defaults_to_rf_and_accepts_run_h():
+def test_resolve_defaults_to_rf_and_accepts_run_h_within_haccp():
     assert E.resolve_cip_trigger(None, None) == ("rf", None)
     assert E.resolve_cip_trigger("RF", "3") == ("rf", None)
-    assert E.resolve_cip_trigger("run_h", "2.5") == ("run_h", 2.5)
+    assert E.resolve_cip_trigger("run_h", "2.5", haccp_h=4.0) == ("run_h", 2.5)
+    assert E.resolve_cip_trigger("run_h", "4", haccp_h=4.0) == ("run_h", 4.0)   # on the limit
 
 
-@pytest.mark.parametrize("trigger,interval", [
-    ("run_h", None), ("run_h", ""), ("run_h", "x"), ("run_h", "0"), ("run_h", "-1"),
-    ("runh", "2"),
+@pytest.mark.parametrize("trigger,interval,haccp", [
+    ("run_h", None, 4.0), ("run_h", "", 4.0), ("run_h", "x", 4.0), ("run_h", "0", 4.0),
+    ("run_h", "-1", 4.0), ("runh", "2", 4.0),
+    ("run_h", "2.5", None),     # no HACCP limit known: no interval (ADR-030)
+    ("run_h", "4.01", 4.0),     # never beyond the HACCP limit
 ])
-def test_invalid_settings_fall_back_to_rf_and_say_so(caplog, trigger, interval):
+def test_invalid_or_unsafe_settings_fall_back_to_rf_and_say_so(caplog, trigger, interval, haccp):
     with caplog.at_level(logging.ERROR, logger="vla.equipment"):
-        assert E.resolve_cip_trigger(trigger, interval) == ("rf", None)
+        assert E.resolve_cip_trigger(trigger, interval, haccp_h=haccp) == ("rf", None)
     assert "using rf" in caplog.text
+
+
+def test_haccp_limit_is_the_strictest_line_and_tolerates_junk():
+    assert E.haccp_limit_h({"food_safety": {"haccp_max_run_h": {"L1": 4.0, "L2": 3.5}}}) == 3.5
+    assert E.haccp_limit_h({"food_safety": {"haccp_max_run_h": 2}}) == 2.0
+    assert E.haccp_limit_h({"food_safety": {"haccp_max_run_h": {"L1": "x", "L2": 0}}}) is None
+    assert E.haccp_limit_h({}) is None and E.haccp_limit_h(None) is None
+
+
+def test_the_real_factory_model_has_a_haccp_limit(monkeypatch):
+    model = E.__file__.rsplit("batch-engine", 1)[0] + "factory-model/isa95-vla.json"
+    monkeypatch.setenv("FACTORY_MODEL", model)
+    assert E._model_haccp_limit_h() == 4.0
 
 
 def test_rf_mode_ignores_run_hours(mon):
