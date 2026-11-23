@@ -1030,7 +1030,7 @@
         "type": "tdengine-datasource",
         "uid": "vla-tdengine"
       },
-      "description": "KPI-MNT-003 · Repeat Failure Rate\nFormule (catalogus): repeat_failures / failures * 100\nBron in de demo: Een storing is een herhaling als dezelfde machine binnen 7 procesdagen eerder met dezelfde oorzaak uitviel.\nLet op: De demo kent twee storingsmodi per machinerol en storingen komen vaak voor (DEMO_BREAKDOWNS), dus het aandeel herhalingen is hoog.\nDoel 10, waarschuwing 15, kritiek 25 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
+      "description": "KPI-MNT-003 · Repeat Failure Rate\nFormule (catalogus): repeat_failures / failures * 100\nBron in de demo: Een storing is een herhaling als dezelfde machine binnen 7 procesdagen eerder met dezelfde oorzaak uitviel.\nLet op: Gesimuleerd: acht storingsmodi per machinerol, en een herhaling ontstaat alleen na een noodoplossing (werkorderveld fix, kans DEMO_WORKAROUND_P, standaard 40%). Verwacht rond 17%.\nDoel 10, waarschuwing 15, kritiek 25 % (catalogus).\nUren zijn procesuren (demo draait 15x versneld)."
     },
     {
       "id": 21,

@@ -1,6 +1,6 @@
 {
   "_bron": "business-value-platform/040_Bron/kpi_catalogue.yaml",
-  "_sha256": "fa541b551d7c9ec43d26021bb0e30219ac8520bcee90e25ea8da8b0a4e988eea",
+  "_sha256": "f568ef906a53e9b3d6624fe28e3577ad6ae8a5c2c82b09432787d6f3e37ef1a6",
   "_let_op": "Gegenereerd door tools/sync-bvip-catalogue.py. Niet met de hand wijzigen.",
   "kpis": [
     {

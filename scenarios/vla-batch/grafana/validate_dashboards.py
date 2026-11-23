@@ -14,7 +14,7 @@ API = os.getenv("API_URL", "http://localhost:8000/api/v1")
 KPI_BOARDS = ["fabriek-kpi", "fabriek-kpi-productie", "fabriek-kpi-kwaliteit", "fabriek-kpi-onderhoud",
               "fabriek-kpi-energie", "fabriek-kpi-proces"]
 BOARDS = ["fabriek-overzicht", "fabriek-lijn", "fabriek-voorbereiding", "fabriek-oee",
-          "fabriek-logistiek", "fabriek-onderhoud", "fabriek-historian"] + KPI_BOARDS + ["vps-health", "pi5-health", "stream-factory"]
+          "fabriek-logistiek", "fabriek-onderhoud", "fabriek-historian"] + KPI_BOARDS + ["fabriek-fouling", "vps-health", "pi5-health", "stream-factory"]
 # state-dependent, may legitimately be empty
 MAY_BE_EMPTY = {"Open werkorders", "Afgekeurd", "Open alarmen", "Afwegen", "Premix", "Gereed", "Verbruikt"}  # noValue "0"
 # KPI panels share titles, so they are judged by the KPI in their query: a fully sourced KPI
