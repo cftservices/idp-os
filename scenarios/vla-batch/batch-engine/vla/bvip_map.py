@@ -87,11 +87,20 @@ BVIP_MAP: dict[str, dict] = {
                     "let_op": "Tarieven en vervangingswaarden zijn demo-aannames uit cost_model; "
                               "gepland en CBM-onderhoud hebben nog geen kosten."},
     "KPI-MNT-003": {"status": OK, "drempels": "catalogus", "additief": True,
-                    "bron": "Een storing is een herhaling als dezelfde machine binnen 7 "
-                            "procesdagen eerder met dezelfde oorzaak uitviel.",
-                    "let_op": "Gesimuleerd: acht storingsmodi per machinerol, en een herhaling "
-                              "ontstaat alleen na een noodoplossing (werkorderveld fix, kans "
-                              "DEMO_WORKAROUND_P, standaard 40%). Verwacht rond 17%."},
+                    "bron": "Een storing telt als herhaling als dezelfde machine binnen 168 "
+                            "procesuren (7 procesdagen, bij de versnelling van 15 ruim 11 uur "
+                            "echte tijd) eerder met dezelfde oorzaak uitviel; die eerdere storing "
+                            "mag vóór het venster liggen. De KPI-berekening stelt dat zelf vast "
+                            "uit de storingswerkorders (machine, oorzaak, meldtijd): een "
+                            "werkorder heeft geen veld dat naar zijn voorganger wijst.",
+                    "let_op": "Gesimuleerd: acht storingsmodi per machinerol, de meest "
+                              "voorkomende vaker. Een afgeronde storing krijgt fix=root_cause of "
+                              "fix=workaround (kans DEMO_WORKAROUND_P, standaard 40%). Na "
+                              "root_cause komt die oorzaak 336 procesuren niet terug op die "
+                              "machine, dus binnen het herhaalvenster ontstaat een herhaling "
+                              "alleen na een noodoplossing. Verwacht voor de fabriek rond 15 tot "
+                              "17%. Per lijn springt de waarde tussen ongeveer 0 en 30%, want in "
+                              "8 uur vallen er maar 5 tot 11 storingen."},
     "KPI-MNT-004": {"status": DEELS, "drempels": "catalogus", "additief": True,
                     "bron": "Kosten per storingswerkorder (zie MNT-002) / gevulde pakken.",
                     "let_op": "Demo-aannames uit cost_model; alleen storingswerkorders."},
