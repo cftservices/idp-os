@@ -106,6 +106,39 @@ EQUIPMENT_IDS = list(M.ALL_EQUIPMENT_IDS)
 COOK_UNITS = {ln.eq("cook") for ln in M.LINES.values()}
 
 
+def resolve_trigger_lines(lines: Optional[str]) -> frozenset:
+    """Cook units the run_h trigger applies to (24-11-2026): CIP_TRIGGER_LINES, e.g. "L1".
+
+    Empty or unset means every line, so nothing changes for whoever does not set it. A line
+    outside the set keeps the rf rule, which makes a reference line possible: roll out a
+    proposed interval on L1 while L2 keeps cleaning on measured fouling. An unknown line code
+    is an error in the log, never a silent "no line on run_h"."""
+    if lines is None or not lines.strip():
+        return frozenset(COOK_UNITS)
+    units, unknown = set(), []
+    for code in (c.strip() for c in lines.split(",")):
+        if not code:
+            continue
+        if code in M.LINES:
+            units.add(M.LINES[code].eq("cook"))
+        else:
+            unknown.append(code)
+    if unknown:
+        log.error("CIP_TRIGGER_LINES has unknown line code(s) %s (known: %s); those are ignored",
+                  unknown, ", ".join(M.LINES))
+    if not units:
+        log.error("CIP_TRIGGER_LINES=%r selects no line: every line keeps the rf rule", lines)
+    return frozenset(units)
+
+
+RUN_H_UNITS = resolve_trigger_lines(os.environ.get("CIP_TRIGGER_LINES"))
+
+
+def uses_run_h(equipment_id: str) -> bool:
+    """True when this equipment cleans on the fixed run-hour interval, False for the rf rule."""
+    return CIP_TRIGGER == "run_h" and equipment_id in RUN_H_UNITS
+
+
 class CipRequired(ValueError):
     """Raised by the CIP gate when equipment is Dirty and refuses a new batch.
 
@@ -392,9 +425,9 @@ class EquipmentMonitor:
         meta = self.ensure_meta(equipment_id)
         rf = meta.get("fouling_rf")
         run_h = None
-        if CIP_TRIGGER == "run_h":
-            if equipment_id in COOK_UNITS:
-                run_h = self._run_h_since_cip(equipment_id, meta)
+        run_h_line = uses_run_h(equipment_id)
+        if run_h_line:
+            run_h = self._run_h_since_cip(equipment_id, meta)
             due, why = run_h is not None and run_h >= CIP_RUN_H_INTERVAL, "draaiuren"
         else:
             due, why = rf is not None and float(rf) >= CIP_RF_LIMIT, "vervuiling"
@@ -405,9 +438,9 @@ class EquipmentMonitor:
             "limit": DIRTY_AFTER_BATCHES,
             "fouling_rf": rf,
             "fouling_rf_limit": CIP_RF_LIMIT,
-            "trigger": CIP_TRIGGER,
+            "trigger": "run_h" if run_h_line else "rf",          # per line: L2 can stay rf
             "run_h_since_cip": run_h,
-            "run_h_limit": CIP_RUN_H_INTERVAL,
+            "run_h_limit": CIP_RUN_H_INTERVAL if run_h_line else None,
             "reason": why if due else ("batches" if meta.get("dirty") else None),
             "last_cip_at": meta.get("last_cip_at"),
             "last_recipe": meta.get("last_recipe"),
@@ -498,7 +531,7 @@ class EquipmentMonitor:
         # run_h mode: remember the counter the factory has not reset yet (see
         # _run_h_since_cip). Near zero there is nothing to wait for.
         seen = (self._pasteuriser_run_h(equipment_id)
-                if CIP_TRIGGER == "run_h" and equipment_id in COOK_UNITS else None)
+                if uses_run_h(equipment_id) else None)
         self.db.dw_equipment_meta.update_one(
             {"equipment_id": equipment_id},
             {"$set": {"batches_since_cip": 0, "dirty": False,

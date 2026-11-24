@@ -138,3 +138,65 @@ def test_run_hours_only_count_for_the_cook_unit(mon, run_h_mode):
     mon.fake_bus.set_run_h(9.0)
     assert mon.cip_status(COOK)["dirty"] is True
     assert mon.cip_status("filler-01")["dirty"] is False
+
+
+# ── per line (CIP_TRIGGER_LINES, 24-11-2026) ────────────────────────────
+
+COOK_L2 = E.M.LINES["L2"].eq("cook")
+
+
+class TwoLineBus(FakeBus):
+    def __init__(self, line):
+        super().__init__()
+        self.topic = topic(line, "Receiving", "pasteurizer", "run_h_since_cip")
+
+    def set_run_h(self, hours):
+        self.tags[self.topic] = json.dumps({"value": hours, "ts": "x"})
+
+
+@pytest.fixture
+def two_lines(monkeypatch):
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    b1, b2 = TwoLineBus("L1"), TwoLineBus("L2")
+    m = EquipmentMonitor(db, bus=None, buses={"L1": b1, "L2": b2})
+    monkeypatch.setattr(E, "CIP_TRIGGER", "run_h")
+    monkeypatch.setattr(E, "CIP_RUN_H_INTERVAL", 3.0)
+    monkeypatch.setattr(E, "RUN_H_UNITS", E.resolve_trigger_lines("L1"))
+    return m, b1, b2
+
+
+def test_trigger_lines_default_to_every_line_and_reject_unknown_codes(caplog):
+    assert E.resolve_trigger_lines(None) == E.resolve_trigger_lines("") == frozenset(E.COOK_UNITS)
+    assert E.resolve_trigger_lines("L1") == {COOK}
+    with caplog.at_level(logging.ERROR):
+        assert E.resolve_trigger_lines("L1, L3") == {COOK}
+    assert "L3" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.ERROR):
+        assert E.resolve_trigger_lines("l1") == frozenset()     # case matters: say so, do not guess
+    assert "selects no line" in caplog.text
+
+
+def test_only_the_selected_line_cleans_on_run_hours_the_other_stays_on_rf(two_lines):
+    m, b1, b2 = two_lines
+    b1.set_run_h(2.9)
+    b2.set_run_h(2.9)
+    m.set_fouling(COOK, E.CIP_RF_LIMIT * 3)          # L1 ignores Rf now
+    m.set_fouling(COOK_L2, E.CIP_RF_LIMIT * 3)       # L2 still cleans on Rf
+    s1, s2 = m.cip_status(COOK), m.cip_status(COOK_L2)
+    assert s1["trigger"] == "run_h" and s1["dirty"] is False and s1["run_h_limit"] == 3.0
+    assert s2["trigger"] == "rf" and s2["dirty"] is True and s2["reason"] == "vervuiling"
+    assert s2["run_h_since_cip"] is None and s2["run_h_limit"] is None
+    b1.set_run_h(3.0)
+    assert m.cip_status(COOK)["dirty"] is True
+
+
+def test_a_cip_on_an_rf_line_sets_no_run_hour_mark(two_lines):
+    m, b1, b2 = two_lines
+    b2.set_run_h(1.6)                                 # a reading exists, but L2 is an rf line
+    m.perform_cip(COOK_L2, operator_id="OP", reason="vervuiling")
+    assert m.ensure_meta(COOK_L2).get("run_h_at_cip") is None
+    b1.set_run_h(3.1)                                 # the run_h line still gets its mark
+    m.perform_cip(COOK, operator_id="OP", reason="draaiuren")
+    assert m.ensure_meta(COOK)["run_h_at_cip"] == 3.1

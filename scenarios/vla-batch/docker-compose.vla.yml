@@ -232,8 +232,12 @@ services:
       # (BVIP ADR-030) uit te rollen en te meten. Rf telt dan niet mee. Een interval
       # boven food_safety.haccp_max_run_h van het fabrieksmodel (of zonder die grens)
       # weigert de engine bij de start: dan blijft het rf, met een foutregel in het log.
-      CIP_TRIGGER: "rf"
-      # CIP_RUN_H_INTERVAL: "1.5"
+      # CIP_TRIGGER_LINES beperkt run_h tot die lijnen (leeg = alle); de andere lijnen
+      # houden rf, zodat ze referentie blijven. Sinds 24-11-2026: L1 reinigt elke 3,0
+      # draaiuur (voorstel uit de aios-schema-analyse, Johannes akkoord), L2 blijft rf.
+      CIP_TRIGGER: "run_h"
+      CIP_RUN_H_INTERVAL: "3.0"
+      CIP_TRIGGER_LINES: "L1"
       CIP_RF_LIMIT: "0.06"
       CIP_AFTER_BATCHES: "16"
       KPI_WRITER: "1"
