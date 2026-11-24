@@ -239,7 +239,11 @@ services:
       CIP_RUN_H_INTERVAL: "3.0"
       CIP_TRIGGER_LINES: "L1"
       CIP_RF_LIMIT: "0.06"
-      CIP_AFTER_BATCHES: "16"
+      # Vangnet in batches. Was 16, maar dat stopte L1 (run_h 3,0) al rond 2,3 draaiuur
+      # (16 batches) en maakte het voorgestelde interval onhaalbaar (24-11-2026). 24 laat
+      # ~20 batches voor 3,0 draaiuur toe; L2 reinigt op Rf rond ~12 batches, dus merkt niets.
+      # De HACCP-grens bewaakt de run_h-trigger zelf (food_safety.haccp_max_run_h).
+      CIP_AFTER_BATCHES: "24"
       KPI_WRITER: "1"
       KPI_WRITER_INTERVAL_S: "300"
       KPI_WRITER_BACKFILL_H: "24"
