@@ -200,3 +200,37 @@ def test_a_cip_on_an_rf_line_sets_no_run_hour_mark(two_lines):
     b1.set_run_h(3.1)                                 # the run_h line still gets its mark
     m.perform_cip(COOK, operator_id="OP", reason="draaiuren")
     assert m.ensure_meta(COOK)["run_h_at_cip"] == 3.1
+
+
+# ── safety net cuts the interval (25-11-2026) ───────────────────────────
+
+def _run_to_dirty(mon, monkeypatch, batches=4):
+    monkeypatch.setattr(E, "DIRTY_AFTER_BATCHES", batches)
+    for i in range(batches):
+        mon.record_batch_completed(f"B{i}", 100.0, equipment_id=COOK)
+    ev = mon.db.dw_batch_events.find_one({"event_type": "equipment_dirty"})
+    return ev["payload"]
+
+
+def test_a_safety_net_that_fires_before_the_interval_says_so_with_the_batches_needed(
+        mon, run_h_mode, monkeypatch, caplog):
+    mon.fake_bus.set_run_h(0.6)                       # 4 batches, 0.6 of 1.5 run h
+    with caplog.at_level(logging.ERROR, logger="vla.equipment"):
+        p = _run_to_dirty(mon, monkeypatch)
+    assert p["interval_cut"] is True and p["run_h_since_cip"] == 0.6 and p["run_h_limit"] == 1.5
+    assert p["batches_needed"] == 10                  # ceil(4 * 1.5 / 0.6)
+    assert "cut the run-hour interval" in caplog.text
+
+
+def test_a_safety_net_after_the_interval_is_not_a_cut(mon, run_h_mode, monkeypatch, caplog):
+    mon.fake_bus.set_run_h(1.6)
+    with caplog.at_level(logging.ERROR, logger="vla.equipment"):
+        p = _run_to_dirty(mon, monkeypatch)
+    assert "interval_cut" not in p and "cut the run-hour" not in caplog.text
+
+
+def test_an_rf_line_never_reports_a_cut(mon, monkeypatch, caplog):
+    mon.fake_bus.set_run_h(0.6)
+    with caplog.at_level(logging.ERROR, logger="vla.equipment"):
+        p = _run_to_dirty(mon, monkeypatch)
+    assert "interval_cut" not in p and "cut the run-hour" not in caplog.text

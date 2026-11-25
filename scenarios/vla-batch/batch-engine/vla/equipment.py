@@ -6,6 +6,7 @@ measured (live) or fabricated (instant) and trended here."""
 from __future__ import annotations
 
 import json
+import math
 import logging
 import os
 import uuid
@@ -23,7 +24,8 @@ CBM_ALERT_FACTOR = 1.35
 # Upper bound of batches between two CIPs. Since fase 3 (2026-11-19) the measured
 # fouling of the intake pasteuriser (CIP_RF_LIMIT, set by vla/meters.py) usually
 # triggers the CIP first, around 12 batches; the count is the safety net. The VPS
-# sets CIP_AFTER_BATCHES=16; the default stays 4 for local runs and the tests.
+# sets CIP_AFTER_BATCHES=24 (16 cut L1's 3.0 run-hour interval at 2.3 h, 25-11-2026);
+# the default stays 4 for local runs and the tests.
 DIRTY_AFTER_BATCHES = int(os.environ.get("CIP_AFTER_BATCHES", "4") or 4)
 CIP_RF_LIMIT = float(os.environ.get("CIP_RF_LIMIT", "0.06") or 0.06)   # m2K/kW
 
@@ -407,17 +409,41 @@ class EquipmentMonitor:
                 self.bus_for(equipment_id).publish_json(
                     f"{area}/{equipment_id}/Status/state",
                     {"value": "Dirty", "ts": _iso()})
+            cut = self._interval_cut(equipment_id, meta, batches_since_cip)
             self.db.dw_batch_events.insert_one({
                 "batch_id": batch_id,
                 "event_type": "equipment_dirty",
                 "payload": {"equipment_id": equipment_id,
-                           "batches_since_cip": batches_since_cip},
+                           "batches_since_cip": batches_since_cip,
+                           **(cut or {})},
                 "ts": _iso(),
             })
             log.warning("Equipment %s marked Dirty after %s batches since CIP",
                        equipment_id, batches_since_cip)
 
         return alert
+
+    def _interval_cut(self, equipment_id: str, meta: dict,
+                      batches: int) -> Optional[dict]:
+        """On a run_h line, the batch safety net must not decide the cleaning interval.
+
+        When the counter marks the line dirty before CIP_RUN_H_INTERVAL is reached, the
+        rolled-out interval is silently shorter than the approved one, and a verification
+        measures the wrong schedule (25-11-2026: 16 batches cut 3.0 h at 2.3 h). This says
+        so in the log and in the event, with the batch count that would have been needed,
+        measured from this cycle instead of assumed at startup. None when nothing was cut."""
+        if not uses_run_h(equipment_id):
+            return None
+        run_h = self._run_h_since_cip(equipment_id, meta)
+        if run_h is None or run_h >= CIP_RUN_H_INTERVAL:
+            return None
+        needed = math.ceil(batches * CIP_RUN_H_INTERVAL / run_h) if run_h > 0 else None
+        log.error("CIP_AFTER_BATCHES=%s cut the run-hour interval on %s: dirty at %.2f of "
+                  "%.2f run h; this cycle needs about %s batches. The cleaning interval "
+                  "now follows the batch count, not CIP_RUN_H_INTERVAL",
+                  DIRTY_AFTER_BATCHES, equipment_id, run_h, CIP_RUN_H_INTERVAL, needed)
+        return {"interval_cut": True, "run_h_since_cip": round(run_h, 3),
+                "run_h_limit": CIP_RUN_H_INTERVAL, "batches_needed": needed}
 
     def cip_status(self, equipment_id: str) -> dict:
         """Cleaning state of one equipment: dirty flag, the fouling counter and
